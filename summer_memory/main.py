@@ -45,6 +45,15 @@ def is_neo4j_running():
         logger.error(f"检查容器状态失败: {e}")
         return False
 
+def check_docker_compose_version():
+    if os.system("docker compose version") == 0:
+        compose_cmd = ["docker", "compose"]
+    elif os.system("docker-compose --version") == 0:
+        compose_cmd = ["docker-compose"]
+    else:
+        logger.error("未找到有效的 Docker Compose命令")
+    return compose_cmd
+
 def start_neo4j_container():
     if is_neo4j_running():
         logger.info("Neo4j 容器已在运行，无需重新启动。")
@@ -52,7 +61,10 @@ def start_neo4j_container():
     try:
         generate_docker_compose()
         logger.info("正在启动 Neo4j Docker 容器...")
-        subprocess.run(["docker-compose", "up", "-d"], check=True)
+        # 检查可用的 docker compose 命令
+        compose_cmd = check_docker_compose_version()
+
+        subprocess.run(compose_cmd + ["up", "-d"], check=True)
         logger.info("Neo4j 容器已启动。")
     except subprocess.CalledProcessError:
         logger.error("启动 Neo4j 容器失败，请检查 Docker 配置")
@@ -62,7 +74,9 @@ def start_neo4j_container():
 def stop_neo4j_container():
     try:
         logger.info("正在关闭 Neo4j Docker 容器...")
-        subprocess.run(["docker-compose", "down"], check=True)
+        # 检查可用的 docker compose 命令
+        compose_cmd = check_docker_compose_version()
+        subprocess.run(compose_cmd + ["down"], check=True)
         logger.info("Neo4j 容器已关闭。")
     except subprocess.CalledProcessError:
         logger.warning("Neo4j 容器关闭失败")
@@ -129,6 +143,10 @@ def batch_add_from_file(filename):# 从文件批量处理文本
 
 
 def main(): # 主程序
+    logger.info("开始启动 Neo4j 容器...")
+    start_neo4j_container()
+    logger.info("Neo4j 容器启动成功")
+    
     try:
         print("请选择输入方式：")
         print("1 - 手动输入文本")
