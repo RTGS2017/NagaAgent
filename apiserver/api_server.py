@@ -216,7 +216,7 @@ async def chat(request: ChatRequest):
             """调用LLM API"""
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{config.api.base_url}/v1/chat/completions",
+                    f"{config.api.base_url}/chat/completions",
                     headers={
                         "Authorization": f"Bearer {config.api.api_key}",
                         "Content-Type": "application/json"
@@ -275,7 +275,7 @@ async def chat_stream(request: ChatRequest):
                 """调用LLM API"""
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        f"{config.api.base_url}/v1/chat/completions",
+                        f"{config.api.base_url}/chat/completions",
                         headers={
                             "Authorization": f"Bearer {config.api.api_key}",
                             "Content-Type": "application/json"
