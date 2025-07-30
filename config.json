@@ -7,7 +7,7 @@
     "log_level": "DEBUG"
   },
   "api": {
-    "api_key": "sk-davlqyohkuwwl3dt",
+    "api_key": "sk-1234",
     "base_url": "https://cloud.infini-ai.com/maas/v1",
     "model": "kimi-k2-instruct",
     "temperature": 0.7,
@@ -59,7 +59,7 @@
   },
   "quick_model": {
     "enabled": true,
-    "api_key": "sk-davlqyohkuwwl3dt",
+    "api_key": "sk-1234",
     "base_url": "https://cloud.infini-ai.com/maas/v1",
     "model_name": "kimi-k2-instruct",
     "max_tokens": 512,
