@@ -2,6 +2,7 @@
 """
 NagaAgent API服务器
 提供RESTful API接口访问NagaAgent功能
+兼容OpenAI API规范
 """
 
 import asyncio
@@ -12,7 +13,7 @@ import re
 import os
 import logging
 from contextlib import asynccontextmanager
-from typing import Dict, List, Optional, AsyncGenerator
+from typing import Dict, List, Optional, AsyncGenerator, Union
 
 # 在导入其他模块前先设置HTTP库日志级别
 logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
@@ -20,12 +21,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 import aiohttp
+from sse_starlette.sse import EventSourceResponse
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,6 +38,12 @@ from .tool_call_utils import parse_tool_calls, execute_tool_calls, tool_call_loo
 # 导入配置系统
 from config import config  # 使用新的配置系统
 from ui.response_utils import extract_message  # 导入消息提取工具
+
+# 导入OpenAI兼容API模型
+from .openai_compatible_api import (
+    ChatMessage, ChatCompletionRequest, ChatCompletionResponse, 
+    ChatCompletionChunk, ChatCompletionChoice, ChatCompletionChunkChoice
+)
 
 # 全局NagaAgent实例 - 延迟导入避免循环依赖
 naga_agent = None
@@ -91,7 +99,7 @@ async def lifespan(app: FastAPI):
 # 创建FastAPI应用
 app = FastAPI(
     title="NagaAgent API",
-    description="智能对话助手API服务",
+    description="智能对话助手API服务，兼容OpenAI API规范",
     version="3.0",
     lifespan=lifespan
 )
@@ -104,6 +112,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API密钥验证依赖
+async def verify_api_key(request: Request):
+    """验证API密钥"""
+    # 首先检查API服务器专用的API密钥，如果没有则使用主API密钥
+    expected_key = config.api_server.api_key if config.api_server.api_key else config.api.api_key
+    
+    # 如果没有设置API密钥，跳过验证
+    if not expected_key or expected_key == "sk-placeholder-key-not-set":
+        return True
+    
+    # 检查Authorization头
+    auth_header = request.headers.get("Authorization")
+    
+    # 验证Bearer token格式
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # 移除"Bearer "前缀
+        if token == expected_key:
+            return True
+    
+    # 检查查询参数
+    api_key_param = request.query_params.get("api_key")
+    if api_key_param and api_key_param == expected_key:
+        return True
+    
+    # 验证失败
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid API key"
+    )
 
 # 请求模型
 class ChatRequest(BaseModel):
@@ -126,6 +164,8 @@ class SystemInfoResponse(BaseModel):
     status: str
     available_services: List[str]
     api_key_configured: bool
+
+# OpenAI兼容模型保持不变，在openai_compatible_api.py中定义
 
 # WebSocket路由
 @app.websocket("/ws/mcplog")
@@ -486,6 +526,161 @@ async def get_memory_stats():
         print(f"获取记忆统计错误: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取记忆统计失败: {str(e)}")
+
+# OpenAI兼容API端点
+@app.get("/v1/models", dependencies=[Depends(verify_api_key)])
+async def list_models():
+    """列出可用模型 (OpenAI兼容)"""
+    if not naga_agent:
+        raise HTTPException(status_code=503, detail="NagaAgent未初始化")
+    
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": config.api.model,
+                "object": "model",
+                "created": 0,
+                "owned_by": "naga-agent"
+            }
+        ]
+    }
+
+@app.post("/v1/chat/completions", dependencies=[Depends(verify_api_key)])
+async def openai_chat_completions(request: ChatCompletionRequest):
+    """OpenAI兼容的聊天完成端点"""
+    if not naga_agent:
+        raise HTTPException(status_code=503, detail="NagaAgent未初始化")
+    
+    # 提取用户消息
+    user_message = None
+    for msg in reversed(request.messages):
+        if msg.role == "user":
+            user_message = msg.content
+            break
+    
+    if not user_message:
+        raise HTTPException(status_code=400, detail="No user message found")
+    
+    # 处理流式响应
+    if request.stream:
+        return EventSourceResponse(
+            stream_openai_response(user_message, request),
+            media_type="text/event-stream"
+        )
+    
+    # 处理非流式响应
+    return await generate_openai_response(user_message, request)
+
+async def stream_openai_response(user_message: str, request: ChatCompletionRequest):
+    """流式OpenAI响应"""
+    try:
+        response_chunks = []
+        async for chunk in naga_agent.process(user_message):
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                speaker, content = chunk
+                if speaker == "娜迦":
+                    content_str = str(content)
+                    response_chunks.append(content_str)
+                    
+                    # 创建并发送数据块
+                    chunk_data = ChatCompletionChunk(
+                        id="naga-agent-chunk",
+                        created=int(asyncio.get_event_loop().time()),
+                        model=request.model,
+                        choices=[
+                            ChatCompletionChunkChoice(
+                                index=0,
+                                delta=ChatMessage(role="assistant", content=content_str)
+                            )
+                        ]
+                    )
+                    yield {"data": chunk_data.json()}
+            else:
+                content_str = str(chunk)
+                response_chunks.append(content_str)
+                
+                # 创建并发送数据块
+                chunk_data = ChatCompletionChunk(
+                    id="naga-agent-chunk",
+                    created=int(asyncio.get_event_loop().time()),
+                    model=request.model,
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            index=0,
+                            delta=ChatMessage(role="assistant", content=content_str)
+                        )
+                    ]
+                )
+                yield {"data": chunk_data.json()}
+        
+        # 发送结束块
+        finish_chunk = ChatCompletionChunk(
+            id="naga-agent-chunk",
+            created=int(asyncio.get_event_loop().time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChunkChoice(
+                    index=0,
+                    delta=ChatMessage(role="", content=""),
+                    finish_reason="stop"
+                )
+            ]
+        )
+        yield {"data": finish_chunk.json()}
+        yield {"data": "[DONE]"}
+        
+    except Exception as e:
+        print(f"流式响应错误: {e}")
+        traceback.print_exc()
+        error_chunk = {
+            "error": {
+                "message": str(e),
+                "type": "server_error",
+                "param": None,
+                "code": 500
+            }
+        }
+        yield {"data": json.dumps(error_chunk)}
+
+async def generate_openai_response(user_message: str, request: ChatCompletionRequest) -> ChatCompletionResponse:
+    """生成OpenAI格式的完整响应"""
+    try:
+        # 使用NagaAgent处理
+        response_chunks = []
+        async for chunk in naga_agent.process(user_message):
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                speaker, content = chunk
+                if speaker == "娜迦":
+                    response_chunks.append(str(content))
+            else:
+                response_chunks.append(str(chunk))
+        
+        full_response = "".join(response_chunks)
+        
+        # 使用UI工具提取消息
+        extracted_message = extract_message(full_response)
+        
+        # 创建响应
+        response = ChatCompletionResponse(
+            id="naga-agent-response",
+            created=int(asyncio.get_event_loop().time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=extracted_message),
+                    finish_reason="stop"
+                )
+            ]
+        )
+        
+        return response
+        
+    except Exception as e:
+        print(f"生成响应错误: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import argparse

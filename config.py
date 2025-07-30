@@ -96,6 +96,8 @@ class APIServerConfig(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535, description="API服务器端口")
     auto_start: bool = Field(default=True, description="启动时自动启动API服务器")
     docs_enabled: bool = Field(default=True, description="是否启用API文档")
+    api_key: str = Field(default="", description="API服务器专用API密钥（留空则使用主API密钥）")
+    use_api_mode: bool = Field(default=False, description="UI是否通过API调用而非直接调用NagaAgent")
 
 
 class GRAGConfig(BaseModel):

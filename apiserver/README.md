@@ -1,6 +1,6 @@
 # NagaAgent API服务器
 
-NagaAgent的RESTful API服务器，提供智能对话、MCP服务调用等功能。
+NagaAgent的RESTful API服务器，提供智能对话、MCP服务调用等功能，并兼容OpenAI API规范。
 
 ## 🚀 功能特性
 
@@ -10,6 +10,7 @@ NagaAgent的RESTful API服务器，提供智能对话、MCP服务调用等功能
 - **MCP服务集成**: 支持多种MCP服务的调用
 - **记忆系统**: 集成记忆管理功能
 - **开发者模式**: 支持开发者模式切换
+- **OpenAI兼容**: 兼容OpenAI Chat Completions API规范
 
 ### 工具调用循环
 - **自动解析**: 自动解析LLM返回的`<<<[HANDOFF]>>>`格式工具调用
@@ -59,6 +60,17 @@ NagaAgent的RESTful API服务器，提供智能对话、MCP服务调用等功能
 - **请求体**: 同普通对话
 - **返回**: Server-Sent Events格式的流式响应
 
+### OpenAI兼容接口
+
+#### GET `/v1/models`
+- **描述**: 获取可用模型列表（OpenAI兼容）
+- **返回**: OpenAI格式的模型列表
+
+#### POST `/v1/chat/completions`
+- **描述**: 聊天完成接口（OpenAI兼容）
+- **请求体**: OpenAI Chat Completions格式
+- **返回**: OpenAI格式的响应或流式响应
+
 ### MCP服务接口
 
 #### POST `/mcp/handoff`
@@ -99,6 +111,24 @@ NagaAgent的RESTful API服务器，提供智能对话、MCP服务调用等功能
 | `MaxhandoffLoopNonStream` | `5` | 非流式模式最大工具调用循环次数 |
 | `Showhandoff` | `False` | 是否显示工具调用输出 |
 
+### API密钥认证
+
+API服务器支持API密钥认证，密钥配置有以下优先级：
+
+1. 首先使用`api_server.api_key`字段（API服务器专用密钥）
+2. 如果未设置，则使用`api.api_key`字段（主API密钥）
+3. 如果都未设置或设置为`sk-placeholder-key-not-set`，则跳过API密钥验证
+
+当配置了API密钥时，所有OpenAI兼容的API端点都需要在请求头中包含：
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+或者在查询参数中包含：
+```
+?api_key=YOUR_API_KEY
+```
+
 ### 工具调用格式
 
 LLM返回的工具调用应使用以下格式：
@@ -115,11 +145,13 @@ param2: 「始」参数值2「末」
 
 ### 方式1: 直接启动
 ```bash
+.venv\Scripts\activate
 python apiserver/start_server.py
 ```
 
 ### 方式2: 使用uvicorn
 ```bash
+.venv\Scripts\activate
 uvicorn apiserver.api_server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -161,6 +193,42 @@ for line in response.iter_lines():
                 print(json_data)
             except:
                 pass
+```
+
+### OpenAI兼容API使用示例
+
+```python
+import openai
+
+# 配置客户端
+client = openai.OpenAI(
+    base_url="http://127.0.0.1:8000/v1",
+    api_key="sk-not-required"
+)
+
+# 聊天完成
+response = client.chat.completions.create(
+    model="naga-agent",
+    messages=[
+        {"role": "user", "content": "你好，介绍一下你自己"}
+    ],
+    stream=False
+)
+
+print(response.choices[0].message.content)
+
+# 流式聊天完成
+stream = client.chat.completions.create(
+    model="naga-agent",
+    messages=[
+        {"role": "user", "content": "写一首关于春天的诗"}
+    ],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content is not None:
+        print(chunk.choices[0].delta.content, end="")
 ```
 
 ### MCP服务调用示例
@@ -218,4 +286,4 @@ print(response.json())
 如果你使用了代理服务器，测试本地API时需要绕过代理：
 ```bash
 NO_PROXY="127.0.0.1,localhost" curl -X GET "http://127.0.0.1:8000/health"
-``` 
+```

@@ -138,10 +138,38 @@ python check_env.py
     "host": "127.0.0.1",
     "port": 8000,
     "auto_start": true,
-    "docs_enabled": true
+    "docs_enabled": true,
+    "api_key": "",
+    "use_api_mode": false
   }
 }
 ```
+
+新增的配置参数说明：
+- `api_key`: API服务器专用API密钥（留空则使用主API密钥）
+- `use_api_mode`: 控制UI是直接调用NagaAgent还是通过API调用
+
+当配置了API密钥时，所有OpenAI兼容的API端点都需要在请求头中包含：
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+### API服务器配置
+在 `config.json` 中可配置API服务器相关参数：
+```json
+{
+  "api_server": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8000,
+    "auto_start": true,
+    "docs_enabled": true,
+    "use_api_mode": false
+  }
+}
+```
+
+新增的 `use_api_mode` 参数控制UI是直接调用NagaAgent还是通过API调用。
 
 ### GRAG知识图谱记忆系统配置
 在 `config.json` 中可配置GRAG记忆系统：

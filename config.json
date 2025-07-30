@@ -1,15 +1,15 @@
 {
   "system": {
     "version": "3.0",
-    "voice_enabled": true,
+    "voice_enabled": false,
     "stream_mode": true,
     "debug": true,
     "log_level": "DEBUG"
   },
   "api": {
-    "api_key": " ",
-    "base_url": " ",
-    "model": "TIG-3.6-VL-Lite",
+    "api_key": "sk-davlqyohkuwwl3dt",
+    "base_url": "https://cloud.infini-ai.com/maas/v1",
+    "model": "kimi-k2-instruct",
     "temperature": 0.7,
     "max_tokens": 2000,
     "max_history_rounds": 10
@@ -19,7 +19,8 @@
     "host": "127.0.0.1",
     "port": 8000,
     "auto_start": true,
-    "docs_enabled": true
+    "docs_enabled": true,
+    "api_key": "sk-1234"
   },
   "grag": {
     "enabled": true,
@@ -58,9 +59,9 @@
   },
   "quick_model": {
     "enabled": true,
-    "api_key": " ",
-    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-    "model_name": "doubao-seed-1-6-flash-250615",
+    "api_key": "sk-davlqyohkuwwl3dt",
+    "base_url": "https://cloud.infini-ai.com/maas/v1",
+    "model_name": "kimi-k2-instruct",
     "max_tokens": 512,
     "temperature": 0.05,
     "timeout": 5,
@@ -70,7 +71,7 @@
     "api_key": " "
   },
   "mqtt": {
-    "enabled": true,
+    "enabled": false,
     "broker": " ",
     "port": 1883,
     "topic": " ",

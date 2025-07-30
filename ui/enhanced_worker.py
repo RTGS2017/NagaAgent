@@ -1,12 +1,16 @@
 """
 增强版Worker类
 支持进度更新、状态回调、错误处理和取消操作
+现在支持通过API或直接调用NagaAgent
 """
 
 import asyncio
 import time
+import json
+import aiohttp
 from PyQt5.QtCore import QThread, pyqtSignal
 from ui.response_utils import extract_message
+from config import config
 
 class EnhancedWorker(QThread):
     """增强版工作线程"""
@@ -18,12 +22,13 @@ class EnhancedWorker(QThread):
     error_occurred = pyqtSignal(str)  # 错误发生信号
     partial_result = pyqtSignal(str)  # 部分结果信号（流式输出）
     
-    def __init__(self, naga, user_input, parent=None):
+    def __init__(self, naga, user_input, parent=None, use_api=False):
         super().__init__(parent)
         self.naga = naga
         self.user_input = user_input
         self.is_cancelled = False
         self.result_buffer = []
+        self.use_api = use_api  # 是否使用API模式
         
         # 初始化语音集成模块
         try:
@@ -62,7 +67,10 @@ class EnhancedWorker(QThread):
             
             try:
                 # 执行异步处理
-                result = loop.run_until_complete(self.process_with_progress())
+                if self.use_api:
+                    result = loop.run_until_complete(self.process_with_api())
+                else:
+                    result = loop.run_until_complete(self.process_with_progress())
                 
                 if not self.is_cancelled and result:
                     # 提取最终消息
@@ -79,7 +87,7 @@ class EnhancedWorker(QThread):
                 self.finished.emit(f"抱歉，处理您的请求时遇到了问题：{error_msg}")
             
     async def process_with_progress(self):
-        """带进度的异步处理"""
+        """带进度的异步处理（直接调用NagaAgent）"""
         start_time = time.time()
         
         try:
@@ -137,6 +145,91 @@ class EnhancedWorker(QThread):
                 
         except Exception as e:
             self.error_occurred.emit(f"异步处理错误: {str(e)}")
+            raise
+            
+    async def process_with_api(self):
+        """通过API处理请求"""
+        start_time = time.time()
+        
+        try:
+            self.status_changed.emit("连接到API...")
+            self.progress_updated.emit(15, "建立API连接")
+            
+            if self.is_cancelled:
+                return ""
+            
+            # 构造OpenAI兼容的请求
+            api_url = f"http://{config.api_server.host}:{config.api_server.port}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "model": config.api.model,
+                "messages": [{"role": "user", "content": self.user_input}],
+                "temperature": config.api.temperature,
+                "max_tokens": config.api.max_tokens,
+                "stream": True
+            }
+            
+            self.status_changed.emit("正在生成回复...")
+            self.progress_updated.emit(30, "API处理中")
+            
+            result_chunks = []
+            word_count = 0
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        raise Exception(f"API请求失败: {resp.status}")
+                    
+                    # 流式处理响应
+                    async for line in resp.content:
+                        if self.is_cancelled:
+                            break
+                            
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:]  # Remove "data: " prefix
+                            if data_str.strip() == "[DONE]":
+                                break
+                                
+                            try:
+                                data = json.loads(data_str)
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    delta = data["choices"][0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        result_chunks.append(content)
+                                        self.partial_result.emit(content)
+                                        word_count += len(content)
+                                        
+                                        # 更新进度
+                                        if word_count < 50:
+                                            status = "开始回复..."
+                                            progress = 35
+                                        elif word_count < 200:
+                                            status = "正在详细解答..."
+                                            progress = 50
+                                        elif word_count < 500:
+                                            status = "完善回答内容..."
+                                            progress = 70
+                                        else:
+                                            status = "整理最终回复..."
+                                            progress = 85
+                                            
+                                        self.progress_updated.emit(progress, f"{status} ({word_count}字)")
+                            except json.JSONDecodeError:
+                                continue
+            
+            if not self.is_cancelled:
+                elapsed = time.time() - start_time
+                self.status_changed.emit(f"回复完成 (用时 {elapsed:.1f}s，{word_count}字)")
+                self.progress_updated.emit(100, "完成")
+                
+                return ''.join(result_chunks)
+            else:
+                return ""
+                
+        except Exception as e:
+            self.error_occurred.emit(f"API处理错误: {str(e)}")
             raise
 
 

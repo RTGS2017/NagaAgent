@@ -435,11 +435,14 @@ class ChatWindow(QWidget):
                 s.worker = None
             
             # 根据模式选择Worker类型，创建全新实例
+            # 检查是否启用API模式
+            use_api = getattr(config.api_server, 'use_api_mode', False)
+            
             if s.streaming_mode:
-                s.worker = StreamingWorker(s.naga, u)
+                s.worker = StreamingWorker(s.naga, u, use_api=use_api)
                 s.setup_streaming_worker()
             else:
-                s.worker = BatchWorker(s.naga, u)
+                s.worker = BatchWorker(s.naga, u, use_api=use_api)
                 s.setup_batch_worker()
             
             # 启动进度显示 - 恢复原来的调用方式
