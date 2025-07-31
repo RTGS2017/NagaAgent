@@ -30,7 +30,7 @@ class GRAGMemoryManager:
         except Exception as e:
             logger.error(f"GRAG记忆系统初始化失败: {e}")
             self.enabled = False
-    
+
     async def add_conversation_memory(self, user_input: str, ai_response: str) -> bool:
         """添加对话记忆到知识图谱（同时更新上下文和三元组）"""
         if not self.enabled:
@@ -38,41 +38,58 @@ class GRAGMemoryManager:
         try:
             # 拼接本轮内容
             conversation_text = f"用户: {user_input}\n娜迦: {ai_response}"
-            
+
             # 更新recent_context（限制长度）
             self.recent_context.append(conversation_text)
             if len(self.recent_context) > self.context_length:
                 self.recent_context = self.recent_context[-self.context_length:]
-            
+
             # 提取和存储三元组
             if self.auto_extract:
-                # 启动异步任务，不阻塞主流程
-                asyncio.create_task(self._extract_and_store_triples(conversation_text))
+                # 创建并等待任务完成
+                task = asyncio.create_task(self._extract_and_store_triples(conversation_text))
+                # 添加超时防止永久阻塞
+                try:
+                    await asyncio.wait_for(task, timeout=20.0)
+                except asyncio.TimeoutError:
+                    logger.warning("三元组提取任务超时")
             return True
         except Exception as e:
             logger.error(f"添加对话记忆失败: {e}")
             return False
-    
+
     async def _extract_and_store_triples(self, text: str) -> bool:
-        """提取并存储三元组"""
         try:
-            # 检查是否已处理过
-            text_hash = hash(text)
+            import hashlib
+            text_hash = hashlib.sha256(text.encode()).hexdigest()
+
             if text_hash in self.extraction_cache:
+                logger.debug(f"跳过已处理的文本: {text[:50]}...")
                 return True
-                
-            # 异步提取三元组
+
+            logger.info(f"开始提取三元组: {text[:100]}...")
             triples = await asyncio.to_thread(extract_triples, text)
-            
-            if triples:
-                # 异步存储到Neo4j
-                await asyncio.to_thread(store_triples, triples)
+
+            if not triples:
+                logger.warning("未提取到三元组")
+                return False
+
+            logger.info(f"提取到 {len(triples)} 个三元组，准备存储")
+
+            # 存储到Neo4j
+            store_success = await asyncio.to_thread(store_triples, triples)
+
+            if store_success:
                 self.extraction_cache.add(text_hash)
-                logger.info(f"成功提取并存储 {len(triples)} 个三元组")
+                logger.info("三元组存储成功")
                 return True
-            return False
+            else:
+                logger.error("三元组存储失败")
+                return False
+
         except Exception as e:
-            logger.error(f"提取三元组失败: {e}")
+            logger.error(f"提取和存储三元组失败: {str(e)}")
+            logger.error(traceback.format_exc())
             return False
     
     async def query_memory(self, question: str) -> Optional[str]:
