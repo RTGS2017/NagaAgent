@@ -6,6 +6,9 @@
 --conversation_core.py
 
 ---summer_memory
+ 
   |--memory_manager.py
+  
   |--graph.py
+  
   |--extractor_ds_tri.py
