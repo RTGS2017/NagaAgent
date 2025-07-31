@@ -49,15 +49,35 @@ def extract_triples(text):
         content_json = response.json()
 
         content = content_json['choices'][0]['message']['content']
-        match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
+
+        # JSON解析逻辑
+        json_str = None
+        # 尝试1: 查找代码块标记
+        match = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", content, re.DOTALL)
         if match:
             json_str = match.group(1)
         else:
-            json_str = content.strip()  
+            # 尝试2: 直接查找JSON数组
+            match = re.search(r"(\[[\s\S]*?\])", content)
+            if match:
+                json_str = match.group(1)
 
-        triples = json.loads(json_str)
-        logger.info(f"提取到的三元组: {triples}")
-        return [tuple(t) for t in triples if len(t) == 3]
+        # 最终回退：使用整个内容
+        if not json_str:
+            json_str = content.strip()
+
+        # 安全解析JSON
+        try:
+            triples = json.loads(json_str)
+            if not isinstance(triples, list):
+                logger.warning("API返回的不是列表格式")
+                return []
+            print("三元组解析成功")
+            #print(tuple(t) for t in triples if len(t) == 3)
+            return [tuple(t) for t in triples if len(t) == 3]
+        except json.JSONDecodeError:
+            logger.error(f"JSON解析失败: {json_str}")
+            return []
 
     except Exception as e:
         logger.error(f"调用 DeepSeek API 抽取三元组失败: {e}")
