@@ -5,10 +5,14 @@ import threading
 import time
 import logging
 
-# 在导入其他模块前先设置HTTP库日志级别
-logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
+# 保留GRAG日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("summer_memory")
+logger.setLevel(logging.INFO)
+
+# 只过滤HTTP相关日志
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 
 from conversation_core import NagaConversation
 
@@ -82,6 +86,18 @@ def start_api_server():
 with open('./ui/progress.txt','w')as f:
     f.write('0')
 mm = memory_manager
+#添加的GRAG相关启动说明
+print("=" * 30)
+print(f"GRAG状态: {'启用' if memory_manager.enabled else '禁用'}")
+if memory_manager.enabled:
+    stats = memory_manager.get_memory_stats()
+    print(f"记忆统计: 三元组={stats.get('total_triples', 0)}")
+
+    # 检查Neo4j连接
+    from summer_memory.graph import graph, GRAG_ENABLED
+
+    print(f"Neo4j连接: {'成功' if graph and GRAG_ENABLED else '失败'}")
+print("=" * 30)
 
 print('='*30+'\n娜迦系统已启动\n'+'='*30)
 
