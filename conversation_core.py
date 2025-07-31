@@ -24,6 +24,7 @@ from apiserver.tool_call_utils import parse_tool_calls, execute_tool_calls, tool
 if config.grag.enabled:
     try:
         from summer_memory.memory_manager import memory_manager
+        print("[GRAG] ✅ 夏园记忆系统初始化成功")
     except Exception as e:
         logger = logging.getLogger("NagaConversation")
         logger.error(f"夏园记忆系统加载失败: {e}")
@@ -337,9 +338,10 @@ class NagaConversation: # 对话主类
     async def process(self, u, is_voice_input=False):  # 添加is_voice_input参数
         try:
             # 开发者模式优先判断
-            if u.strip() == "#devmode":
-                self.dev_mode = True
-                yield ("娜迦", "已进入开发者模式")
+            if u.strip().lower() == "#devmode":
+                self.dev_mode = not self.dev_mode  # 切换模式
+                status = "进入" if self.dev_mode else "退出"
+                yield ("娜迦", f"已{status}开发者模式")
                 return
 
             # 只在语音输入时显示处理提示
@@ -422,7 +424,7 @@ class NagaConversation: # 对话主类
                                     self.save_log(u, final_content + "\n\n" + final_thinking_answer)
                                     
                                     # GRAG记忆存储（开发者模式不写入）
-                                    if self.memory_manager and not self.dev_mode:
+                                    if self.memory_manager:
                                         try:
                                             await self.memory_manager.add_conversation_memory(u, final_content + "\n\n" + final_thinking_answer)
                                         except Exception as e:
