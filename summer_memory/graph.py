@@ -63,25 +63,42 @@ def save_triples(triples):
         _json.dump(list(triples), f, ensure_ascii=False, indent=2)
 
 
-def store_triples(new_triples):
-    all_triples = load_triples()
-    all_triples.update(new_triples)  # 集合自动去重
+def store_triples(new_triples) -> bool:
+    """存储三元组到文件和Neo4j，返回是否成功"""
+    try:
+        # 1. 保存到本地文件
+        all_triples = load_triples()
+        all_triples.update(new_triples)
+        save_triples(all_triples)
 
-    # 持久化到文件
-    save_triples(all_triples)
+        # 2. 存储到Neo4j（如果启用）
+        if graph is not None:
+            success_count = 0
+            for head, rel, tail in new_triples:
+                if not head or not tail:
+                    logger.warning(f"跳过无效三元组，head或tail为空: {(head, rel, tail)}")
+                    continue
 
-    # 同步更新Neo4j图谱数据库（仅在GRAG_ENABLED时）
-    if graph is not None:
-        for head, rel, tail in new_triples:
-            if not head or not tail:
-                logger.warning(f"跳过无效三元组，head或tail为空: {(head, rel, tail)}")
-                continue
-            h_node = Node("Entity", name=head)
-            t_node = Node("Entity", name=tail)
-            r = Relationship(h_node, rel, t_node)
-            graph.merge(h_node, "Entity", "name")
-            graph.merge(t_node, "Entity", "name")
-            graph.merge(r)
+                try:
+                    h_node = Node("Entity", name=head)
+                    t_node = Node("Entity", name=tail)
+                    r = Relationship(h_node, rel, t_node)
+
+                    graph.merge(h_node, "Entity", "name")
+                    graph.merge(t_node, "Entity", "name")
+                    graph.merge(r)
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"存储三元组失败: {head}-{rel}-{tail}, 错误: {e}")
+
+            logger.info(f"成功存储 {success_count}/{len(new_triples)} 个三元组到Neo4j")
+            return success_count > 0  # 只要有成功存储的就返回True
+        else:
+            logger.info(f"跳过Neo4j存储（未启用），保存 {len(new_triples)} 个三元组到文件")
+            return True  # 文件存储成功也算成功
+    except Exception as e:
+        logger.error(f"存储三元组失败: {e}")
+        return False
 
 
 def get_all_triples():
