@@ -424,7 +424,7 @@ class NagaConversation: # 对话主类
                                     self.save_log(u, final_content + "\n\n" + final_thinking_answer)
                                     
                                     # GRAG记忆存储（开发者模式不写入）
-                                    if self.memory_manager:
+                                    if self.memory_manager and not self.dev_mode:
                                         try:
                                             await self.memory_manager.add_conversation_memory(u, final_content + "\n\n" + final_thinking_answer)
                                         except Exception as e:
