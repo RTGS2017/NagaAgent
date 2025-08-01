@@ -19,41 +19,84 @@ class SimpleBrowserTool:
         self._page = None
         self._is_initialized = False
         
-    async def _init_browser(self):
-        """初始化浏览器"""
-        if self._is_initialized:
-            return
-            
+    async def _check_browser_alive(self):
+        """检查浏览器和页面是否仍然有效"""
         try:
-            self._playwright = await async_playwright().start()
+            if not self._browser or not self._page:
+                return False
             
-            # 尝试使用Edge通道启动
+            # 检查浏览器连接是否有效
+            if self._browser.is_connected():
+                # 尝试获取页面标题来验证页面是否有效
+                await self._page.title()
+                return True
+            return False
+        except Exception:
+            return False
+    
+    async def _init_browser(self, force_reinit=False):
+        """初始化浏览器"""
+        # 如果强制重新初始化或检查发现连接断开，则重新初始化
+        if force_reinit or not await self._check_browser_alive():
+            # 先清理现有资源
+            await self._cleanup_browser()
+            
             try:
-                self._browser = await self._playwright.chromium.launch(
-                    headless=PLAYWRIGHT_HEADLESS,
-                    channel="msedge"
-                )
-                print("✅ 使用Edge通道启动浏览器成功")
-            except Exception as e:
-                print(f"Edge通道启动失败: {e}，尝试使用可执行文件路径")
-                # 尝试使用可执行文件路径
-                edge_path = self._get_edge_path()
-                if edge_path:
+                self._playwright = await async_playwright().start()
+                
+                # 尝试使用Edge通道启动
+                try:
                     self._browser = await self._playwright.chromium.launch(
                         headless=PLAYWRIGHT_HEADLESS,
-                        executable_path=edge_path
+                        channel="msedge"
                     )
-                    print(f"✅ 使用路径启动浏览器成功: {edge_path}")
-                else:
-                    raise Exception("未找到Edge浏览器")
-                    
-            self._page = await self._browser.new_page()
-            self._is_initialized = True
-            print("✅ 浏览器初始化完成")
+                    print("✅ 使用Edge通道启动浏览器成功")
+                except Exception as e:
+                    print(f"Edge通道启动失败: {e}，尝试使用可执行文件路径")
+                    # 尝试使用可执行文件路径
+                    edge_path = self._get_edge_path()
+                    if edge_path:
+                        self._browser = await self._playwright.chromium.launch(
+                            headless=PLAYWRIGHT_HEADLESS,
+                            executable_path=edge_path
+                        )
+                        print(f"✅ 使用路径启动浏览器成功: {edge_path}")
+                    else:
+                        raise Exception("未找到Edge浏览器")
+                        
+                self._page = await self._browser.new_page()
+                self._is_initialized = True
+                print("✅ 浏览器初始化完成")
+                
+            except Exception as e:
+                print(f"❌ 浏览器初始化失败: {e}")
+                await self._cleanup_browser()
+                raise
+    
+    async def _cleanup_browser(self):
+        """清理浏览器资源"""
+        try:
+            if self._page:
+                await self._page.close()
+        except Exception:
+            pass
+        
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
             
-        except Exception as e:
-            print(f"❌ 浏览器初始化失败: {e}")
-            raise
+        try:
+            if self._playwright:
+                await self._playwright.stop()
+        except Exception:
+            pass
+            
+        self._page = None
+        self._browser = None
+        self._playwright = None
+        self._is_initialized = False
     
     def _get_edge_path(self):
         """获取Edge浏览器路径"""
@@ -85,6 +128,7 @@ class SimpleBrowserTool:
     async def open_url(self, url: str, new_tab: bool = False) -> dict:
         """打开URL"""
         try:
+            # 先检查并确保浏览器连接有效
             await self._init_browser()
             
             # 确保URL格式正确
@@ -98,8 +142,20 @@ class SimpleBrowserTool:
                 # 使用当前页面
                 page = self._page
                 
-            # 打开URL
-            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            # 打开URL - 如果失败可能是连接断开，尝试重新初始化
+            try:
+                await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            except Exception as goto_error:
+                print(f"页面导航失败，尝试重新初始化浏览器: {goto_error}")
+                # 强制重新初始化浏览器
+                await self._init_browser(force_reinit=True)
+                
+                # 重新尝试打开URL
+                if new_tab:
+                    page = await self._browser.new_page()
+                else:
+                    page = self._page
+                await page.goto(url, wait_until='domcontentloaded', timeout=30000)
             
             # 获取页面信息
             title = await page.title()
@@ -124,6 +180,7 @@ class SimpleBrowserTool:
     async def search_web(self, query: str, engine: str = 'google') -> dict:
         """搜索网页"""
         try:
+            # 先检查并确保浏览器连接有效
             await self._init_browser()
             
             # 构建搜索URL
@@ -136,8 +193,15 @@ class SimpleBrowserTool:
             else:
                 search_url = f'https://www.google.com/search?q={query}'
                 
-            # 打开搜索页面
-            await self._page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+            # 打开搜索页面 - 如果失败可能是连接断开，尝试重新初始化
+            try:
+                await self._page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+            except Exception as goto_error:
+                print(f"搜索页面导航失败，尝试重新初始化浏览器: {goto_error}")
+                # 强制重新初始化浏览器
+                await self._init_browser(force_reinit=True)
+                await self._page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+                
             title = await self._page.title()
             
             return {
@@ -160,14 +224,8 @@ class SimpleBrowserTool:
     
     async def close(self):
         """关闭浏览器"""
-        try:
-            if self._browser:
-                await self._browser.close()
-            if self._playwright:
-                await self._playwright.stop()
-            self._is_initialized = False
-        except Exception as e:
-            print(f"关闭浏览器时出错: {e}")
+        await self._cleanup_browser()
+        print("✅ 浏览器已关闭")
 
 class PlaywrightAgent(Agent):
     """简化的Playwright浏览器Agent"""
