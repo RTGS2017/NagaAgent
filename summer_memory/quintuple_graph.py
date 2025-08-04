@@ -63,32 +63,53 @@ def save_quintuples(quintuples):
         _json.dump(list(quintuples), f, ensure_ascii=False, indent=2)
 
 
-def store_quintuples(new_quintuples):
-    all_quintuples = load_quintuples()
-    all_quintuples.update(new_quintuples)  # 集合自动去重
+def store_quintuples(new_quintuples) -> bool:
+    """存储五元组到文件和Neo4j，返回是否成功"""
+    try:
+        all_quintuples = load_quintuples()
+        all_quintuples.update(new_quintuples)  # 集合自动去重
 
-    # 持久化到文件
-    save_quintuples(all_quintuples)
+        # 持久化到文件
+        save_quintuples(all_quintuples)
 
-    # 同步更新Neo4j图谱数据库（仅在GRAG_ENABLED时）
-    if graph is not None:
-        for head, head_type, rel, tail, tail_type in new_quintuples:
-            if not head or not tail:
-                logger.warning(f"跳过无效五元组，head或tail为空: {(head, head_type, rel, tail, tail_type)}")
-                continue
-            
-            # 创建带类型的节点
-            h_node = Node("Entity", name=head, entity_type=head_type)
-            t_node = Node("Entity", name=tail, entity_type=tail_type)
-            
-            # 创建关系，保存主体和客体类型信息
-            r = Relationship(h_node, rel, t_node, head_type=head_type, tail_type=tail_type)
-            
-            # 合并节点时使用name和entity_type作为唯一标识
-            graph.merge(h_node, "Entity", "name")
-            graph.merge(t_node, "Entity", "name")
-            graph.merge(r)
+        # 同步更新Neo4j图谱数据库（仅在GRAG_ENABLED时）
+        success = True
+        if graph is not None:
+            success_count = 0
+            for head, head_type, rel, tail, tail_type in new_quintuples:
+                if not head or not tail:
+                    logger.warning(f"跳过无效五元组，head或tail为空: {(head, head_type, rel, tail, tail_type)}")
+                    continue
 
+                try:
+                    # 创建带类型的节点
+                    h_node = Node("Entity", name=head, entity_type=head_type)
+                    t_node = Node("Entity", name=tail, entity_type=tail_type)
+
+                    # 创建关系，保存主体和客体类型信息
+                    r = Relationship(h_node, rel, t_node, head_type=head_type, tail_type=tail_type)
+
+                    # 合并节点时使用name和entity_type作为唯一标识
+                    graph.merge(h_node, "Entity", "name")
+                    graph.merge(t_node, "Entity", "name")
+                    graph.merge(r)
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"存储五元组失败: {head}-{rel}-{tail}, 错误: {e}")
+                    success = False
+
+            logger.info(f"成功存储 {success_count}/{len(new_quintuples)} 个五元组到Neo4j")
+            # 如果至少成功存储了一个五元组，就认为是成功的
+            if success_count > 0:
+                return True
+            else:
+                return False
+        else:
+            logger.info(f"跳过Neo4j存储（未启用），保存 {len(new_quintuples)} 个五元组到文件")
+            return True  # 文件存储成功也算成功
+    except Exception as e:
+        logger.error(f"存储五元组失败: {e}")
+        return False
 
 def get_all_quintuples():
     return load_quintuples()
