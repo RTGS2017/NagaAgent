@@ -8,6 +8,8 @@ from enum import Enum
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from NagaAgent.summer_memory.quintuple_extractor import extract_quintuples_async
+
 logger = logging.getLogger(__name__)
 
 class TaskStatus(Enum):
@@ -116,82 +118,29 @@ class QuintupleTaskManager:
         asyncio.create_task(self._process_task(task_id))
         
         return task_id
-    
-    async def _process_task(self, task_id: str):
+
+    async def _process_task(self, task_id: str, text: str):
         """处理单个任务"""
-        task = self.tasks.get(task_id)
-        if not task:
-            logger.error(f"任务不存在: {task_id}")
-            return
-        
-        # 更新任务状态
-        with self.lock:
-            task.status = TaskStatus.RUNNING
-            task.started_at = time.time()
-            self.running_tasks += 1
-        
-        logger.info(f"开始处理任务: {task_id}")
-        
         try:
-            # 在线程池中执行提取，添加超时控制
-            loop = asyncio.get_event_loop()
-            result = await asyncio.wait_for(
-                loop.run_in_executor(self.executor, self._extract_quintuples_sync, task.text),
-                timeout=self.task_timeout
-            )
-            
-            # 更新任务状态
-            with self.lock:
-                task.status = TaskStatus.COMPLETED
-                task.completed_at = time.time()
-                task.result = result
-                self.running_tasks -= 1
-                self.completed_tasks += 1
-            
-            logger.info(f"任务完成: {task_id}, 提取到 {len(result)} 个五元组")
-            
-            # 调用完成回调
+            quintuples = await extract_quintuples_async(text)
+
+            # 修复：确保在主线程触发回调
             if self.on_task_completed:
-                try:
-                    await self.on_task_completed(task_id, result)
-                except Exception as e:
-                    logger.error(f"任务完成回调执行失败: {e}")
-        
-        except asyncio.TimeoutError:
-            # 处理超时
-            with self.lock:
-                task.status = TaskStatus.FAILED
-                task.completed_at = time.time()
-                task.error = f"任务超时（{self.task_timeout}秒）"
-                self.running_tasks -= 1
-                self.failed_tasks += 1
-            
-            logger.error(f"任务超时: {task_id}")
-            
-            # 调用失败回调
-            if self.on_task_failed:
-                try:
-                    await self.on_task_failed(task_id, f"任务超时（{self.task_timeout}秒）")
-                except Exception as callback_e:
-                    logger.error(f"任务失败回调执行失败: {callback_e}")
-        
+                # 使用线程安全的方式调度回调
+                asyncio.run_coroutine_threadsafe(
+                    self.on_task_completed(task_id, quintuples),
+                    loop=asyncio.get_event_loop()
+                )
+
+            return quintuples
         except Exception as e:
-            # 处理失败
-            with self.lock:
-                task.status = TaskStatus.FAILED
-                task.completed_at = time.time()
-                task.error = str(e)
-                self.running_tasks -= 1
-                self.failed_tasks += 1
-            
-            logger.error(f"任务失败: {task_id}, 错误: {e}")
-            
-            # 调用失败回调
+            logger.error(f"任务处理失败: {task_id}, 错误: {e}")
             if self.on_task_failed:
-                try:
-                    await self.on_task_failed(task_id, str(e))
-                except Exception as callback_e:
-                    logger.error(f"任务失败回调执行失败: {callback_e}")
+                asyncio.run_coroutine_threadsafe(
+                    self.on_task_failed(task_id, str(e)),
+                    loop=asyncio.get_event_loop()
+                )
+            return []
     
     def _extract_quintuples_sync(self, text: str) -> List:
         """同步执行五元组提取（在线程池中运行）"""
