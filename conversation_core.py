@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 # import asyncio # 日志与系统
@@ -114,7 +115,8 @@ class NagaConversation: # 对话主类
             except Exception as e:
                 logger.warning(f"树状思考系统实例创建失败: {e}")
                 self.tree_thinking = None
-        
+
+        self.loop = asyncio.get_event_loop()
 
 
     def _init_mcp_services(self):
