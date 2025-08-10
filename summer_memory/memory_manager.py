@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import traceback
+import weakref
 from typing import List, Dict, Optional, Tuple
 from .quintuple_extractor import extract_quintuples
 from .quintuple_graph import store_quintuples, query_graph_by_keywords, get_all_quintuples
@@ -35,8 +36,8 @@ class GRAGMemoryManager:
             start_auto_cleanup()
             
             # 设置任务完成回调
-            task_manager.on_task_completed = self._on_task_completed
-            task_manager.on_task_failed = self._on_task_failed
+            self._weak_ref = weakref.ref(self)
+            task_manager.on_task_completed = self._on_task_completed_wrapper
             
         except Exception as e:
             logger.error(f"GRAG记忆系统初始化失败: {e}")
@@ -71,27 +72,35 @@ class GRAGMemoryManager:
             logger.error(f"添加对话记忆失败: {e}")
             return False
 
+    def _on_task_completed_wrapper(self, task_id: str, quintuples: List):
+        """包装回调方法，处理实例可能被销毁的情况"""
+        instance = self._weak_ref()
+        if instance:
+            asyncio.run_coroutine_threadsafe(
+                instance._on_task_completed(task_id, quintuples),
+                loop=asyncio.get_event_loop()
+            )
+
     async def _on_task_completed(self, task_id: str, quintuples: List) -> None:
-        """任务完成回调"""
         try:
             self.active_tasks.discard(task_id)
             logger.info(f"任务完成回调: {task_id}, 提取到 {len(quintuples)} 个五元组")
-            
+
+            # 确保在事件循环线程中执行
             if not quintuples:
                 logger.warning(f"任务 {task_id} 未提取到五元组")
                 return
-            
-            # 存储到Neo4j
-            store_success = await asyncio.wait_for(
-                asyncio.to_thread(store_quintuples, quintuples),
-                timeout=15.0  # 15秒超时
-            )
-            
+
+            logger.debug(f"准备存储五元组: {quintuples[:2]}...")
+
+            # 直接调用同步存储函数（避免线程切换）
+            store_success = store_quintuples(quintuples)
+
             if store_success:
                 logger.info(f"任务 {task_id} 的五元组存储成功")
             else:
                 logger.error(f"任务 {task_id} 的五元组存储失败")
-                
+
         except Exception as e:
             logger.error(f"任务完成回调处理失败: {e}")
 
