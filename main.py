@@ -154,6 +154,8 @@ class NagaAgentAdapter:
          yield "娜迦",resp,None,True,False
 
 if __name__=="__main__":
+ if not asyncio.get_event_loop().is_running():
+    asyncio.set_event_loop(asyncio.new_event_loop())
  app=QApplication(sys.argv)
  icon_path = os.path.join(os.path.dirname(__file__), "ui", "window_icon.png")
  app.setWindowIcon(QIcon(icon_path))
