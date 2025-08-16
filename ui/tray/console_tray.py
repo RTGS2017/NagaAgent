@@ -4,7 +4,9 @@
 """
 import os
 import sys
-import winreg
+import platform
+if platform.system().lower() == 'windows':
+    import winreg
 import threading
 import subprocess
 import ctypes
