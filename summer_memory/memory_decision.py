@@ -55,6 +55,24 @@ class MemoryDecisionMaker:
     
     def __init__(self):
         self.enabled = getattr(config.grag, 'memory_decision_enabled', True)
+    
+    def _clean_json_content(self, content: str) -> str:
+        """清理JSON内容，去除代码框标记等"""
+        import re
+        
+        # 去除代码框标记
+        content = re.sub(r'```json\s*', '', content)
+        content = re.sub(r'```\s*', '', content)
+        content = re.sub(r'```\s*$', '', content)
+        
+        # 去除其他可能的标记
+        content = re.sub(r'^```.*?\n', '', content, flags=re.MULTILINE)
+        content = re.sub(r'\n```.*?$', '', content, flags=re.MULTILINE)
+        
+        # 去除前后空白
+        content = content.strip()
+        
+        return content
         
     async def decide_memory_query(self, user_question: str) -> MemoryQueryDecision:
         """决定是否需要查询记忆，以及查询什么"""
@@ -153,11 +171,20 @@ class MemoryDecisionMaker:
                 )
                 
                 content = response.choices[0].message.content.strip()
-                data = json.loads(content)
                 
-                result = MemoryQueryDecision(**data)
-                logger.info(f"传统方法记忆查询决策成功: should_query={result.should_query}")
-                return result
+                # 清理JSON内容
+                cleaned_content = self._clean_json_content(content)
+                
+                # 尝试解析清理后的内容
+                try:
+                    data = json.loads(cleaned_content)
+                    result = MemoryQueryDecision(**data)
+                    logger.info(f"传统方法记忆查询决策成功: should_query={result.should_query}")
+                    return result
+                except json.JSONDecodeError as je:
+                    logger.error(f"JSON解析失败，原始内容: {content[:200]}")
+                    logger.error(f"清理后内容: {cleaned_content[:200]}")
+                    raise je
                 
             except Exception as e:
                 logger.error(f"传统方法失败 (第{attempt + 1}次): {e}")
@@ -275,11 +302,20 @@ AI：{ai_response}
                 )
                 
                 content = response.choices[0].message.content.strip()
-                data = json.loads(content)
                 
-                result = MemoryGenerationDecision(**data)
-                logger.info(f"传统方法记忆生成决策成功: should_store={result.should_store}")
-                return result
+                # 清理JSON内容
+                cleaned_content = self._clean_json_content(content)
+                
+                # 尝试解析清理后的内容
+                try:
+                    data = json.loads(cleaned_content)
+                    result = MemoryGenerationDecision(**data)
+                    logger.info(f"传统方法记忆生成决策成功: should_store={result.should_store}")
+                    return result
+                except json.JSONDecodeError as je:
+                    logger.error(f"JSON解析失败，原始内容: {content[:200]}")
+                    logger.error(f"清理后内容: {cleaned_content[:200]}")
+                    raise je
                 
             except Exception as e:
                 logger.error(f"传统方法失败 (第{attempt + 1}次): {e}")
