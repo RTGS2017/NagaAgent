@@ -99,6 +99,11 @@ class GRAGConfig(BaseModel):
     neo4j_password: str = Field(default="your_password", description="Neo4j密码")
     neo4j_database: str = Field(default="neo4j", description="Neo4j数据库名")
     extraction_timeout: int = Field(default=600, ge=1, le=1800, description="知识提取超时时间（秒）")
+    # 新增记忆决策相关配置
+    memory_decision_enabled: bool = Field(default=True, description="是否启用智能记忆决策")
+    intelligent_memory_enabled: bool = Field(default=True, description="是否启用智能记忆流程")
+    query_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0, description="记忆查询决策置信度阈值")
+    generation_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0, description="记忆生成决策置信度阈值")
     extraction_retries: int = Field(default=2, ge=0, le=5, description="知识提取重试次数")
     base_timeout: int = Field(default=600, ge=5, le=1800, description="基础操作超时时间（秒）")
     task_timeout: int = Field(default=600, ge=5, le=1800, description="单个任务超时时间（秒）")
@@ -343,6 +348,45 @@ Agent服务：
 请设计一个简洁的核心问题。
 【重要】：只输出问题本身，不要包含思考过程或解释。""",
         description="下一级问题生成系统提示词"
+    )
+    
+    # 记忆系统相关的提示词模板
+    memory_query_prompt: str = Field(
+        default="""你是一个记忆查询专家，负责分析用户问题并决定是否需要查询历史记忆。
+
+记忆类型：
+- fact: 事实记忆（人物、地点、物体等基本信息）
+- process: 过程记忆（事件、活动、流程等）
+- emotion: 情感记忆（情感、态度、偏好等）
+- meta: 元记忆（关于记忆本身的记忆）
+
+请根据用户问题的内容，判断是否需要查询历史记忆来更好地回答问题。""",
+        description="记忆查询决策系统提示词"
+    )
+    
+    memory_generation_prompt: str = Field(
+        default="""你是一个记忆生成专家，负责分析对话内容并决定是否需要生成新的记忆。
+
+记忆类型：
+- fact: 事实记忆（人物、地点、物体等基本信息）
+- process: 过程记忆（事件、活动、流程等）
+- emotion: 情感记忆（情感、态度、偏好等）
+- meta: 元记忆（关于记忆本身的记忆）
+
+重要性评分：0.0-1.0，分数越高表示越重要
+
+请根据用户问题和AI回复的对话内容，判断是否需要生成新的记忆。""",
+        description="记忆生成决策系统提示词"
+    )
+    
+    memory_context_prompt: str = Field(
+        default="""【历史记忆信息】
+{memory_context}
+
+请基于以上历史记忆信息，结合你的知识库，回答用户的问题。如果记忆信息与问题相关，请充分利用这些信息；如果不相关，请忽略并正常回答。
+
+记住：记忆信息是为了帮助你更好地理解用户背景和上下文，但不要过度依赖或强制使用不相关的记忆。""",
+        description="记忆上下文注入提示词模板"
     )
 
 class NagaConfig(BaseModel):
