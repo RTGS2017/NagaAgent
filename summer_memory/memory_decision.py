@@ -25,6 +25,17 @@ async_client = AsyncOpenAI(
     base_url=config.api.base_url
 )
 
+# 初始化快速模型客户端
+fast_client = OpenAI(
+    api_key=config.fast_model.api_key,
+    base_url=config.fast_model.base_url
+)
+
+fast_async_client = AsyncOpenAI(
+    api_key=config.fast_model.api_key,
+    base_url=config.fast_model.base_url
+)
+
 logger = logging.getLogger(__name__)
 
 # 定义Pydantic模型
@@ -136,14 +147,14 @@ class MemoryDecisionMaker:
         
         for attempt in range(max_retries + 1):
             try:
-                completion = await async_client.beta.chat.completions.parse(
-                    model=config.api.model,
+                completion = await fast_async_client.beta.chat.completions.parse(
+                    model=config.fast_model.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"请分析以下用户问题，决定是否需要查询记忆：\n\n问题：{user_question}"}
                     ],
                     response_format=MemoryQueryDecision,
-                    max_tokens=config.api.max_tokens,
+                    max_tokens=config.fast_model.max_tokens,
                     temperature=0.3,
                     timeout=600 + (attempt * 20)
                 )
@@ -188,10 +199,10 @@ class MemoryDecisionMaker:
         
         for attempt in range(max_retries + 1):
             try:
-                response = await async_client.chat.completions.create(
-                    model=config.api.model,
+                response = await fast_async_client.chat.completions.create(
+                    model=config.fast_model.model,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=config.api.max_tokens,
+                    max_tokens=config.fast_model.max_tokens,
                     temperature=0.3,
                     timeout=600
                 )
@@ -278,14 +289,14 @@ class MemoryDecisionMaker:
         
         for attempt in range(max_retries + 1):
             try:
-                completion = await async_client.beta.chat.completions.parse(
-                    model=config.api.model,
+                completion = await fast_async_client.beta.chat.completions.parse(
+                    model=config.fast_model.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"请分析以下对话对，决定是否需要生成记忆：\n\n用户：{user_question}\n\nAI：{ai_response}"}
                     ],
                     response_format=MemoryGenerationDecision,
-                    max_tokens=config.api.max_tokens,
+                    max_tokens=config.fast_model.max_tokens,
                     temperature=0.3,
                     timeout=600 + (attempt * 20)
                 )
@@ -332,10 +343,10 @@ AI：{ai_response}
         
         for attempt in range(max_retries + 1):
             try:
-                response = await async_client.chat.completions.create(
-                    model=config.api.model,
+                response = await fast_async_client.chat.completions.create(
+                    model=config.fast_model.model,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=config.api.max_tokens,
+                    max_tokens=config.fast_model.max_tokens,
                     temperature=0.3,
                     timeout=600
                 )

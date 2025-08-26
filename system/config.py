@@ -80,6 +80,15 @@ class APIConfig(BaseModel):
     context_load_days: int = Field(default=3, ge=1, le=30, description="加载历史上下文的天数")
     context_parse_logs: bool = Field(default=True, description="是否从日志文件解析上下文")
 
+class FastModelConfig(BaseModel):
+    """快速模型配置 - 用于记忆查询和存储决策"""
+    api_key: str = Field(default="sk-placeholder-key-not-set", description="API密钥")
+    base_url: str = Field(default="https://api.deepseek.com/v1", description="API基础URL")
+    model: str = Field(default="deepseek-chat", description="使用的快速模型名称")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
+    max_tokens: int = Field(default=8000, ge=1, le=8192, description="最大token数")
+    max_history_rounds: int = Field(default=10, ge=1, le=200, description="最大历史轮数")
+
 class APIServerConfig(BaseModel):
     """API服务器配置"""
     enabled: bool = Field(default=True, description="是否启用API服务器")
@@ -393,6 +402,7 @@ class NagaConfig(BaseModel):
     """NagaAgent主配置类"""
     system: SystemConfig = Field(default_factory=SystemConfig)
     api: APIConfig = Field(default_factory=APIConfig)
+    fast_model: FastModelConfig = Field(default_factory=FastModelConfig)
     api_server: APIServerConfig = Field(default_factory=APIServerConfig)
     grag: GRAGConfig = Field(default_factory=GRAGConfig)
     handoff: HandoffConfig = Field(default_factory=HandoffConfig)

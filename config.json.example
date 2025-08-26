@@ -19,6 +19,14 @@
     "context_load_days": 3,
     "context_parse_logs": true
   },
+   "fast_model": {
+    "api_key": " ",
+    "base_url": "https://naga.furina.chat/v1",
+    "model": " ",
+    "temperature": 0.7,
+    "max_tokens": 8000,
+    "max_history_rounds": 10
+  },
   "api_server": {
     "enabled": true,
     "host": "127.0.0.1",
