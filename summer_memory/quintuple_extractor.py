@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from system.config import config
 from openai import OpenAI, AsyncOpenAI
+from .json_utils import clean_and_parse_json
 
 # 初始化OpenAI客户端
 client = OpenAI(
@@ -167,7 +168,7 @@ async def _extract_quintuples_async_structured(text):
 """
 
     # 重试机制配置
-    max_retries = 3
+    max_retries = 1  # 减少重试次数，失败后立即回退
 
     for attempt in range(max_retries + 1):
         logger.info(f"尝试使用结构化输出提取五元组 (第{attempt + 1}次)")
@@ -201,10 +202,12 @@ async def _extract_quintuples_async_structured(text):
 
         except Exception as e:
             logger.warning(f"结构化输出失败: {str(e)}")
-            logger.info("结构化输出失败，立即回退到传统JSON解析方法")
-            return await _extract_quintuples_async_fallback(text)
+            # 立即回退到传统方法，不再重试
+            break
 
-    return []
+    # 立即调用回退方法
+    logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+    return await _extract_quintuples_async_fallback(text)
 
 
 async def _extract_quintuples_async_fallback(text):
@@ -238,20 +241,26 @@ async def _extract_quintuples_async_fallback(text):
             
             content = response.choices[0].message.content.strip()
             
-            # 尝试解析JSON
-            try:
-                quintuples = json.loads(content)
+            # 使用统一的JSON清理和解析工具
+            quintuples = clean_and_parse_json(content, expected_type=list, default=[])
+            
+            if quintuples:
                 logger.info(f"传统方法成功，提取到 {len(quintuples)} 个五元组")
                 return [tuple(t) for t in quintuples if len(t) == 5]
-            except json.JSONDecodeError:
-                logger.error(f"JSON解析失败，原始内容: {content[:200]}")
-                # 尝试直接提取数组
+            else:
+                logger.warning("传统方法JSON解析失败，尝试额外解析策略")
+                # 尝试直接提取数组作为最后的策略
                 if '[' in content and ']' in content:
-                    start = content.index('[')
-                    end = content.rindex(']') + 1
-                    quintuples = json.loads(content[start:end])
-                    return [tuple(t) for t in quintuples if len(t) == 5]
-                raise
+                    try:
+                        start = content.index('[')
+                        end = content.rindex(']') + 1
+                        array_content = content[start:end]
+                        quintuples = json.loads(array_content)
+                        if isinstance(quintuples, list):
+                            logger.info(f"数组提取策略成功，提取到 {len(quintuples)} 个五元组")
+                            return [tuple(t) for t in quintuples if len(t) == 5]
+                    except:
+                        pass
 
         except Exception as e:
             logger.error(f"传统方法提取失败: {str(e)}")
@@ -311,7 +320,7 @@ def _extract_quintuples_structured(text):
 """
 
     # 重试机制配置
-    max_retries = 3
+    max_retries = 1  # 减少重试次数，失败后立即回退
 
     for attempt in range(max_retries + 1):
         logger.info(f"尝试使用结构化输出提取五元组 (第{attempt + 1}次)")
@@ -345,10 +354,12 @@ def _extract_quintuples_structured(text):
 
         except Exception as e:
             logger.warning(f"结构化输出失败: {str(e)}")
-            logger.info("结构化输出失败，立即回退到传统JSON解析方法")
-            return _extract_quintuples_fallback(text)
+            # 立即回退到传统方法，不再重试
+            break
 
-    return []
+    # 立即调用回退方法
+    logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+    return _extract_quintuples_fallback(text)
 
 
 def _extract_quintuples_fallback(text):
@@ -382,20 +393,26 @@ def _extract_quintuples_fallback(text):
 
             content = response.choices[0].message.content.strip()
             
-            # 尝试解析JSON
-            try:
-                quintuples = json.loads(content)
+            # 使用统一的JSON清理和解析工具
+            quintuples = clean_and_parse_json(content, expected_type=list, default=[])
+            
+            if quintuples:
                 logger.info(f"传统方法成功，提取到 {len(quintuples)} 个五元组")
                 return [tuple(t) for t in quintuples if len(t) == 5]
-            except json.JSONDecodeError:
-                logger.error(f"JSON解析失败，原始内容: {content[:200]}")
-                # 尝试直接提取数组
+            else:
+                logger.warning("传统方法JSON解析失败，尝试额外解析策略")
+                # 尝试直接提取数组作为最后的策略
                 if '[' in content and ']' in content:
-                    start = content.index('[')
-                    end = content.rindex(']') + 1
-                    quintuples = json.loads(content[start:end])
-                    return [tuple(t) for t in quintuples if len(t) == 5]
-                raise
+                    try:
+                        start = content.index('[')
+                        end = content.rindex(']') + 1
+                        array_content = content[start:end]
+                        quintuples = json.loads(array_content)
+                        if isinstance(quintuples, list):
+                            logger.info(f"数组提取策略成功，提取到 {len(quintuples)} 个五元组")
+                            return [tuple(t) for t in quintuples if len(t) == 5]
+                    except:
+                        pass
 
         except Exception as e:
             logger.error(f"传统方法提取失败: {str(e)}")
