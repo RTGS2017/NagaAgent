@@ -88,7 +88,7 @@ class MemoryDecisionMaker:
 请仔细分析用户问题，提取关键信息，并做出决策。
 """
         
-        max_retries = 3
+        max_retries = 1  # 减少重试次数，失败后立即回退
         
         for attempt in range(max_retries + 1):
             try:
@@ -110,11 +110,12 @@ class MemoryDecisionMaker:
                 
             except Exception as e:
                 logger.warning(f"结构化输出失败 (第{attempt + 1}次): {e}")
-                if attempt == max_retries:
-                    raise
-                await asyncio.sleep(1)
+                # 立即回退到传统方法，不再重试
+                break
         
-        raise Exception("所有重试都失败")
+        # 立即调用回退方法
+        logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+        return await self._decide_memory_query_fallback(user_question)
     
     async def _decide_memory_query_fallback(self, user_question: str) -> MemoryQueryDecision:
         """传统JSON解析的记忆查询决策（回退方案）"""
@@ -207,7 +208,7 @@ class MemoryDecisionMaker:
 请仔细分析对话内容，识别关键信息，并做出决策。
 """
         
-        max_retries = 3
+        max_retries = 1  # 减少重试次数，失败后立即回退
         
         for attempt in range(max_retries + 1):
             try:
@@ -229,11 +230,12 @@ class MemoryDecisionMaker:
                 
             except Exception as e:
                 logger.warning(f"结构化输出失败 (第{attempt + 1}次): {e}")
-                if attempt == max_retries:
-                    raise
-                await asyncio.sleep(1)
+                # 立即回退到传统方法，不再重试
+                break
         
-        raise Exception("所有重试都失败")
+        # 立即调用回退方法
+        logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+        return await self._decide_memory_generation_fallback(user_question, ai_response)
     
     async def _decide_memory_generation_fallback(self, user_question: str, ai_response: str) -> MemoryGenerationDecision:
         """传统JSON解析的记忆生成决策（回退方案）"""
