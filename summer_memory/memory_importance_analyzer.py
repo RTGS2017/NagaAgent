@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from config import config
 from openai import OpenAI, AsyncOpenAI
+from .json_utils import clean_and_parse_json
 
 # 初始化OpenAI客户端
 client = OpenAI(
@@ -135,7 +136,9 @@ class MemoryImportanceAnalyzer:
             )
             
             content = response.choices[0].message.content.strip()
-            result = json.loads(content)
+            
+            # 使用统一的JSON清理和解析工具
+            result = clean_and_parse_json(content, expected_type=dict, default={})
             
             return ImportanceFactors(
                 factual_importance=result.get("factual_importance", 0.5),
