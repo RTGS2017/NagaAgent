@@ -25,18 +25,24 @@ async_client = AsyncOpenAI(
     base_url=config.api.base_url
 )
 
-# 初始化快速模型客户端
+# 获取快速模型配置（如果无效则回退到主模型）
+fast_model_config = config.get_fast_model_config()
+
+# 初始化快速模型客户端（支持回退）
 fast_client = OpenAI(
-    api_key=config.fast_model.api_key,
-    base_url=config.fast_model.base_url
+    api_key=fast_model_config["api_key"],
+    base_url=fast_model_config["base_url"]
 )
 
 fast_async_client = AsyncOpenAI(
-    api_key=config.fast_model.api_key,
-    base_url=config.fast_model.base_url
+    api_key=fast_model_config["api_key"],
+    base_url=fast_model_config["base_url"]
 )
 
 logger = logging.getLogger(__name__)
+
+# 记录使用的模型类型
+logger.info(f"记忆决策系统使用模型: {fast_model_config['model']} (快速模型: {fast_model_config['is_fast_model']})")
 
 # 定义Pydantic模型
 class MemoryQueryDecision(BaseModel):
@@ -148,13 +154,13 @@ class MemoryDecisionMaker:
         for attempt in range(max_retries + 1):
             try:
                 completion = await fast_async_client.beta.chat.completions.parse(
-                    model=config.fast_model.model,
+                    model=fast_model_config["model"],
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"请分析以下用户问题，决定是否需要查询记忆：\n\n问题：{user_question}"}
                     ],
                     response_format=MemoryQueryDecision,
-                    max_tokens=config.fast_model.max_tokens,
+                    max_tokens=fast_model_config["max_tokens"],
                     temperature=0.3,
                     timeout=600 + (attempt * 20)
                 )
@@ -200,9 +206,9 @@ class MemoryDecisionMaker:
         for attempt in range(max_retries + 1):
             try:
                 response = await fast_async_client.chat.completions.create(
-                    model=config.fast_model.model,
+                    model=fast_model_config["model"],
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=config.fast_model.max_tokens,
+                    max_tokens=fast_model_config["max_tokens"],
                     temperature=0.3,
                     timeout=600
                 )
@@ -290,13 +296,13 @@ class MemoryDecisionMaker:
         for attempt in range(max_retries + 1):
             try:
                 completion = await fast_async_client.beta.chat.completions.parse(
-                    model=config.fast_model.model,
+                    model=fast_model_config["model"],
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"请分析以下对话对，决定是否需要生成记忆：\n\n用户：{user_question}\n\nAI：{ai_response}"}
                     ],
                     response_format=MemoryGenerationDecision,
-                    max_tokens=config.fast_model.max_tokens,
+                    max_tokens=fast_model_config["max_tokens"],
                     temperature=0.3,
                     timeout=600 + (attempt * 20)
                 )
@@ -344,9 +350,9 @@ AI：{ai_response}
         for attempt in range(max_retries + 1):
             try:
                 response = await fast_async_client.chat.completions.create(
-                    model=config.fast_model.model,
+                    model=fast_model_config["model"],
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=config.fast_model.max_tokens,
+                    max_tokens=fast_model_config["max_tokens"],
                     temperature=0.3,
                     timeout=600
                 )

@@ -88,6 +88,37 @@ class FastModelConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
     max_tokens: int = Field(default=8000, ge=1, le=8192, description="最大token数")
     max_history_rounds: int = Field(default=10, ge=1, le=200, description="最大历史轮数")
+    
+    @field_validator('api_key')
+    @classmethod
+    def validate_api_key(cls, v):
+        """验证API密钥是否有效"""
+        # 检查是否为默认值或空值
+        if v in ["sk-placeholder-key-not-set", "", "your_api_key_here", "your-fast-model-api-key"]:
+            raise ValueError("API密钥未配置")
+        return v
+    
+    @field_validator('model')
+    @classmethod
+    def validate_model(cls, v):
+        """验证模型名称是否有效"""
+        if not v or v.strip() == "":
+            raise ValueError("模型名称未配置")
+        return v.strip()
+    
+    def is_valid(self) -> bool:
+        """检查快速模型配置是否有效"""
+        try:
+            # 检查关键配置项
+            if self.api_key in ["sk-placeholder-key-not-set", "", "your_api_key_here", "your-fast-model-api-key"]:
+                return False
+            if not self.model or self.model.strip() == "":
+                return False
+            if not self.base_url or self.base_url.strip() == "":
+                return False
+            return True
+        except Exception:
+            return False
 
 class APIServerConfig(BaseModel):
     """API服务器配置"""
@@ -423,6 +454,34 @@ class NagaConfig(BaseModel):
     system_check: SystemCheckConfig = Field(default_factory=SystemCheckConfig)
 
     model_config = {"extra": "ignore"}
+    
+    def get_fast_model_config(self) -> dict:
+        """获取快速模型配置，如果无效则回退到主模型配置"""
+        if self.fast_model.is_valid():
+            return {
+                "api_key": self.fast_model.api_key,
+                "base_url": self.fast_model.base_url,
+                "model": self.fast_model.model,
+                "temperature": self.fast_model.temperature,
+                "max_tokens": self.fast_model.max_tokens,
+                "max_history_rounds": self.fast_model.max_history_rounds,
+                "is_fast_model": True
+            }
+        else:
+            # 回退到主模型配置
+            return {
+                "api_key": self.api.api_key,
+                "base_url": self.api.base_url,
+                "model": self.api.model,
+                "temperature": self.api.temperature,
+                "max_tokens": self.api.max_tokens,
+                "max_history_rounds": self.api.max_history_rounds,
+                "is_fast_model": False
+            }
+    
+    def is_fast_model_enabled(self) -> bool:
+        """检查快速模型是否启用且有效"""
+        return self.fast_model.is_valid()
 
     def __init__(self, **kwargs):
         setup_environment()
