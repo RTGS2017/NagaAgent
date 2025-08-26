@@ -177,27 +177,34 @@ def query_graph_by_keywords(keywords, memory_types=None, importance_threshold=0.
     results = []
     if graph is not None:
         for kw in keywords:
+            # 使用参数化查询避免注入问题
+            params = {
+                'keyword': kw,
+                'importance_threshold': importance_threshold
+            }
+            
             # 构建基础查询
-            query = f"""
+            query = """
             MATCH (e1:Entity)-[r]->(e2:Entity)
-            WHERE e1.name CONTAINS '{kw}' OR e2.name CONTAINS '{kw}' OR type(r) CONTAINS '{kw}'
-               OR e1.entity_type CONTAINS '{kw}' OR e2.entity_type CONTAINS '{kw}'
+            WHERE e1.name CONTAINS $keyword OR e2.name CONTAINS $keyword OR type(r) CONTAINS $keyword
+               OR e1.entity_type CONTAINS $keyword OR e2.entity_type CONTAINS $keyword
             """
             
             # 添加记忆类型过滤
             if memory_types:
-                memory_types_str = "', '".join(memory_types)
-                query += f" AND r.memory_type IN ['{memory_types_str}']"
+                params['memory_types'] = memory_types
+                query += " AND r.memory_type IN $memory_types"
             
             # 添加重要性阈值过滤
             if importance_threshold > 0:
-                query += f" AND r.importance_score >= {importance_threshold}"
+                query += " AND r.importance_score >= $importance_threshold"
             
             # 添加时间窗口过滤
             if time_window:
                 current_time = time.time()
                 start_time = current_time - time_window
-                query += f" AND r.timestamp >= {start_time}"
+                params['start_time'] = start_time
+                query += " AND r.timestamp >= $start_time"
             
             query += """
             RETURN e1.name, e1.entity_type, type(r), e2.name, e2.entity_type, 
@@ -205,7 +212,7 @@ def query_graph_by_keywords(keywords, memory_types=None, importance_threshold=0.
             LIMIT 10
             """
             
-            res = graph.run(query).data()
+            res = graph.run(query, **params).data()
             for record in res:
                 results.append({
                     "subject": record['e1.name'],
