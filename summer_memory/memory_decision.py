@@ -73,6 +73,28 @@ class MemoryDecisionMaker:
         content = content.strip()
         
         return content
+    
+    def _simple_query_decision(self, user_question: str) -> MemoryQueryDecision:
+        """简单的查询决策，用于短问题或快速决策"""
+        question_length = len(user_question)
+        should_query = question_length >= 2  # 很低的门槛
+        
+        # 简单的关键词提取
+        keywords = []
+        if question_length > 0:
+            words = user_question.replace("？", "").replace("?", "").split()
+            keywords = [word[:8] for word in words if len(word) > 0][:2]  # 最多2个关键词
+        
+        if not keywords:
+            keywords = [user_question[:8]] if user_question else ["默认"]
+        
+        return MemoryQueryDecision(
+            should_query=should_query,
+            query_keywords=keywords,
+            memory_types=["fact"],
+            query_reason="简单快速决策",
+            confidence=0.7
+        )
         
     async def decide_memory_query(self, user_question: str) -> MemoryQueryDecision:
         """决定是否需要查询记忆，以及查询什么"""
@@ -84,6 +106,10 @@ class MemoryDecisionMaker:
                 query_reason="记忆决策功能未启用",
                 confidence=0.0
             )
+        
+        # 对于很短的问题，直接使用宽松规则
+        if len(user_question) <= 5:
+            return self._simple_query_decision(user_question)
         
         # 首先尝试结构化输出
         try:
@@ -191,13 +217,26 @@ class MemoryDecisionMaker:
                 if attempt < max_retries:
                     await asyncio.sleep(1)
         
-        # 最终回退：简单规则
+        # 最终回退：更宽松的规则
+        question_length = len(user_question)
+        should_query = question_length >= 3  # 降低查询门槛
+        
+        # 提取简单的关键词
+        keywords = []
+        if question_length > 0:
+            # 简单的关键词提取：取问题的主要词汇
+            words = user_question.replace("？", "").replace("?", "").split()
+            keywords = [word[:10] for word in words if len(word) > 0][:3]  # 最多3个关键词
+        
+        if not keywords:
+            keywords = [user_question[:10]] if user_question else ["默认"]
+        
         return MemoryQueryDecision(
-            should_query=len(user_question) > 10,
-            query_keywords=[user_question[:10]],
+            should_query=should_query,
+            query_keywords=keywords,
             memory_types=["fact"],
-            query_reason="默认决策",
-            confidence=0.5
+            query_reason="宽松默认决策",
+            confidence=0.6
         )
     
     async def decide_memory_generation(self, user_question: str, ai_response: str) -> MemoryGenerationDecision:
