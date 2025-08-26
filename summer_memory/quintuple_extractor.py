@@ -6,7 +6,8 @@ import sys
 import os
 import time
 import asyncio
-from typing import List, Tuple
+import uuid
+from typing import List, Tuple, Dict, Any
 from pydantic import BaseModel
 
 # 添加项目根目录到路径，以便导入config
@@ -37,16 +38,92 @@ class Quintuple(BaseModel):
     predicate: str
     object: str
     object_type: str
+    timestamp: float = None
+    session_id: str = None
+    memory_type: str = "fact"  # fact, process, emotion, meta
+    importance_score: float = 0.5
 
 
 class QuintupleResponse(BaseModel):
     quintuples: List[Quintuple]
 
 
-async def extract_quintuples_async(text):
+def create_enhanced_quintuple(subject: str, subject_type: str, predicate: str, 
+                             object: str, object_type: str, 
+                             memory_type: str = "fact", 
+                             importance_score: float = 0.5,
+                             session_id: str = None) -> Dict[str, Any]:
+    """创建增强的五元组，包含时间戳和元数据"""
+    current_time = time.time()
+    if session_id is None:
+        session_id = str(uuid.uuid4())
+    
+    return {
+        "subject": subject,
+        "subject_type": subject_type,
+        "predicate": predicate,
+        "object": object,
+        "object_type": object_type,
+        "timestamp": current_time,
+        "session_id": session_id,
+        "memory_type": memory_type,
+        "importance_score": importance_score
+    }
+
+
+def analyze_memory_importance(quintuple: Dict[str, Any], context: str = "") -> float:
+    """分析记忆重要程度"""
+    # 基础重要性分数
+    base_score = 0.5
+    
+    # 根据实体类型调整重要性
+    important_entities = {"人物", "组织", "事件"}
+    if quintuple["subject_type"] in important_entities or quintuple["object_type"] in important_entities:
+        base_score += 0.2
+    
+    # 根据关系类型调整重要性
+    important_relations = {"是", "拥有", "完成", "开始", "结束", "创建", "发现"}
+    if quintuple["predicate"] in important_relations:
+        base_score += 0.2
+    
+    # 根据上下文长度调整重要性（更长的上下文可能包含更多信息）
+    if len(context) > 100:
+        base_score += 0.1
+    
+    # 确保分数在0-1之间
+    return min(max(base_score, 0.0), 1.0)
+
+
+async def extract_quintuples_async(text, session_id: str = None, context: str = ""):
     """异步版本的五元组提取"""
     # 首先尝试使用结构化输出
-    return await _extract_quintuples_async_structured(text)
+    basic_quintuples = await _extract_quintuples_async_structured(text)
+    
+    # 转换为增强五元组
+    enhanced_quintuples = []
+    for quintuple in basic_quintuples:
+        subject, subject_type, predicate, object, object_type = quintuple
+        
+        # 分析记忆重要性
+        temp_quintuple = {
+            "subject": subject,
+            "subject_type": subject_type,
+            "predicate": predicate,
+            "object": object,
+            "object_type": object_type
+        }
+        importance_score = analyze_memory_importance(temp_quintuple, context)
+        
+        # 创建增强五元组
+        enhanced = create_enhanced_quintuple(
+            subject, subject_type, predicate, object, object_type,
+            memory_type="fact",  # 默认为事实记忆
+            importance_score=importance_score,
+            session_id=session_id
+        )
+        enhanced_quintuples.append(enhanced)
+    
+    return enhanced_quintuples
 
 
 async def _extract_quintuples_async_structured(text):
@@ -161,10 +238,36 @@ async def _extract_quintuples_async_fallback(text):
     return []
 
 
-def extract_quintuples(text):
+def extract_quintuples(text, session_id: str = None, context: str = ""):
     """同步版本的五元组提取"""
     # 首先尝试使用结构化输出
-    return _extract_quintuples_structured(text)
+    basic_quintuples = _extract_quintuples_structured(text)
+    
+    # 转换为增强五元组
+    enhanced_quintuples = []
+    for quintuple in basic_quintuples:
+        subject, subject_type, predicate, object, object_type = quintuple
+        
+        # 分析记忆重要性
+        temp_quintuple = {
+            "subject": subject,
+            "subject_type": subject_type,
+            "predicate": predicate,
+            "object": object,
+            "object_type": object_type
+        }
+        importance_score = analyze_memory_importance(temp_quintuple, context)
+        
+        # 创建增强五元组
+        enhanced = create_enhanced_quintuple(
+            subject, subject_type, predicate, object, object_type,
+            memory_type="fact",  # 默认为事实记忆
+            importance_score=importance_score,
+            session_id=session_id
+        )
+        enhanced_quintuples.append(enhanced)
+    
+    return enhanced_quintuples
 
 
 def _extract_quintuples_structured(text):
