@@ -395,9 +395,14 @@ class GRAGMemoryManager:
     async def _background_store_task(self, user_question: str, ai_response: str) -> None:
         """后台记忆存储任务"""
         try:
-            await self.store_memory_intelligent(user_question, ai_response)
+            store_success = await self.store_memory_intelligent(user_question, ai_response)
+            if store_success:
+                print(f"后台记忆存储完成：{len(user_question)}字用户输入 + {len(ai_response)}字AI回复")
+            else:
+                print(f"后台记忆存储完成：决策跳过存储")
         except Exception as e:
             logger.error(f"后台记忆存储任务失败: {e}")
+            print(f"后台记忆存储失败：{e}")
     
     async def _store_memory_by_decision(self, generation_decision, user_question: str, ai_response: str) -> bool:
         """根据决策结果执行记忆存储"""
