@@ -299,8 +299,10 @@ class GRAGMemoryManager:
                 # 如果没有关键词，使用用户问题
                 keywords = [user_question]
             
-            # 执行查询
-            result = await asyncio.to_thread(query_knowledge, user_question)
+            logger.info(f"执行智能记忆查询，关键词: {keywords}, 记忆类型: {query_decision.memory_types}")
+            
+            # 执行查询 - 传递决策的关键词
+            result = await asyncio.to_thread(query_knowledge_with_keywords, user_question, keywords, query_decision.memory_types)
             
             if result and "未在知识图谱中找到相关信息" not in result:
                 logger.info(f"智能记忆查询成功，找到相关信息")
