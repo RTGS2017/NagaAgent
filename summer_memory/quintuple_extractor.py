@@ -71,8 +71,17 @@ def create_enhanced_quintuple(subject: str, subject_type: str, predicate: str,
     }
 
 
+async def analyze_memory_importance_advanced(quintuple: Dict[str, Any], context: str = "", use_llm: bool = True):
+    """使用高级分析器分析记忆重要程度"""
+    from summer_memory.memory_importance_analyzer import memory_importance_analyzer
+    
+    return await memory_importance_analyzer.analyze_memory_importance(
+        quintuple, context, use_llm
+    )
+
+
 def analyze_memory_importance(quintuple: Dict[str, Any], context: str = "") -> float:
-    """分析记忆重要程度"""
+    """分析记忆重要程度（简化版本）"""
     # 基础重要性分数
     base_score = 0.5
     
@@ -94,7 +103,7 @@ def analyze_memory_importance(quintuple: Dict[str, Any], context: str = "") -> f
     return min(max(base_score, 0.0), 1.0)
 
 
-async def extract_quintuples_async(text, session_id: str = None, context: str = ""):
+async def extract_quintuples_async(text, session_id: str = None, context: str = "", use_advanced_analysis: bool = False):
     """异步版本的五元组提取"""
     # 首先尝试使用结构化输出
     basic_quintuples = await _extract_quintuples_async_structured(text)
@@ -104,7 +113,7 @@ async def extract_quintuples_async(text, session_id: str = None, context: str = 
     for quintuple in basic_quintuples:
         subject, subject_type, predicate, object, object_type = quintuple
         
-        # 分析记忆重要性
+        # 创建临时五元组用于分析
         temp_quintuple = {
             "subject": subject,
             "subject_type": subject_type,
@@ -112,15 +121,29 @@ async def extract_quintuples_async(text, session_id: str = None, context: str = 
             "object": object,
             "object_type": object_type
         }
-        importance_score = analyze_memory_importance(temp_quintuple, context)
+        
+        if use_advanced_analysis:
+            # 使用高级重要性分析
+            analysis_result = await analyze_memory_importance_advanced(temp_quintuple, context)
+            importance_score = analysis_result["importance_score"]
+            memory_type = analysis_result["memory_type"]
+        else:
+            # 使用基础重要性分析
+            importance_score = analyze_memory_importance(temp_quintuple, context)
+            memory_type = "fact"  # 默认为事实记忆
         
         # 创建增强五元组
         enhanced = create_enhanced_quintuple(
             subject, subject_type, predicate, object, object_type,
-            memory_type="fact",  # 默认为事实记忆
+            memory_type=memory_type,
             importance_score=importance_score,
             session_id=session_id
         )
+        
+        # 如果使用了高级分析，添加分析结果
+        if use_advanced_analysis:
+            enhanced["analysis_result"] = analysis_result
+        
         enhanced_quintuples.append(enhanced)
     
     return enhanced_quintuples
