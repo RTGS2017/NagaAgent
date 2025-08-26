@@ -2,6 +2,7 @@ import logging
 import asyncio
 import traceback
 import weakref
+import threading
 from typing import List, Dict, Optional, Tuple
 from .quintuple_extractor import extract_quintuples
 from .quintuple_graph import store_quintuples, query_graph_by_keywords, get_all_quintuples
@@ -41,6 +42,33 @@ class GRAGMemoryManager:
             # 初始化Neo4j连接
             from .quintuple_graph import graph
             logger.info("GRAG记忆系统初始化成功")
+
+            # 启动任务管理器（使用线程方式，保持事件循环运行）
+            def run_task_manager():
+                try:
+                    # 创建新的事件循环
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # 启动任务管理器
+                    loop.run_until_complete(start_task_manager())
+                    
+                    # 保持事件循环运行，处理任务
+                    logger.info("任务管理器事件循环开始持续运行...")
+                    loop.run_forever()
+                    
+                except Exception as e:
+                    logger.error(f"任务管理器启动失败: {e}")
+                finally:
+                    # 清理事件循环
+                    try:
+                        loop.close()
+                    except:
+                        pass
+
+            task_manager_thread = threading.Thread(target=run_task_manager, daemon=True)
+            task_manager_thread.start()
+            logger.info("任务管理器启动线程已创建")
 
             # 启动自动清理任务
             start_auto_cleanup()
