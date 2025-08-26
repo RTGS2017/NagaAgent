@@ -5,6 +5,7 @@ import sys
 import os
 import time
 import uuid
+from datetime import datetime
 
 # 添加项目根目录到路径，以便导入config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -64,13 +65,18 @@ def load_quintuples():
                     enhanced_quintuples = []
                     for quintuple in data:
                         if len(quintuple) == 5:
+                            # 获取本地时区时间
+                            local_time = datetime.fromtimestamp(time.time()).astimezone()
+                            time_str = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+                            
                             enhanced_quintuples.append({
                                 "subject": quintuple[0],
                                 "subject_type": quintuple[1],
                                 "predicate": quintuple[2],
                                 "object": quintuple[3],
                                 "object_type": quintuple[4],
-                                "timestamp": time.time(),
+                                "timestamp": time_str,
+                                "timestamp_raw": time.time(),
                                 "session_id": str(uuid.uuid4()),
                                 "memory_type": "fact",
                                 "importance_score": 0.5
@@ -138,16 +144,20 @@ def store_quintuples(new_quintuples) -> bool:
                     # 创建带类型的节点，包含增强信息
                     h_node = Node("Entity", name=head, entity_type=head_type, 
                                  timestamp=quintuple.get("timestamp"), 
+                                 timestamp_raw=quintuple.get("timestamp_raw"),
                                  memory_type=quintuple.get("memory_type", "fact"),
                                  importance_score=quintuple.get("importance_score", 0.5))
                     t_node = Node("Entity", name=tail, entity_type=tail_type,
                                  timestamp=quintuple.get("timestamp"),
+                                 timestamp_raw=quintuple.get("timestamp_raw"),
                                  memory_type=quintuple.get("memory_type", "fact"),
                                  importance_score=quintuple.get("importance_score", 0.5))
 
                     # 创建关系，保存主体和客体类型信息
                     r = Relationship(h_node, rel, t_node, head_type=head_type, tail_type=tail_type,
                                    session_id=quintuple.get("session_id"),
+                                   timestamp=quintuple.get("timestamp"),
+                                   timestamp_raw=quintuple.get("timestamp_raw"),
                                    memory_type=quintuple.get("memory_type", "fact"),
                                    importance_score=quintuple.get("importance_score", 0.5))
 

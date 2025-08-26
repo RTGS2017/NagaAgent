@@ -7,9 +7,10 @@
 import re
 import math
 import logging
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Set, Tuple, Union
 from collections import defaultdict
 import difflib
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,23 @@ class SemanticDeduplicator:
     
     def __init__(self, similarity_threshold=0.8):
         self.similarity_threshold = similarity_threshold
+    
+    def _get_timestamp_value(self, quintuple: Dict[str, Any]) -> float:
+        """获取五元组的时间戳值（支持新旧格式）"""
+        # 优先使用 timestamp_raw（新格式）
+        if "timestamp_raw" in quintuple:
+            return quintuple["timestamp_raw"]
+        # 如果 timestamp 是字符串（新格式），尝试解析
+        elif isinstance(quintuple.get("timestamp"), str):
+            try:
+                time_str = quintuple["timestamp"]
+                if " " in time_str:
+                    dt = datetime.strptime(time_str.split(" ")[0] + " " + time_str.split(" ")[1], "%Y-%m-%d %H:%M:%S")
+                    return dt.timestamp()
+            except:
+                pass
+        # 回退到当前时间
+        return time.time()
         
     def normalize_text(self, text: str) -> str:
         """标准化文本"""
@@ -146,7 +164,7 @@ class SemanticDeduplicator:
             return similar_quintuples[0]
         
         # 使用最新的五元组作为基础
-        base_quintuple = max(similar_quintuples, key=lambda x: x.get("timestamp", 0))
+        base_quintuple = max(similar_quintuples, key=self._get_timestamp_value)
         
         # 合并逻辑
         merged = base_quintuple.copy()
@@ -161,7 +179,7 @@ class SemanticDeduplicator:
         
         # 记录合并信息
         merged["merged_from"] = len(similar_quintuples)
-        merged["merge_timestamp"] = max(q.get("timestamp", 0) for q in similar_quintuples)
+        merged["merge_timestamp"] = max(self._get_timestamp_value(q) for q in similar_quintuples)
         
         return merged
     

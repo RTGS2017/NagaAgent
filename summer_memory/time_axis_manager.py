@@ -7,7 +7,7 @@
 import time
 import math
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,40 @@ class TimeAxisManager:
         self.time_decay_rate = 0.1  # 时间衰减率
         self.half_life = 30 * 24 * 3600  # 半衰期：30天（秒）
         
-    def calculate_time_decay_factor(self, timestamp: float) -> float:
+    def _get_timestamp_from_quintuple(self, quintuple: Dict[str, Any]) -> float:
+        """从五元组中获取时间戳（支持新旧格式）"""
+        # 优先使用 timestamp_raw（新格式）
+        if "timestamp_raw" in quintuple:
+            return quintuple["timestamp_raw"]
+        # 如果 timestamp 是字符串（新格式），尝试解析
+        elif isinstance(quintuple.get("timestamp"), str):
+            try:
+                # 尝试解析时间字符串
+                time_str = quintuple["timestamp"]
+                # 移除时区信息并解析
+                if " " in time_str:
+                    dt = datetime.strptime(time_str.split(" ")[0] + " " + time_str.split(" ")[1], "%Y-%m-%d %H:%M:%S")
+                    return dt.timestamp()
+            except:
+                pass
+        # 回退到当前时间
+        return time.time()
+    
+    def calculate_time_decay_factor(self, timestamp: Union[float, str, Dict[str, Any]]) -> float:
         """计算时间衰减因子"""
         current_time = time.time()
+        
+        # 如果传入的是五元组字典
+        if isinstance(timestamp, dict):
+            timestamp = self._get_timestamp_from_quintuple(timestamp)
+        # 如果是字符串，尝试解析
+        elif isinstance(timestamp, str):
+            try:
+                dt = datetime.strptime(timestamp.split(" ")[0] + " " + timestamp.split(" ")[1], "%Y-%m-%d %H:%M:%S")
+                timestamp = dt.timestamp()
+            except:
+                timestamp = current_time
+        
         age = current_time - timestamp
         
         # 使用指数衰减公式
@@ -32,7 +63,7 @@ class TimeAxisManager:
     def apply_time_decay(self, quintuple: Dict[str, Any]) -> float:
         """应用时间衰减到五元组的重要性分数"""
         original_importance = quintuple.get("importance_score", 0.5)
-        decay_factor = self.calculate_time_decay_factor(quintuple.get("timestamp", time.time()))
+        decay_factor = self.calculate_time_decay_factor(quintuple)
         
         # 计算衰减后的重要性分数
         decayed_importance = original_importance * decay_factor
@@ -47,7 +78,8 @@ class TimeAxisManager:
         filtered_quintuples = []
         
         for quintuple in quintuples:
-            quintuple_time = quintuple.get("timestamp", current_time)
+            # 使用新的时间戳获取方法
+            quintuple_time = self._get_timestamp_from_quintuple(quintuple)
             
             # 时间窗口过滤（最近N秒）
             if time_window is not None:
@@ -90,7 +122,7 @@ class TimeAxisManager:
     def sort_by_time(self, quintuples: List[Dict[str, Any]], 
                     ascending: bool = False) -> List[Dict[str, Any]]:
         """按时间戳排序五元组"""
-        return sorted(quintuples, key=lambda x: x.get("timestamp", 0), reverse=not ascending)
+        return sorted(quintuples, key=self._get_timestamp_from_quintuple, reverse=not ascending)
     
     def get_memory_timeline(self, quintuples: List[Dict[str, Any]], 
                           time_window: Optional[float] = None) -> List[Dict[str, Any]]:
@@ -105,7 +137,7 @@ class TimeAxisManager:
             # 创建时间线条目
             timeline_entry = quintuple.copy()
             timeline_entry["decayed_importance"] = decayed_importance
-            timeline_entry["age_hours"] = (time.time() - quintuple.get("timestamp", time.time())) / 3600
+            timeline_entry["age_hours"] = (time.time() - self._get_timestamp_from_quintuple(quintuple)) / 3600
             
             timeline.append(timeline_entry)
         
@@ -118,7 +150,7 @@ class TimeAxisManager:
             return {}
         
         current_time = time.time()
-        timestamps = [q.get("timestamp", current_time) for q in quintuples]
+        timestamps = [self._get_timestamp_from_quintuple(q) for q in quintuples]
         
         # 计算时间统计信息
         oldest_time = min(timestamps)

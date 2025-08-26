@@ -7,6 +7,7 @@ import os
 import time
 import asyncio
 import uuid
+from datetime import datetime
 from typing import List, Tuple, Dict, Any
 from pydantic import BaseModel
 
@@ -45,7 +46,8 @@ class Quintuple(BaseModel):
     predicate: str
     object: str
     object_type: str
-    timestamp: float = None
+    timestamp: str = None  # 改为字符串类型
+    timestamp_raw: float = None  # 添加原始时间戳
     session_id: str = None
     memory_type: str = "fact"  # fact, process, emotion, meta
     importance_score: float = 0.5
@@ -60,8 +62,11 @@ def create_enhanced_quintuple(subject: str, subject_type: str, predicate: str,
                              memory_type: str = "fact", 
                              importance_score: float = 0.5,
                              session_id: str = None) -> Dict[str, Any]:
-    """创建增强的五元组，包含时间戳和元数据"""
-    current_time = time.time()
+    """创建增强的五元组，包含本地时间和元数据"""
+    # 获取本地时区的当前时间
+    local_time = datetime.now().astimezone()
+    time_str = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    
     if session_id is None:
         session_id = str(uuid.uuid4())
     
@@ -71,7 +76,8 @@ def create_enhanced_quintuple(subject: str, subject_type: str, predicate: str,
         "predicate": predicate,
         "object": object,
         "object_type": object_type,
-        "timestamp": current_time,
+        "timestamp": time_str,  # 改为可读的本地时间字符串
+        "timestamp_raw": time.time(),  # 保留原始时间戳用于排序
         "session_id": session_id,
         "memory_type": memory_type,
         "importance_score": importance_score

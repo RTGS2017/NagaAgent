@@ -7,11 +7,12 @@
 import json
 import logging
 import time
-from typing import List, Dict, Any, Optional, Tuple, Set
+from typing import List, Dict, Any, Optional, Tuple, Set, Union
 from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict, Counter
 import re
+from datetime import datetime
 
 # 添加项目根目录到路径
 import sys
@@ -104,6 +105,23 @@ class IntelligentMemoryExtractor:
             r"喜欢|讨厌|爱|恨|开心|难过|愤怒|害怕|满意|失望",
             r"感觉|觉得|认为|以为|想|希望"
         ]
+    
+    def _get_timestamp_value(self, quintuple: Dict[str, Any]) -> float:
+        """获取五元组的时间戳值（支持新旧格式）"""
+        # 优先使用 timestamp_raw（新格式）
+        if "timestamp_raw" in quintuple:
+            return quintuple["timestamp_raw"]
+        # 如果 timestamp 是字符串（新格式），尝试解析
+        elif isinstance(quintuple.get("timestamp"), str):
+            try:
+                time_str = quintuple["timestamp"]
+                if " " in time_str:
+                    dt = datetime.strptime(time_str.split(" ")[0] + " " + time_str.split(" ")[1], "%Y-%m-%d %H:%M:%S")
+                    return dt.timestamp()
+            except:
+                pass
+        # 回退到当前时间
+        return time.time()
     
     async def analyze_query(self, query: str, context: str = "") -> QueryAnalysis:
         """分析查询，确定提取策略"""
@@ -482,7 +500,7 @@ class IntelligentMemoryExtractor:
             
             # 时间衰减分数
             if analysis.time_constraints:
-                age = time.time() - quintuple.get("timestamp", time.time())
+                age = time.time() - self._get_timestamp_value(quintuple)
                 time_decay = max(0.1, 1.0 - (age / (30 * 24 * 3600)))  # 30天衰减
                 score += time_decay * 0.3
             
