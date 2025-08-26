@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 def load_quintuples_from_json():
     """
     直接从JSON文件中读取五元组数据，解耦数据库依赖
+    支持新的增强五元组格式（字典）和旧格式（元组）
     """
     try:
         json_file = "logs/knowledge_graph/quintuples.json"
@@ -20,9 +21,32 @@ def load_quintuples_from_json():
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
             print(f"JSON文件读取成功，包含 {len(data)} 条记录")
-            result = set(tuple(t) for t in data)
-            print(f"转换为集合后包含 {len(result)} 条唯一记录")
-            return result
+            
+            # 检查数据格式
+            if not data:
+                return set()
+                
+            # 判断是新的字典格式还是旧的元组格式
+            if isinstance(data[0], dict):
+                # 新格式：增强五元组字典
+                result = set()
+                for item in data:
+                    # 转换为传统元组格式用于可视化
+                    quintuple_tuple = (
+                        item.get("subject", ""),
+                        item.get("subject_type", ""),
+                        item.get("predicate", ""),
+                        item.get("object", ""),
+                        item.get("object_type", "")
+                    )
+                    result.add(quintuple_tuple)
+                print(f"转换新格式为元组后包含 {len(result)} 条唯一记录")
+                return result
+            else:
+                # 旧格式：直接是元组列表
+                result = set(tuple(t) for t in data)
+                print(f"旧格式直接转换后包含 {len(result)} 条唯一记录")
+                return result
     except FileNotFoundError:
         print("错误：找不到 quintuples.json 文件")
         return set()
