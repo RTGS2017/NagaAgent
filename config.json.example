@@ -81,7 +81,7 @@
     "qos": 1
   },
   "ui": {
-    "user_name": "用户",
+    "user_name": "User",
     "bg_alpha": 0.81,
     "window_bg_alpha": 128,
     "mac_btn_size": 36,
