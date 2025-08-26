@@ -23,6 +23,15 @@ class GRAGMemoryManager:
         self.recent_context = [] # 最近对话上下文
         self.extraction_cache = set() # 避免重复提取
         self.active_tasks = set() # 当前活跃的任务ID
+        
+        # 查询统计
+        self.query_stats = {
+            "total_queries": 0,
+            "successful_queries": 0,
+            "failed_queries": 0,
+            "skipped_queries": 0,
+            "last_query_time": None
+        }
 
         if not self.enabled:
             logger.info("GRAG记忆系统已禁用")
@@ -225,11 +234,27 @@ class GRAGMemoryManager:
                 "context_length": len(self.recent_context),
                 "cache_size": len(self.extraction_cache),
                 "active_tasks": len(self.active_tasks),
-                "task_manager": task_stats
+                "task_manager": task_stats,
+                "query_stats": self.query_stats.copy()
             }
         except Exception as e:
             logger.error(f"获取记忆统计失败: {e}")
             return {"enabled": False, "error": str(e)}
+    
+    def get_query_stats(self) -> Dict:
+        """获取查询统计信息"""
+        return self.query_stats.copy()
+    
+    def reset_query_stats(self) -> None:
+        """重置查询统计"""
+        self.query_stats = {
+            "total_queries": 0,
+            "successful_queries": 0,
+            "failed_queries": 0,
+            "skipped_queries": 0,
+            "last_query_time": None
+        }
+        logger.info("查询统计已重置")
     
     def get_task_status(self, task_id: str) -> Optional[Dict]:
         """获取任务状态"""
@@ -268,23 +293,42 @@ class GRAGMemoryManager:
     async def query_memory_intelligent(self, user_question: str) -> Optional[str]:
         """智能记忆查询：基于决策结果进行查询"""
         if not self.enabled:
+            logger.info("记忆系统未启用，跳过查询")
             return None
             
         try:
+            import time
+            # 更新查询统计
+            self.query_stats["total_queries"] += 1
+            self.query_stats["last_query_time"] = time.time()
+            
+            logger.info(f"开始智能记忆查询，问题: {user_question[:50]}...")
+            
             # 1. 记忆查询决策
             query_decision = await memory_decision_maker.decide_memory_query(user_question)
             
             if not query_decision.should_query:
-                logger.info("记忆查询决策：无需查询记忆")
+                logger.info(f"记忆查询决策：无需查询记忆，原因: {query_decision.query_reason}")
+                self.query_stats["skipped_queries"] += 1
                 return None
             
-            logger.info(f"记忆查询决策：需要查询，关键词={query_decision.query_keywords}，类型={query_decision.memory_types}")
+            logger.info(f"记忆查询决策：需要查询，关键词={query_decision.query_keywords}，类型={query_decision.memory_types}，置信度={query_decision.confidence}")
             
             # 2. 执行查询
-            return await self._query_memory_by_decision(query_decision, user_question)
+            result = await self._query_memory_by_decision(query_decision, user_question)
+            
+            if result:
+                logger.info(f"智能记忆查询成功，返回记忆内容长度: {len(result)}")
+                self.query_stats["successful_queries"] += 1
+            else:
+                logger.info("智能记忆查询完成，未找到相关记忆")
+                self.query_stats["failed_queries"] += 1
+            
+            return result
             
         except Exception as e:
             logger.error(f"智能记忆查询失败: {e}")
+            self.query_stats["failed_queries"] += 1
             return None
     
     async def _query_memory_by_decision(self, query_decision, user_question: str) -> Optional[str]:
