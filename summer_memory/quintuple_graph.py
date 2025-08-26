@@ -98,7 +98,16 @@ def store_quintuples(new_quintuples) -> bool:
     """存储增强的五元组到文件和Neo4j，返回是否成功"""
     try:
         from summer_memory.semantic_deduplicator import semantic_deduplicator
+        from summer_memory.typed_memory_storage import typed_memory_storage
         
+        # 使用分类型存储系统
+        storage_success = True
+        for quintuple in new_quintuples:
+            if not typed_memory_storage.store_memory(quintuple):
+                storage_success = False
+                logger.warning(f"存储到分类型系统失败: {quintuple}")
+        
+        # 同时保存到传统文件（向后兼容）
         all_quintuples = load_quintuples()
         
         # 合并现有五元组和新五元组
@@ -111,7 +120,7 @@ def store_quintuples(new_quintuples) -> bool:
         save_quintuples(deduplicated_quintuples)
 
         # 同步更新Neo4j图谱数据库（仅在GRAG_ENABLED时）
-        success = True
+        graph_success = True
         if graph is not None:
             success_count = 0
             for quintuple in new_quintuples:  # 只处理新添加的五元组
@@ -149,17 +158,11 @@ def store_quintuples(new_quintuples) -> bool:
                     success_count += 1
                 except Exception as e:
                     logger.error(f"存储五元组失败: {head}-{rel}-{tail}, 错误: {e}")
-                    success = False
+                    graph_success = False
 
             logger.info(f"成功存储 {success_count}/{len(new_quintuples)} 个五元组到Neo4j")
-            # 如果至少成功存储了一个五元组，就认为是成功的
-            if success_count > 0:
-                return True
-            else:
-                return False
-        else:
-            logger.info(f"跳过Neo4j存储（未启用），语义去重后保存 {len(deduplicated_quintuples)} 个五元组到文件")
-            return True  # 文件存储成功也算成功
+        
+        return storage_success and graph_success
     except Exception as e:
         logger.error(f"存储五元组失败: {e}")
         return False
@@ -341,3 +344,73 @@ def deduplicate_existing_quintuples():
     
     logger.info(f"现有五元组去重: {len(all_quintuples)} -> {len(deduplicated)}")
     return deduplicated
+
+
+def get_typed_memories(memory_types=None, limit=None, min_importance=0.0):
+    """获取分类型记忆"""
+    from summer_memory.typed_memory_storage import typed_memory_storage, MemoryType
+    
+    if memory_types is None:
+        memory_types = ["fact", "process", "emotion", "meta"]
+    
+    # 转换字符串为枚举
+    type_enums = []
+    for memory_type in memory_types:
+        try:
+            type_enums.append(MemoryType(memory_type))
+        except ValueError:
+            logger.warning(f"未知的记忆类型: {memory_type}")
+    
+    return typed_memory_storage.get_memories_by_types(type_enums, limit, min_importance)
+
+
+def search_typed_memories(keywords, memory_types=None, limit=None):
+    """搜索分类型记忆"""
+    from summer_memory.typed_memory_storage import typed_memory_storage, MemoryType
+    
+    if memory_types is None:
+        memory_types = list(MemoryType)
+    elif isinstance(memory_types[0], str):
+        # 转换字符串为枚举
+        type_enums = []
+        for memory_type in memory_types:
+            try:
+                type_enums.append(MemoryType(memory_type))
+            except ValueError:
+                logger.warning(f"未知的记忆类型: {memory_type}")
+        memory_types = type_enums
+    
+    return typed_memory_storage.search_memories(keywords, memory_types, limit)
+
+
+def get_typed_memory_statistics():
+    """获取分类型存储统计信息"""
+    from summer_memory.typed_memory_storage import typed_memory_storage
+    
+    return typed_memory_storage.get_memory_statistics()
+
+
+def cleanup_old_memories():
+    """清理过期记忆"""
+    from summer_memory.typed_memory_storage import typed_memory_storage
+    
+    return typed_memory_storage.cleanup_old_memories()
+
+
+def export_typed_memories(memory_types=None, output_file=None):
+    """导出分类型记忆"""
+    from summer_memory.typed_memory_storage import typed_memory_storage, MemoryType
+    
+    if memory_types is None:
+        memory_types = list(MemoryType)
+    elif isinstance(memory_types[0], str):
+        # 转换字符串为枚举
+        type_enums = []
+        for memory_type in memory_types:
+            try:
+                type_enums.append(MemoryType(memory_type))
+            except ValueError:
+                logger.warning(f"未知的记忆类型: {memory_type}")
+        memory_types = type_enums
+    
+    return typed_memory_storage.export_memories(memory_types, output_file)
