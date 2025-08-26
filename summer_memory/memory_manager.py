@@ -381,6 +381,24 @@ class GRAGMemoryManager:
             logger.error(f"智能记忆存储失败: {e}")
             return False
     
+    async def store_memory_intelligent_background(self, user_question: str, ai_response: str) -> None:
+        """智能记忆存储的后台版本，不等待结果"""
+        if not self.enabled:
+            return
+            
+        try:
+            # 创建后台任务进行存储，不阻塞主流程
+            asyncio.create_task(self._background_store_task(user_question, ai_response))
+        except Exception as e:
+            logger.error(f"启动后台记忆存储失败: {e}")
+    
+    async def _background_store_task(self, user_question: str, ai_response: str) -> None:
+        """后台记忆存储任务"""
+        try:
+            await self.store_memory_intelligent(user_question, ai_response)
+        except Exception as e:
+            logger.error(f"后台记忆存储任务失败: {e}")
+    
     async def _store_memory_by_decision(self, generation_decision, user_question: str, ai_response: str) -> bool:
         """根据决策结果执行记忆存储"""
         try:
