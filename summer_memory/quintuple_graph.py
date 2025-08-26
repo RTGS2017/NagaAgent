@@ -229,7 +229,14 @@ def query_graph_by_keywords(keywords, memory_types=None, importance_threshold=0.
 
 def query_quintuples_by_keywords(keywords, memory_types=None, importance_threshold=0.0, time_window=None):
     """从文件中查询增强的五元组"""
+    from summer_memory.time_axis_manager import time_axis_manager
+    
     all_quintuples = load_quintuples()
+    
+    # 应用时间窗口过滤
+    if time_window:
+        all_quintuples = time_axis_manager.filter_by_time_window(all_quintuples, time_window)
+    
     results = []
     
     for quintuple in all_quintuples:
@@ -249,17 +256,66 @@ def query_quintuples_by_keywords(keywords, memory_types=None, importance_thresho
         if memory_types and quintuple.get("memory_type", "fact") not in memory_types:
             continue
         
-        # 检查重要性阈值
-        if importance_threshold > 0 and quintuple.get("importance_score", 0.5) < importance_threshold:
+        # 检查重要性阈值（使用时间衰减后的重要性）
+        decayed_importance = time_axis_manager.apply_time_decay(quintuple)
+        if importance_threshold > 0 and decayed_importance < importance_threshold:
             continue
         
-        # 检查时间窗口
-        if time_window:
-            current_time = time.time()
-            quintuple_time = quintuple.get("timestamp", current_time)
-            if current_time - quintuple_time > time_window:
-                continue
+        # 添加衰减后的重要性分数
+        quintuple_with_decay = quintuple.copy()
+        quintuple_with_decay["decayed_importance"] = decayed_importance
         
-        results.append(quintuple)
+        results.append(quintuple_with_decay)
     
     return results
+
+
+def get_memory_timeline(keywords=None, memory_types=None, time_window=None):
+    """获取记忆时间线"""
+    from summer_memory.time_axis_manager import time_axis_manager
+    
+    all_quintuples = load_quintuples()
+    
+    # 应用关键词过滤
+    if keywords:
+        filtered_quintuples = []
+        for quintuple in all_quintuples:
+            matched = False
+            for kw in keywords:
+                if (kw in quintuple["subject"] or kw in quintuple["subject_type"] or
+                    kw in quintuple["predicate"] or kw in quintuple["object"] or 
+                    kw in quintuple["object_type"]):
+                    matched = True
+                    break
+            if matched:
+                filtered_quintuples.append(quintuple)
+        all_quintuples = filtered_quintuples
+    
+    # 应用记忆类型过滤
+    if memory_types:
+        all_quintuples = [q for q in all_quintuples if q.get("memory_type", "fact") in memory_types]
+    
+    # 获取时间线
+    return time_axis_manager.get_memory_timeline(all_quintuples, time_window)
+
+
+def get_recent_quintuples(hours=24, memory_types=None):
+    """获取最近N小时内的五元组"""
+    from summer_memory.time_axis_manager import time_axis_manager
+    
+    all_quintuples = load_quintuples()
+    recent_quintuples = time_axis_manager.get_recent_quintuples(all_quintuples, hours)
+    
+    # 应用记忆类型过滤
+    if memory_types:
+        recent_quintuples = [q for q in recent_quintuples if q.get("memory_type", "fact") in memory_types]
+    
+    return recent_quintuples
+
+
+def analyze_temporal_patterns():
+    """分析记忆的时间模式"""
+    from summer_memory.time_axis_manager import time_axis_manager
+    
+    all_quintuples = load_quintuples()
+    return time_axis_manager.analyze_temporal_patterns(all_quintuples)
