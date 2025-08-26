@@ -17,19 +17,25 @@ from system.config import config
 from openai import OpenAI, AsyncOpenAI
 from .json_utils import clean_and_parse_json
 
-# 初始化OpenAI客户端
+# 获取快速模型配置（如果无效则回退到主模型）
+fast_model_config = config.get_fast_model_config()
+
+# 初始化OpenAI客户端（支持回退）
 client = OpenAI(
-    api_key=config.api.api_key,
-    base_url=config.api.base_url
+    api_key=fast_model_config["api_key"],
+    base_url=fast_model_config["base_url"]
 )
 
 async_client = AsyncOpenAI(
-    api_key=config.api.api_key,
-    base_url=config.api.base_url
+    api_key=fast_model_config["api_key"],
+    base_url=fast_model_config["base_url"]
 )
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# 记录使用的模型类型
+logger.info(f"五元组提取系统使用模型: {fast_model_config['model']} (快速模型: {fast_model_config['is_fast_model']})")
 
 
 # 定义五元组的Pydantic模型
@@ -176,13 +182,13 @@ async def _extract_quintuples_async_structured(text):
         try:
             # 尝试使用结构化输出
             completion = await async_client.beta.chat.completions.parse(
-                model=config.api.model,
+                model=fast_model_config["model"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"请从以下文本中提取五元组：\n\n{text}"}
                 ],
                 response_format=QuintupleResponse,
-                max_tokens=config.api.max_tokens,
+                max_tokens=fast_model_config["max_tokens"],
                 temperature=0.3,
                 timeout=600 + (attempt * 20)
             )
@@ -232,9 +238,9 @@ async def _extract_quintuples_async_fallback(text):
     for attempt in range(max_retries + 1):
         try:
             response = await async_client.chat.completions.create(
-                model=config.api.model,
+                model=fast_model_config["model"],
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=config.api.max_tokens,
+                max_tokens=fast_model_config["max_tokens"],
                 temperature=0.3,
                 timeout=600 + (attempt * 20)
             )
@@ -328,13 +334,13 @@ def _extract_quintuples_structured(text):
         try:
             # 尝试使用结构化输出
             completion = client.beta.chat.completions.parse(
-                model=config.api.model,
+                model=fast_model_config["model"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"请从以下文本中提取五元组：\n\n{text}"}
                 ],
                 response_format=QuintupleResponse,
-                max_tokens=config.api.max_tokens,
+                max_tokens=fast_model_config["max_tokens"],
                 temperature=0.3,
                 timeout=600 + (attempt * 20)
             )
@@ -384,9 +390,9 @@ def _extract_quintuples_fallback(text):
     for attempt in range(max_retries + 1):
         try:
             response = client.chat.completions.create(
-                model=config.api.model,
+                model=fast_model_config["model"],
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=config.api.max_tokens,
+                max_tokens=fast_model_config["max_tokens"],
                 temperature=0.5,
                 timeout=600 + (attempt * 20)
             )
