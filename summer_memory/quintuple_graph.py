@@ -97,32 +97,24 @@ def save_quintuples(quintuples):
 def store_quintuples(new_quintuples) -> bool:
     """存储增强的五元组到文件和Neo4j，返回是否成功"""
     try:
+        from summer_memory.semantic_deduplicator import semantic_deduplicator
+        
         all_quintuples = load_quintuples()
         
-        # 去重逻辑：基于subject, subject_type, predicate, object, object_type
-        existing_keys = set()
-        for q in all_quintuples:
-            key = (q["subject"], q["subject_type"], q["predicate"], q["object"], q["object_type"])
-            existing_keys.add(key)
+        # 合并现有五元组和新五元组
+        combined_quintuples = all_quintuples + new_quintuples
         
-        # 只添加不重复的五元组
-        unique_new_quintuples = []
-        for q in new_quintuples:
-            key = (q["subject"], q["subject_type"], q["predicate"], q["object"], q["object_type"])
-            if key not in existing_keys:
-                unique_new_quintuples.append(q)
-                existing_keys.add(key)
+        # 应用语义去重
+        deduplicated_quintuples = semantic_deduplicator.smart_deduplicate(combined_quintuples)
         
-        all_quintuples.extend(unique_new_quintuples)
-
         # 持久化到文件
-        save_quintuples(all_quintuples)
+        save_quintuples(deduplicated_quintuples)
 
         # 同步更新Neo4j图谱数据库（仅在GRAG_ENABLED时）
         success = True
         if graph is not None:
             success_count = 0
-            for quintuple in unique_new_quintuples:
+            for quintuple in new_quintuples:  # 只处理新添加的五元组
                 head = quintuple["subject"]
                 head_type = quintuple["subject_type"]
                 rel = quintuple["predicate"]
@@ -159,14 +151,14 @@ def store_quintuples(new_quintuples) -> bool:
                     logger.error(f"存储五元组失败: {head}-{rel}-{tail}, 错误: {e}")
                     success = False
 
-            logger.info(f"成功存储 {success_count}/{len(unique_new_quintuples)} 个五元组到Neo4j")
+            logger.info(f"成功存储 {success_count}/{len(new_quintuples)} 个五元组到Neo4j")
             # 如果至少成功存储了一个五元组，就认为是成功的
             if success_count > 0:
                 return True
             else:
                 return False
         else:
-            logger.info(f"跳过Neo4j存储（未启用），保存 {len(unique_new_quintuples)} 个五元组到文件")
+            logger.info(f"跳过Neo4j存储（未启用），语义去重后保存 {len(deduplicated_quintuples)} 个五元组到文件")
             return True  # 文件存储成功也算成功
     except Exception as e:
         logger.error(f"存储五元组失败: {e}")
@@ -319,3 +311,33 @@ def analyze_temporal_patterns():
     
     all_quintuples = load_quintuples()
     return time_axis_manager.analyze_temporal_patterns(all_quintuples)
+
+
+def analyze_similarity_patterns():
+    """分析记忆的相似度模式"""
+    from summer_memory.semantic_deduplicator import semantic_deduplicator
+    
+    all_quintuples = load_quintuples()
+    return semantic_deduplicator.analyze_similarity_patterns(all_quintuples)
+
+
+def get_similarity_groups():
+    """获取相似度分组"""
+    from summer_memory.semantic_deduplicator import semantic_deduplicator
+    
+    all_quintuples = load_quintuples()
+    return semantic_deduplicator.group_by_similarity(all_quintuples)
+
+
+def deduplicate_existing_quintuples():
+    """对现有五元组进行去重"""
+    from summer_memory.semantic_deduplicator import semantic_deduplicator
+    
+    all_quintuples = load_quintuples()
+    deduplicated = semantic_deduplicator.smart_deduplicate(all_quintuples)
+    
+    # 保存去重后的结果
+    save_quintuples(deduplicated)
+    
+    logger.info(f"现有五元组去重: {len(all_quintuples)} -> {len(deduplicated)}")
+    return deduplicated
