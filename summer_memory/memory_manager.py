@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Tuple
 from .quintuple_extractor import extract_quintuples
 from .quintuple_graph import store_quintuples, query_graph_by_keywords, get_all_quintuples
 from .quintuple_rag_query import query_knowledge, set_context
+from .memory_decision import memory_decision_maker
 from .task_manager import task_manager, start_auto_cleanup, start_task_manager
 from system.config import config, AI_NAME
 
@@ -262,6 +263,111 @@ class GRAGMemoryManager:
             return True
         except Exception as e:
             logger.error(f"清空记忆失败: {e}")
+            return False
+    
+    async def query_memory_intelligent(self, user_question: str) -> Optional[str]:
+        """智能记忆查询：基于决策结果进行查询"""
+        if not self.enabled:
+            return None
+            
+        try:
+            # 1. 记忆查询决策
+            query_decision = await memory_decision_maker.decide_memory_query(user_question)
+            
+            if not query_decision.should_query:
+                logger.info("记忆查询决策：无需查询记忆")
+                return None
+            
+            logger.info(f"记忆查询决策：需要查询，关键词={query_decision.query_keywords}，类型={query_decision.memory_types}")
+            
+            # 2. 执行查询
+            return await self._query_memory_by_decision(query_decision, user_question)
+            
+        except Exception as e:
+            logger.error(f"智能记忆查询失败: {e}")
+            return None
+    
+    async def _query_memory_by_decision(self, query_decision, user_question: str) -> Optional[str]:
+        """根据决策结果执行记忆查询"""
+        try:
+            # 设置查询上下文
+            set_context(self.recent_context)
+            
+            # 使用决策结果中的关键词进行查询
+            keywords = query_decision.query_keywords
+            if not keywords:
+                # 如果没有关键词，使用用户问题
+                keywords = [user_question]
+            
+            # 执行查询
+            result = await asyncio.to_thread(query_knowledge, user_question)
+            
+            if result and "未在知识图谱中找到相关信息" not in result:
+                logger.info(f"智能记忆查询成功，找到相关信息")
+                return result
+            else:
+                logger.info("智能记忆查询：未找到相关信息")
+                return None
+                
+        except Exception as e:
+            logger.error(f"根据决策结果查询记忆失败: {e}")
+            return None
+    
+    async def store_memory_intelligent(self, user_question: str, ai_response: str) -> bool:
+        """智能记忆存储：基于决策结果进行存储"""
+        if not self.enabled:
+            return False
+            
+        try:
+            # 1. 记忆生成决策
+            generation_decision = await memory_decision_maker.decide_memory_generation(user_question, ai_response)
+            
+            if not generation_decision.should_store:
+                logger.info("记忆生成决策：无需存储记忆")
+                return False
+            
+            logger.info(f"记忆生成决策：需要存储，类型={generation_decision.memory_type}，重要性={generation_decision.importance_score}")
+            
+            # 2. 执行存储
+            return await self._store_memory_by_decision(generation_decision, user_question, ai_response)
+            
+        except Exception as e:
+            logger.error(f"智能记忆存储失败: {e}")
+            return False
+    
+    async def _store_memory_by_decision(self, generation_decision, user_question: str, ai_response: str) -> bool:
+        """根据决策结果执行记忆存储"""
+        try:
+            # 拼接对话内容
+            conversation_text = f"用户: {user_question}\n娜迦: {ai_response}"
+            
+            # 更新recent_context
+            self.recent_context.append(conversation_text)
+            if len(self.recent_context) > self.context_length:
+                self.recent_context = self.recent_context[-self.context_length:]
+            
+            # 使用任务管理器异步提取五元组
+            if self.auto_extract:
+                try:
+                    if not task_manager.is_running:
+                        logger.warning("任务管理器未运行，正在启动...")
+                        from .task_manager import start_task_manager
+                        await start_task_manager()
+                        await asyncio.sleep(1)
+                    
+                    task_id = await task_manager.add_task(conversation_text)
+                    self.active_tasks.add(task_id)
+                    logger.info(f"已提交智能记忆存储任务: {task_id}")
+                    return True
+                except Exception as e:
+                    logger.error(f"提交智能记忆存储任务失败: {e}")
+                    # 回退到同步提取
+                    return await self._extract_and_store_quintuples_fallback(conversation_text)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"根据决策结果存储记忆失败: {e}")
             return False
 
 # 全局记忆管理器实例
