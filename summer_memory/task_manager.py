@@ -61,7 +61,7 @@ class QuintupleTaskManager:
         except Exception:
             self.max_workers = max_workers or 3
             self.max_queue_size = max_queue_size or 100
-            self.task_timeout = 30
+            self.task_timeout = 600
             self.auto_cleanup_hours = 24
             self.enabled = True
 

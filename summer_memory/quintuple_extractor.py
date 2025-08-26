@@ -101,11 +101,8 @@ async def _extract_quintuples_async_structured(text):
 
         except Exception as e:
             logger.warning(f"结构化输出失败: {str(e)}")
-            if attempt == max_retries - 1:  # 最后一次尝试，回退到传统方法
-                logger.info("回退到传统JSON解析方法")
-                return await _extract_quintuples_async_fallback(text)
-            elif attempt < max_retries:
-                await asyncio.sleep(1 + attempt)
+            logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+            return await _extract_quintuples_async_fallback(text)
 
     return []
 
@@ -222,11 +219,8 @@ def _extract_quintuples_structured(text):
 
         except Exception as e:
             logger.warning(f"结构化输出失败: {str(e)}")
-            if attempt == max_retries - 1:  # 最后一次尝试，回退到传统方法
-                logger.info("回退到传统JSON解析方法")
-                return _extract_quintuples_fallback(text)
-            elif attempt < max_retries:
-                time.sleep(1 + attempt)
+            logger.info("结构化输出失败，立即回退到传统JSON解析方法")
+            return _extract_quintuples_fallback(text)
 
     return []
 
