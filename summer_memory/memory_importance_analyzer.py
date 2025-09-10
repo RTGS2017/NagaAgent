@@ -16,7 +16,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from config import config
+from system.config import config
 from openai import OpenAI, AsyncOpenAI
 from .json_utils import clean_and_parse_json
 

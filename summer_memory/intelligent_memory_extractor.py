@@ -19,7 +19,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from config import config
+from system.config import config
 from openai import OpenAI, AsyncOpenAI
 
 # 初始化OpenAI客户端
