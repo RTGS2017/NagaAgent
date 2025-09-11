@@ -3,145 +3,17 @@ MCP工具调用接口
 提供与LLM交互的工具函数
 """
 
-import asyncio
-import json
 import logging
-from typing import Any, Dict, List, Optional
-from pathlib import Path
+from typing import Any, Dict, List
 
-from .comic_downloader_agent import ComicDownloaderAgent
+try:
+    from .comic_service import download_comic, search_comic_by_name, search_comic_by_author, get_comic_detail
+except ImportError:
+    from comic_service import download_comic, search_comic_by_name, search_comic_by_author, get_comic_detail
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class MCPTools:
-    """MCP工具类"""
-    
-    def __init__(self):
-        self.agent = ComicDownloaderAgent()
-    
-    def download_comic(self, album_id: str) -> Dict[str, Any]:
-        """
-        下载漫画工具
-        
-        Args:
-            album_id: 漫画ID
-            
-        Returns:
-            下载结果
-        """
-        try:
-            logger.info(f"MCP工具调用: 下载漫画 {album_id}")
-            
-            # 启动异步下载
-            task_id = self.agent.downloader.download_comic_async(album_id)
-            self.agent.active_tasks[album_id] = task_id
-            
-            # 等待下载完成
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                result = loop.run_until_complete(self.agent.download_comic(album_id))
-            finally:
-                loop.close()
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"下载漫画时发生错误: {e}")
-            return {
-                'success': False,
-                'album_id': album_id,
-                'error': str(e),
-                'message': f'下载失败: {str(e)}'
-            }
-    
-    def get_download_status(self, album_id: str) -> Dict[str, Any]:
-        """
-        获取下载状态工具
-        
-        Args:
-            album_id: 漫画ID
-            
-        Returns:
-            下载状态
-        """
-        try:
-            logger.info(f"MCP工具调用: 获取下载状态 {album_id}")
-            
-            if album_id not in self.agent.active_tasks:
-                return {
-                    'status': 'not_found',
-                    'message': f'漫画 {album_id} 没有活跃的下载任务'
-                }
-            
-            task_id = self.agent.active_tasks[album_id]
-            return self.agent.downloader.get_download_status(task_id)
-            
-        except Exception as e:
-            logger.error(f"获取下载状态时发生错误: {e}")
-            return {
-                'status': 'error',
-                'error': str(e),
-                'message': f'获取状态失败: {str(e)}'
-            }
-    
-    def cancel_download(self, album_id: str) -> Dict[str, Any]:
-        """
-        取消下载工具
-        
-        Args:
-            album_id: 漫画ID
-            
-        Returns:
-            取消结果
-        """
-        try:
-            logger.info(f"MCP工具调用: 取消下载 {album_id}")
-            
-            if album_id not in self.agent.active_tasks:
-                return {
-                    'success': False,
-                    'message': f'漫画 {album_id} 没有活跃的下载任务'
-                }
-            
-            task_id = self.agent.active_tasks[album_id]
-            result = self.agent.downloader.cancel_download(task_id)
-            
-            if result['success']:
-                del self.agent.active_tasks[album_id]
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"取消下载时发生错误: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'message': f'取消下载失败: {str(e)}'
-            }
-    
-    def get_all_status(self) -> Dict[str, Any]:
-        """
-        获取所有下载状态工具
-        
-        Returns:
-            所有任务状态
-        """
-        try:
-            logger.info("MCP工具调用: 获取所有下载状态")
-            return self.agent.downloader.get_all_download_status()
-        except Exception as e:
-            logger.error(f"获取所有状态时发生错误: {e}")
-            return {
-                'error': str(e),
-                'message': f'获取状态失败: {str(e)}'
-            }
-
-# 全局MCP工具实例
-mcp_tools = MCPTools()
 
 # 工具函数映射
 TOOLS = {
@@ -159,40 +31,56 @@ TOOLS = {
             'required': ['album_id']
         }
     },
-    '查询下载状态': {
-        'name': '查询下载状态',
-        'description': '获取指定漫画的下载状态',
+    '搜索漫画': {
+        'name': '搜索漫画',
+        'description': '按漫画名称搜索漫画，返回搜索结果列表',
         'parameters': {
             'type': 'object',
             'properties': {
-                'album_id': {
+                'comic_name': {
+                    'type': 'string',
+                    'description': '要搜索的漫画名称'
+                },
+                'page': {
+                    'type': 'integer',
+                    'description': '页码，默认为1',
+                    'default': 1
+                }
+            },
+            'required': ['comic_name']
+        }
+    },
+    '搜索作者': {
+        'name': '搜索作者',
+        'description': '按作者名称搜索漫画，返回该作者的所有作品',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'author_name': {
+                    'type': 'string',
+                    'description': '要搜索的作者名称'
+                },
+                'page': {
+                    'type': 'integer',
+                    'description': '页码，默认为1',
+                    'default': 1
+                }
+            },
+            'required': ['author_name']
+        }
+    },
+    '获取漫画详情': {
+        'name': '获取漫画详情',
+        'description': '根据漫画ID获取详细的漫画信息',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'comic_id': {
                     'type': 'string',
                     'description': '漫画的ID号'
                 }
             },
-            'required': ['album_id']
-        }
-    },
-    '取消下载': {
-        'name': '取消下载',
-        'description': '取消指定漫画的下载任务',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'album_id': {
-                    'type': 'string',
-                    'description': '漫画的ID号'
-                }
-            },
-            'required': ['album_id']
-        }
-    },
-    '查询所有状态': {
-        'name': '查询所有状态',
-        'description': '获取所有下载任务的状态',
-        'parameters': {
-            'type': 'object',
-            'properties': {}
+            'required': ['comic_id']
         }
     }
 }
@@ -219,13 +107,15 @@ def call_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         if tool_name == '下载漫画':
-            return mcp_tools.download_comic(parameters['album_id'])
-        elif tool_name == '查询下载状态':
-            return mcp_tools.get_download_status(parameters['album_id'])
-        elif tool_name == '取消下载':
-            return mcp_tools.cancel_download(parameters['album_id'])
-        elif tool_name == '查询所有状态':
-            return mcp_tools.get_all_status()
+            return download_comic(parameters['album_id'])
+        elif tool_name == '搜索漫画':
+            page = parameters.get('page', 1)
+            return search_comic_by_name(parameters['comic_name'], page)
+        elif tool_name == '搜索作者':
+            page = parameters.get('page', 1)
+            return search_comic_by_author(parameters['author_name'], page)
+        elif tool_name == '获取漫画详情':
+            return get_comic_detail(parameters['comic_id'])
         else:
             return {
                 'error': f'未知工具: {tool_name}',

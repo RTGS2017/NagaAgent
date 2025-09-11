@@ -1,10 +1,12 @@
 # Comic Downloader MCP Agent
 
-一个简化的漫画下载器MCP代理，基于原项目的核心下载功能，只保留下载功能，默认保存到桌面。
+一个简化的漫画下载器MCP代理，基于JMComic-Crawler-Python项目的核心功能，提供下载和搜索功能，默认保存到桌面。
 
 ## 功能特点
 
 - 简化的漫画下载功能
+- 漫画搜索功能（按漫画名和作者名搜索）
+- 获取漫画详情功能
 - 默认保存到桌面
 - 支持异步下载
 - 提供HTTP API接口
@@ -106,7 +108,97 @@ python start_server.py
 }
 ```
 
-### 5. 健康检查
+### 5. 搜索漫画
+
+**POST** `/search/comic`
+
+请求体：
+```json
+{
+  "comic_name": "漫画名称",
+  "page": 1
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "query_info": "漫画名: 无修正",
+  "total": 100,
+  "page": 5,
+  "current_page": 1,
+  "comics": [
+    {
+      "id": "123456",
+      "title": "漫画标题",
+      "tags": ["标签1", "标签2"],
+      "url": "https://18comic.vip/album/123456/"
+    }
+  ],
+  "message": "找到 20 个结果，共 100 个"
+}
+```
+
+### 6. 搜索作者
+
+**POST** `/search/author`
+
+请求体：
+```json
+{
+  "author_name": "作者名称",
+  "page": 1
+}
+```
+
+响应：
+```json
+{
+  "success": true,
+  "query_info": "作者: MANA",
+  "total": 50,
+  "page": 3,
+  "current_page": 1,
+  "comics": [
+    {
+      "id": "789012",
+      "title": "作者作品1",
+      "tags": ["标签1", "标签2"],
+      "url": "https://18comic.vip/album/789012/"
+    }
+  ],
+  "message": "找到 20 个结果，共 50 个"
+}
+```
+
+### 7. 获取漫画详情
+
+**GET** `/detail/{comic_id}`
+
+响应：
+```json
+{
+  "success": true,
+  "comic": {
+    "id": "123456",
+    "title": "漫画标题",
+    "author": "作者名",
+    "tags": ["标签1", "标签2"],
+    "description": "漫画描述",
+    "page_count": 50,
+    "pub_date": "2023-01-01",
+    "update_date": "2023-01-15",
+    "likes": 1000,
+    "views": 5000,
+    "comment_count": 100,
+    "episode_count": 5,
+    "url": "https://18comic.vip/album/123456/"
+  }
+}
+```
+
+### 8. 健康检查
 
 **GET** `/health`
 
@@ -142,6 +234,28 @@ curl -X POST "http://localhost:8080/cancel" \
      -d '{"album_id": "422866"}'
 ```
 
+### 搜索漫画
+
+```bash
+curl -X POST "http://localhost:8080/search/comic" \
+     -H "Content-Type: application/json" \
+     -d '{"comic_name": "无修正", "page": 1}'
+```
+
+### 搜索作者
+
+```bash
+curl -X POST "http://localhost:8080/search/author" \
+     -H "Content-Type: application/json" \
+     -d '{"author_name": "MANA", "page": 1}'
+```
+
+### 获取漫画详情
+
+```bash
+curl "http://localhost:8080/detail/123456"
+```
+
 ## 配置说明
 
 下载器使用以下默认配置：
@@ -174,14 +288,34 @@ curl -X POST "http://localhost:8080/cancel" \
 }
 ```
 
+## 搜索功能说明
+
+搜索功能基于JMComic-Crawler-Python项目移植，支持以下功能：
+
+- **按漫画名搜索**：搜索包含指定关键词的漫画
+- **按作者名搜索**：搜索指定作者的所有作品
+- **获取漫画详情**：根据漫画ID获取详细信息
+- **按最新时间排序**：搜索结果按发布时间排序
+
+搜索功能特点：
+- 使用JMComic的API客户端
+- 支持分页显示
+- 返回漫画ID、标题、标签等信息
+- 提供访问链接
+
 ## 开发说明
 
-本项目基于原项目的核心下载功能，移除了以下功能：
+本项目基于JMComic-Crawler-Python项目的核心功能，保留了以下功能：
 
-- 搜索功能
+- 核心下载功能
+- 简化的搜索功能（漫画名和作者名搜索）
+- 获取漫画详情功能
+
+移除了以下功能：
+- 复杂的搜索参数（分类、时间筛选等）
 - 登录功能
 - 收藏夹功能
 - 插件系统
 - 复杂的配置选项
 
-只保留了核心的下载功能，并默认保存到桌面，简化了使用流程。 
+简化了使用流程，默认保存到桌面，提供基础的搜索和下载功能。 

@@ -163,7 +163,7 @@ class DeviceSwitchManager:
         # 自动重连设置
         self.reconnect_enabled = True
         self.reconnect_attempt = 0
-        self.max_reconnect_attempts = 10
+        self.max_reconnect_attempts = 5  # 改为5次重连
         self.reconnect_delay = 1
         self.max_reconnect_delay = 60
         self.reconnect_thread = None
@@ -270,6 +270,8 @@ class DeviceSwitchManager:
                 for _ in range(10):
                     if self.connected:
                         logger.info("物联网模块重连成功")
+                        self.reconnect_attempt = 0  # 重置重连计数器
+                        self.reconnect_delay = 1  # 重置延迟时间
                         return
                     time.sleep(0.5)
                 

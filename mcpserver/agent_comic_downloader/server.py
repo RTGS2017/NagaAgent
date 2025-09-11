@@ -12,12 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-from .comic_downloader_agent import (
-    download_comic_tool,
-    get_download_status_tool,
-    cancel_download_tool,
-    get_all_status_tool
-)
+try:
+    from .comic_service import download_comic, search_comic_by_name, search_comic_by_author, get_comic_detail
+except ImportError:
+    from comic_service import download_comic, search_comic_by_name, search_comic_by_author, get_comic_detail
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -43,11 +41,14 @@ app.add_middleware(
 class DownloadRequest(BaseModel):
     album_id: str
 
-class StatusRequest(BaseModel):
-    album_id: str
 
-class CancelRequest(BaseModel):
-    album_id: str
+class SearchComicRequest(BaseModel):
+    comic_name: str
+    page: int = 1
+
+class SearchAuthorRequest(BaseModel):
+    author_name: str
+    page: int = 1
 
 # 响应模型
 class DownloadResponse(BaseModel):
@@ -59,15 +60,20 @@ class DownloadResponse(BaseModel):
     download_path: Optional[str] = None
     error: Optional[str] = None
 
-class StatusResponse(BaseModel):
-    status: str
+
+class SearchResponse(BaseModel):
+    success: bool
+    query_info: Optional[str] = None
+    total: Optional[int] = None
+    page: Optional[int] = None
+    current_page: Optional[int] = None
+    comics: List[Dict[str, Any]] = []
     message: str
-    progress: Optional[int] = None
-    result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-class CancelResponse(BaseModel):
+class DetailResponse(BaseModel):
     success: bool
+    comic: Optional[Dict[str, Any]] = None
     message: str
     error: Optional[str] = None
 
@@ -85,7 +91,7 @@ async def download_comic(request: DownloadRequest):
     """
     try:
         logger.info(f"收到下载请求: {request.album_id}")
-        result = await download_comic_tool(request.album_id)
+        result = download_comic(request.album_id)
         
         return DownloadResponse(
             success=result.get('success', False),
@@ -101,73 +107,91 @@ async def download_comic(request: DownloadRequest):
         logger.error(f"下载漫画时发生错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/status/{album_id}", response_model=StatusResponse)
-async def get_download_status(album_id: str):
-    """
-    获取下载状态
-    
-    Args:
-        album_id: 漫画ID
-        
-    Returns:
-        下载状态
-    """
-    try:
-        logger.info(f"获取下载状态: {album_id}")
-        result = await get_download_status_tool(album_id)
-        
-        return StatusResponse(
-            status=result.get('status', 'unknown'),
-            message=result.get('message', ''),
-            progress=result.get('progress'),
-            result=result.get('result'),
-            error=result.get('error')
-        )
-        
-    except Exception as e:
-        logger.error(f"获取下载状态时发生错误: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/cancel", response_model=CancelResponse)
-async def cancel_download(request: CancelRequest):
+@app.post("/search/comic", response_model=SearchResponse)
+async def search_comic(request: SearchComicRequest):
     """
-    取消下载
+    搜索漫画
     
     Args:
-        request: 包含漫画ID的请求
+        request: 包含漫画名称和页码的请求
         
     Returns:
-        取消结果
+        搜索结果
     """
     try:
-        logger.info(f"取消下载: {request.album_id}")
-        result = await cancel_download_tool(request.album_id)
+        logger.info(f"搜索漫画: {request.comic_name}, 页码: {request.page}")
+        result = search_comic_by_name(request.comic_name, request.page)
         
-        return CancelResponse(
+        return SearchResponse(
             success=result.get('success', False),
+            query_info=result.get('query_info'),
+            total=result.get('total'),
+            page=result.get('page'),
+            current_page=result.get('current_page'),
+            comics=result.get('comics', []),
             message=result.get('message', ''),
             error=result.get('error')
         )
         
     except Exception as e:
-        logger.error(f"取消下载时发生错误: {e}")
+        logger.error(f"搜索漫画时发生错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/status", response_model=Dict[str, Any])
-async def get_all_status():
+@app.post("/search/author", response_model=SearchResponse)
+async def search_author(request: SearchAuthorRequest):
     """
-    获取所有下载状态
+    搜索作者
     
+    Args:
+        request: 包含作者名称和页码的请求
+        
     Returns:
-        所有任务状态
+        搜索结果
     """
     try:
-        logger.info("获取所有下载状态")
-        result = await get_all_status_tool()
-        return result
+        logger.info(f"搜索作者: {request.author_name}, 页码: {request.page}")
+        result = search_comic_by_author(request.author_name, request.page)
+        
+        return SearchResponse(
+            success=result.get('success', False),
+            query_info=result.get('query_info'),
+            total=result.get('total'),
+            page=result.get('page'),
+            current_page=result.get('current_page'),
+            comics=result.get('comics', []),
+            message=result.get('message', ''),
+            error=result.get('error')
+        )
         
     except Exception as e:
-        logger.error(f"获取所有状态时发生错误: {e}")
+        logger.error(f"搜索作者时发生错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/detail/{comic_id}", response_model=DetailResponse)
+async def get_comic_detail_api(comic_id: str):
+    """
+    获取漫画详情
+    
+    Args:
+        comic_id: 漫画ID
+        
+    Returns:
+        漫画详情
+    """
+    try:
+        logger.info(f"获取漫画详情: {comic_id}")
+        result = get_comic_detail(comic_id)
+        
+        return DetailResponse(
+            success=result.get('success', False),
+            comic=result.get('comic'),
+            message=result.get('message', ''),
+            error=result.get('error')
+        )
+        
+    except Exception as e:
+        logger.error(f"获取漫画详情时发生错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
@@ -194,9 +218,9 @@ async def root():
         "description": "A simplified comic downloader that downloads comics to desktop",
         "endpoints": {
             "download": "POST /download",
-            "status": "GET /status/{album_id}",
-            "cancel": "POST /cancel",
-            "all_status": "GET /status",
+            "search_comic": "POST /search/comic",
+            "search_author": "POST /search/author",
+            "comic_detail": "GET /detail/{comic_id}",
             "health": "GET /health"
         }
     }

@@ -960,7 +960,7 @@ class ElegantSettingsWidget(QWidget):
                 return
             
             # 使用配置管理器进行统一的配置更新
-            from config_manager import update_config
+            from system.config_manager import update_config
             # 将扁平化的配置键值对转换为嵌套字典格式
             nested_updates = self._convert_to_nested_updates(self.pending_changes)
             

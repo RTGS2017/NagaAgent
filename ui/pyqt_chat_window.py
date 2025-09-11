@@ -1211,14 +1211,9 @@ class ChatWindow(QWidget):
         """初始化Live2D"""
         if s.live2d_enabled and s.live2d_model_path:
             if os.path.exists(s.live2d_model_path):
-                s.add_user_message("系统", "🔄 正在加载Live2D模型...")
-                success = s.side.set_live2d_model(s.live2d_model_path)
-                if success:
-                    s.add_user_message("系统", "✅ Live2D模型加载成功")
-                else:
-                    s.add_user_message("系统", "⚠️ Live2D模型加载失败，已回退到图片模式")
+                s.side.set_live2d_model(s.live2d_model_path) # 调用已有输出逻辑
             else:
-                s.add_user_message("系统", f"⚠️ Live2D模型文件不存在: {s.live2d_model_path}")
+                print(f"⚠️ Live2D模型文件不存在: {s.live2d_model_path}")
         else:
             print("📝 Live2D功能未启用或未配置模型路径")
     

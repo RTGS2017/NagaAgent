@@ -37,12 +37,22 @@ class LogContextParser:
         
         # 用户和AI名称，用于解析日志
         try:
-            from system.config import config
-            self.ai_name = config.system.ai_name
-            # 从配置读取持久化上下文相关参数
-            self.context_load_days = config.api.context_load_days
-        except ImportError:
-            self.ai_name = "娜迦"
+            # 从config.json文件读取配置
+            import json
+            config_path = Path(__file__).parent.parent / "config.json"
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                self.ai_name = config_data.get("system", {}).get("ai_name", "娜杰日达")
+                self.context_load_days = config_data.get("api", {}).get("context_load_days", 3)
+            else:
+                # 如果config.json不存在，尝试从system.config导入
+                from system.config import config
+                self.ai_name = config.system.ai_name
+                self.context_load_days = config.api.context_load_days
+        except Exception as e:
+            logging.warning(f"无法读取配置，使用默认值: {e}")
+            self.ai_name = "娜杰日达"  # 使用正确的默认AI名称
             self.context_load_days = 3  # 默认值
     
     def _parse_log_line(self, line: str) -> Optional[tuple]:
@@ -73,9 +83,28 @@ class LogContextParser:
         
         return None
     
+    def _is_message_start_line(self, line: str) -> bool:
+        """
+        判断是否为消息开始行
+        
+        Args:
+            line: 日志行内容
+            
+        Returns:
+            bool: 是否为消息开始行
+        """
+        line = line.strip()
+        if not line:
+            return False
+        
+        # 匹配格式：[时间] 用户: 或 [时间] AI名称:
+        pattern = r'^\[(\d{2}:\d{2}:\d{2})\] (用户|' + re.escape(self.ai_name) + r'):'
+        return bool(re.match(pattern, line))
+    
     def parse_log_file(self, log_file_path: str) -> List[Dict]:
         """
         解析单个日志文件，提取对话内容
+        按照日志记录代码的格式：每轮对话包含用户消息和AI回复，用50个-分隔
         
         Args:
             log_file_path: 日志文件路径
@@ -87,16 +116,79 @@ class LogContextParser:
         
         try:
             with open(log_file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    result = self._parse_log_line(line)
-                    if result:
-                        role, content = result
-                        messages.append({"role": role, "content": content})
+                content = f.read()
+            
+            # 以50个-分割对话轮次（按照日志记录代码的格式）
+            conversation_blocks = content.split('-' * 50)
+            
+            for block in conversation_blocks:
+                block = block.strip()
+                if not block:
+                    continue
+                
+                # 解析每个对话块中的消息
+                block_messages = self._parse_conversation_block(block)
+                messages.extend(block_messages)
                         
         except FileNotFoundError:
             logger.debug(f"日志文件不存在: {log_file_path}")
         except Exception as e:
             logger.error(f"解析日志文件失败 {log_file_path}: {e}")
+        
+        return messages
+    
+    def _parse_conversation_block(self, block: str) -> List[Dict]:
+        """
+        解析单个对话块，提取其中的所有消息
+        每块包含用户消息和AI回复，支持多行内容
+        
+        Args:
+            block: 对话块内容
+            
+        Returns:
+            List[Dict]: 消息列表
+        """
+        messages = []
+        lines = block.split('\n')
+        current_message = None
+        current_content_lines = []
+        
+        for line in lines:
+            line = line.rstrip('\n\r')  # 移除行尾换行符，但保留内容中的换行
+            
+            # 检查是否为消息开始行
+            if self._is_message_start_line(line):
+                # 保存前一个消息
+                if current_message is not None and current_content_lines:
+                    content = '\n'.join(current_content_lines)
+                    messages.append({
+                        "role": current_message["role"], 
+                        "content": content
+                    })
+                
+                # 开始新消息
+                result = self._parse_log_line(line)
+                if result:
+                    role, content = result
+                    current_message = {"role": role}
+                    current_content_lines = [content] if content else []
+                else:
+                    current_message = None
+                    current_content_lines = []
+            
+            # 如果当前有活跃消息，且不是消息开始行，则作为内容行处理
+            elif current_message is not None:
+                # 跳过分隔线和空行
+                if line.strip() and not line.strip().startswith('---') and not line.strip().startswith('--'):
+                    current_content_lines.append(line)
+        
+        # 保存最后一个消息
+        if current_message is not None and current_content_lines:
+            content = '\n'.join(current_content_lines)
+            messages.append({
+                "role": current_message["role"], 
+                "content": content
+            })
         
         return messages
     

@@ -2,15 +2,15 @@
   "name": "漫画下载服务",
   "displayName": "漫画下载服务",
   "version": "1.0.0",
-  "description": "支持漫画下载功能，默认保存到桌面，支持异步下载和状态查询。",
+  "description": "支持漫画下载和搜索功能，默认保存到桌面，支持异步下载、状态查询和漫画搜索。",
   "author": "NagaAgent",
   "agentType": "mcp",
   "entryPoint": {
-    "module": "mcpserver.agent_comic_downloader.comic_downloader_agent",
-    "class": "ComicDownloaderAgent"
+    "module": "mcpserver.agent_comic_downloader.comic_service",
+    "class": "ComicService"
   },
   "factory": {
-    "create_instance": "create_comic_downloader_agent",
+    "create_instance": "comic_service",
     "validate_config": "validate_agent_config",
     "get_dependencies": "get_agent_dependencies"
   },
@@ -26,27 +26,31 @@
         "example": "{\"tool_name\":\"下载漫画\",\"album_id\":\"422866\"}"
       },
       {
-        "command": "查询下载状态",
-        "description": "获取指定漫画的下载状态；参数：album_id（漫画ID，必需）",
-        "example": "{\"tool_name\":\"查询下载状态\",\"album_id\":\"422866\"}"
+        "command": "搜索漫画",
+        "description": "按漫画名称搜索漫画；参数：comic_name（漫画名称，必需），page（页码，可选，默认1）",
+        "example": "{\"tool_name\":\"搜索漫画\",\"comic_name\":\"无修正\",\"page\":1}"
       },
       {
-        "command": "取消下载",
-        "description": "取消指定漫画的下载任务；参数：album_id（漫画ID，必需）",
-        "example": "{\"tool_name\":\"取消下载\",\"album_id\":\"422866\"}"
+        "command": "搜索作者",
+        "description": "按作者名称搜索漫画；参数：author_name（作者名称，必需），page（页码，可选，默认1）",
+        "example": "{\"tool_name\":\"搜索作者\",\"author_name\":\"MANA\",\"page\":1}"
       },
       {
-        "command": "查询所有状态",
-        "description": "获取所有下载任务的状态；无需参数",
-        "example": "{\"tool_name\":\"查询所有状态\"}"
+        "command": "获取漫画详情",
+        "description": "获取指定漫画的详细信息；参数：comic_id（漫画ID，必需）",
+        "example": "{\"tool_name\":\"获取漫画详情\",\"comic_id\":\"123456\"}"
       }
     ]
   },
   "inputSchema": {
     "type": "object",
     "properties": {
-      "tool_name": {"type": "string", "description": "工具名称：下载漫画/查询下载状态/取消下载/查询所有状态"},
-      "album_id": {"type": "string", "description": "漫画ID（下载漫画/查询下载状态/取消下载时必需）"}
+      "tool_name": {"type": "string", "description": "工具名称：下载漫画/搜索漫画/搜索作者/获取漫画详情"},
+      "album_id": {"type": "string", "description": "漫画ID（下载漫画时必需）"},
+      "comic_name": {"type": "string", "description": "漫画名称（搜索漫画时必需）"},
+      "author_name": {"type": "string", "description": "作者名称（搜索作者时必需）"},
+      "comic_id": {"type": "string", "description": "漫画ID（获取漫画详情时必需）"},
+      "page": {"type": "integer", "description": "页码（搜索时可选，默认1）"}
     },
     "required": ["tool_name"]
   },
@@ -60,8 +64,12 @@
       "album_author": {"type": "string", "description": "作者"},
       "download_path": {"type": "string", "description": "下载路径"},
       "error": {"type": "string", "description": "错误信息"},
-      "status": {"type": "string", "description": "下载状态"},
-      "progress": {"type": "integer", "description": "下载进度"}
+      "query_info": {"type": "string", "description": "搜索查询信息"},
+      "total": {"type": "integer", "description": "搜索结果总数"},
+      "page": {"type": "integer", "description": "总页数"},
+      "current_page": {"type": "integer", "description": "当前页码"},
+      "comics": {"type": "array", "description": "搜索结果列表"},
+      "comic": {"type": "object", "description": "漫画详情信息"}
     }
   },
   "configSchema": {

@@ -126,7 +126,6 @@ class ServiceManager:
                 print(f"⚠️ 端口 {config.tts.port} 已被占用，跳过语音输出服务启动")
                 return
             
-            print("🚀 正在启动语音输出服务...")
             print(f"📍 地址: http://127.0.0.1:{config.tts.port}")
             
             def run_tts():
