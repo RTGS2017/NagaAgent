@@ -35,7 +35,7 @@
     "neo4j_user": "neo4j",
     "neo4j_password": "your_neo4j_password",
     "neo4j_database": "neo4j",
-    "extraction_timeout": 12,
+    "extraction_timeout": 60,
     "extraction_retries": 2,
     "base_timeout": 15
   },
