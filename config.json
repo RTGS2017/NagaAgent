@@ -1,7 +1,7 @@
 {
   "system": {
     "version": "3.1",
-    "ai_name": "娜杰日达",
+    "ai_name": "娜迦日达",
     "voice_enabled": true,
     "stream_mode": true,
     "debug": true,
@@ -9,11 +9,11 @@
     "save_prompts": true
   },
   "api": {
-    "api_key": "your_api_key_here",
-    "base_url": "https://api.openai.com/v1",
-    "model": "gpt-3.5-turbo",
+    "api_key": "sk-e0ff4364daac427a8b07fb7fb8bddfc7",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
     "temperature": 0.7,
-    "max_tokens": 2000,
+    "max_tokens": 8192,
     "max_history_rounds": 10,
     "persistent_context": true,
     "context_load_days": 3,
@@ -33,7 +33,7 @@
     "similarity_threshold": 0.6,
     "neo4j_uri": "neo4j://127.0.0.1:7687",
     "neo4j_user": "neo4j",
-    "neo4j_password": "your_neo4j_password",
+    "neo4j_password": "20110212",
     "neo4j_database": "neo4j",
     "extraction_timeout": 12,
     "extraction_retries": 2,
