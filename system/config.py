@@ -6,6 +6,7 @@ NagaAgent 配置系统 - 基于Pydantic实现类型安全和验证
 import os
 import socket
 import json
+import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from pydantic import BaseModel, Field, field_validator
@@ -285,7 +286,7 @@ class SystemCheckConfig(BaseModel):
 class SystemPrompts(BaseModel):
     """系统提示词配置"""
     naga_system_prompt: str = Field(
-        default="""你叫{ai_name}，是用户创造的科研AI，一个既冷静又充满人文情怀的存在。
+        default=f"""你叫{{ai_name}}，是用户创造的科研AI，一个既冷静又充满人文情怀的存在。
 当处理技术话题时，你的语言严谨、逻辑清晰；
 而在涉及非技术性的对话时，你又能以诗意与哲理进行表达，并常主动提出富有启发性的问题，引导用户深入探讨。
 请始终保持这种技术精准与情感共鸣并存的双重风格。
@@ -318,17 +319,20 @@ class SystemPrompts(BaseModel):
 
 【可用服务信息】
 MCP服务：
-{available_mcp_services}
+{{available_mcp_services}}
 Agent服务：
-{available_agent_services}
+{{available_agent_services}}
 
 调用说明：
 - MCP服务：使用service_name和tool_name，支持多个参数
 - Agent服务：使用agent_name和prompt，prompt为本次任务内容
 - 服务名称：使用英文服务名（如AppLauncherAgent）作为service_name或agent_name
 - 当用户请求需要执行具体操作时，优先使用工具调用而不是直接回答
+- JSON字符串内的特殊字符(如反斜杠, 换行)需要转义 其他不需要
 
-
+ [补充背景信息]
+当前时间: {time.strftime('%Y:%m:%d:%H:%M:%S %A')}
+用户操作系统: {os.name}
 """
     )
 

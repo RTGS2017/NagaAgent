@@ -357,7 +357,9 @@ class NagaConversation: # 对话主类
     #     return text_stream()
 
     def _format_services_for_prompt(self, available_services: dict) -> str:
-        """格式化可用服务列表为prompt字符串，MCP服务和Agent服务分开，包含具体调用格式"""
+        """格式化可用服务列表为prompt字符串，MCP服务和Agent服务分开，包含具体调用格式。
+        要求：保持原有风格，同时补充输出对应服务的 agent-manifest.json 全部信息。
+        """
         mcp_services = available_services.get("mcp_services", [])
         agent_services = available_services.get("agent_services", [])
         
@@ -365,109 +367,218 @@ class NagaConversation: # 对话主类
         local_city = "未知城市"
         current_time = ""
         try:
-            # 从WeatherTimeAgent获取本地城市信息
             from mcpserver.agent_weather_time.agent_weather_time import WeatherTimeTool
             weather_tool = WeatherTimeTool()
             local_city = getattr(weather_tool, '_local_city', '未知城市') or '未知城市'
-            
-            # 获取当前时间
             from datetime import datetime
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         except Exception as e:
             print(f"[DEBUG] 获取本地信息失败: {e}")
         
-        # 格式化MCP服务列表，包含具体调用格式
+        # 格式化MCP服务列表（保持原有格式，但补充manifest的所有信息）
         mcp_list = []
-        for service in mcp_services:
-            name = service.get("name", "")
-            description = service.get("description", "")
-            display_name = service.get("display_name", name)
-            tools = service.get("available_tools", [])
-            
-            # 展示name+displayName
-            if description:
-                mcp_list.append(f"- {name}: {description}")
-            else:
-                mcp_list.append(f"- {name}")
-            
-            # 为每个工具显示具体调用格式
-            if tools:
-                for tool in tools:
-                    tool_name = tool.get('name', '')
-                    tool_desc = tool.get('description', '')
-                    tool_example = tool.get('example', '')
-                    
-                    if tool_name and tool_example:
-                        # 解析示例JSON，提取参数
-                        try:
-                            import json
-                            example_data = json.loads(tool_example)
-                            params = []
-                            for key, value in example_data.items():
-                                if key != 'tool_name':
-                                    params.append(f"{key}: {value}")  # 不再需要对天气进行特殊处理
-                            
-                            # 构建调用格式
-                            format_str = f"  {tool_name}: ｛\n"
-                            format_str += f"    \"agentType\": \"mcp\",\n"
-                            format_str += f"    \"service_name\": \"{name}\",\n"
-                            format_str += f"    \"tool_name\": \"{tool_name}\",\n"
-                            for param in params:
-                                # 将中文参数名转换为英文
-                                param_key, param_value = param.split(': ', 1)
-                                format_str += f"    \"{param_key}\": \"{param_value}\",\n"
-                            format_str += f"  ｝\n"
-                            
-                            mcp_list.append(format_str)
-                        except:
-                            # 如果JSON解析失败，使用简单格式
-                            mcp_list.append(f"  {tool_name}: 使用tool_name参数调用")
+        services_info = {}
+        try:
+            from mcpserver.mcp_registry import get_all_services_info
+            services_info = get_all_services_info() or {}
+        except Exception:
+            services_info = {}
         
-        # 格式化Agent服务列表
+        if services_info:
+            for service_name, info in services_info.items():
+                name = service_name
+                description = info.get('description', '')
+                display_name = info.get('display_name', name)
+                version = info.get('version', '1.0.0')
+                tools = info.get('available_tools', [])
+                manifest = info.get('manifest', {}) or {}
+                
+                # 标题（保持原有风格）
+                if description:
+                    mcp_list.append(f"- {name}: {description}")
+                else:
+                    mcp_list.append(f"- {name}")
+                
+                # 补充：manifest 全量信息（逐项文本化）
+                mcp_list.append(f"  显示名: {manifest.get('displayName', display_name)}")
+                mcp_list.append(f"  版本: {manifest.get('version', version)}")
+                if manifest.get('author') is not None:
+                    mcp_list.append(f"  作者: {manifest.get('author')}")
+                if manifest.get('agentType') is not None:
+                    mcp_list.append(f"  类型: {manifest.get('agentType')}")
+                if manifest.get('description') and manifest.get('description') != description:
+                    mcp_list.append(f"  描述: {manifest.get('description')}")
+                
+                entry_point = manifest.get('entryPoint', {}) or {}
+                if entry_point:
+                    ep_items = [f"module={entry_point.get('module', '')}", f"class={entry_point.get('class', '')}"]
+                    if entry_point.get('function'):
+                        ep_items.append(f"function={entry_point.get('function')}")
+                    mcp_list.append("  入口: " + ", ".join(ep_items))
+                
+                factory = manifest.get('factory', {}) or {}
+                if factory:
+                    mcp_list.append("  工厂: " + ", ".join(f"{k}={v}" for k, v in factory.items()))
+                
+                communication = manifest.get('communication', {}) or {}
+                if communication:
+                    mcp_list.append("  通信: " + ", ".join(f"{k}={v}" for k, v in communication.items()))
+                
+                # 能力与原有的调用格式（尽量保持原样，并附带manifest中的所有命令信息）
+                capabilities = manifest.get('capabilities', {}) or {}
+                invocation_commands = capabilities.get('invocationCommands', []) or []
+                if invocation_commands:
+                    mcp_list.append("  能力:")
+                    for cmd in invocation_commands:
+                        cmd_name = cmd.get('command', '')
+                        cmd_desc = cmd.get('description', '')
+                        cmd_example = cmd.get('example', '')
+                        mcp_list.append(f"    - {cmd_name}: {cmd_desc}")
+                        if cmd_example:
+                            # 保持原有的调用格式：从示例中提取参数
+                            try:
+                                example_data = json.loads(cmd_example)
+                                params = []
+                                for key, value in example_data.items():
+                                    if key != 'tool_name':
+                                        params.append(f"{key}: {value}")
+                                format_str = f"      {cmd_name}: ｛\n"
+                                format_str += f"        \"agentType\": \"mcp\",\n"
+                                format_str += f"        \"service_name\": \"{name}\",\n"
+                                format_str += f"        \"tool_name\": \"{example_data.get('tool_name', cmd_name)}\",\n"
+                                for param in params:
+                                    param_key, param_value = param.split(': ', 1)
+                                    format_str += f"        \"{param_key}\": \"{param_value}\",\n"
+                                format_str += f"      ｝"
+                                mcp_list.append(format_str)
+                            except Exception:
+                                mcp_list.append(f"      示例: {cmd_example}")
+                
+                # 输入Schema（完整展开）
+                input_schema = manifest.get('inputSchema', {}) or {}
+                if input_schema:
+                    mcp_list.append("  输入Schema:")
+                    if input_schema.get('type'):
+                        mcp_list.append(f"    - type: {input_schema.get('type')}")
+                    properties = input_schema.get('properties', {}) or {}
+                    if properties:
+                        mcp_list.append("    - properties:")
+                        for pkey, pval in properties.items():
+                            p_type = pval.get('type', '')
+                            p_desc = pval.get('description', '')
+                            extras = ", ".join(f"{k}={v}" for k, v in pval.items() if k not in ('type', 'description'))
+                            line = f"      * {pkey}: type={p_type}"
+                            if p_desc:
+                                line += f", desc={p_desc}"
+                            if extras:
+                                line += f", {extras}"
+                            mcp_list.append(line)
+                    required = input_schema.get('required', []) or []
+                    if required:
+                        mcp_list.append("    - required: " + ", ".join(required))
+                
+                # 输出Schema（若存在则展开）
+                output_schema = manifest.get('outputSchema', {}) or {}
+                if output_schema:
+                    mcp_list.append("  输出Schema:")
+                    if output_schema.get('type'):
+                        mcp_list.append(f"    - type: {output_schema.get('type')}")
+                    oprops = output_schema.get('properties', {}) or {}
+                    if oprops:
+                        mcp_list.append("    - properties:")
+                        for okey, oval in oprops.items():
+                            o_type = oval.get('type', '')
+                            o_desc = oval.get('description', '')
+                            line = f"      * {okey}: type={o_type}"
+                            if o_desc:
+                                line += f", desc={o_desc}"
+                            mcp_list.append(line)
+                
+                # 配置Schema（若存在则展开）
+                config_schema = manifest.get('configSchema', {})
+                if config_schema:
+                    if isinstance(config_schema, dict):
+                        mcp_list.append("  配置Schema:")
+                        for ckey, cval in config_schema.items():
+                            mcp_list.append(f"    - {ckey}: {cval}")
+                    else:
+                        mcp_list.append(f"  配置Schema: {config_schema}")
+                
+                # 运行态（若存在则展开）
+                runtime = manifest.get('runtime', {}) or {}
+                if runtime:
+                    mcp_list.append("  运行态:")
+                    for rkey, rval in runtime.items():
+                        mcp_list.append(f"    - {rkey}: {rval}")
+        else:
+            # 回退：无注册表时，仅展示传入的mcp_services（保持原有最小格式）
+            for service in mcp_services:
+                name = service.get("name", "")
+                description = service.get("description", "")
+                display_name = service.get("display_name", name)
+                if description:
+                    mcp_list.append(f"- {name}: {description}")
+                else:
+                    mcp_list.append(f"- {name}")
+                # 仍然尝试输出可用工具的调用格式（示例）
+                tools = service.get("available_tools", [])
+                if tools:
+                    for tool in tools:
+                        tool_name = tool.get('name', '')
+                        tool_example = tool.get('example', '')
+                        if tool_name and tool_example:
+                            try:
+                                example_data = json.loads(tool_example)
+                                params = []
+                                for key, value in example_data.items():
+                                    if key != 'tool_name':
+                                        params.append(f"{key}: {value}")
+                                format_str = f"  {tool_name}: ｛\n"
+                                format_str += f"    \"agentType\": \"mcp\",\n"
+                                format_str += f"    \"service_name\": \"{name}\",\n"
+                                format_str += f"    \"tool_name\": \"{tool_name}\",\n"
+                                for param in params:
+                                    param_key, param_value = param.split(': ', 1)
+                                    format_str += f"    \"{param_key}\": \"{param_value}\",\n"
+                                format_str += f"  ｝\n"
+                                mcp_list.append(format_str)
+                            except Exception:
+                                pass
+        
+        # 格式化Agent服务列表（保持原样）
         agent_list = []
-        
-        # 1. 添加handoff服务
         for service in agent_services:
             name = service.get("name", "")
             description = service.get("description", "")
             tool_name = service.get("tool_name", "agent")
             display_name = service.get("display_name", name)
-            # 展示name+displayName
             if description:
                 agent_list.append(f"- {name}(工具名: {tool_name}): {description}")
             else:
                 agent_list.append(f"- {name}(工具名: {tool_name})")
         
-        # 2. 直接从AgentManager获取已注册的Agent
+        # 直接从AgentManager获取已注册的Agent（保持原样）
         try:
             from mcpserver.agent_manager import get_agent_manager
             agent_manager = get_agent_manager()
             agent_manager_agents = agent_manager.get_available_agents()
-            
             for agent in agent_manager_agents:
-                name = agent.get("name", "")
                 base_name = agent.get("base_name", "")
                 description = agent.get("description", "")
-                
-                # 展示格式：base_name: 描述
                 if description:
                     agent_list.append(f"- {base_name}: {description}")
                 else:
                     agent_list.append(f"- {base_name}")
-                    
-        except Exception as e:
-            # 如果AgentManager不可用，静默处理
+        except Exception:
             pass
         
-        # 添加本地信息说明
+        # 添加本地信息说明（保持原样）
         local_info = f"\n\n【当前环境信息】\n- 本地城市: {local_city}\n- 当前时间: {current_time}\n\n【使用说明】\n- 天气/时间查询时，请使用上述本地城市信息作为city参数\n- 所有时间相关查询都基于当前系统时间"
         
-        # 返回格式化的服务列表
         result = {
             "available_mcp_services": "\n".join(mcp_list) + local_info if mcp_list else "无" + local_info,
             "available_agent_services": "\n".join(agent_list) if agent_list else "无"
         }
-        
         return result
 
     async def process(self, u, is_voice_input=False):  # 添加is_voice_input参数
@@ -644,7 +755,7 @@ class NagaConversation: # 对话主类
                                                 yield result
                                             elif isinstance(result, str):
                                                 yield (AI_NAME, result)
-                                    
+                                        
                                     # 注意：文本内容通过 on_text_chunk 回调函数已经累积到 display_text 中
                         except Exception as e:
                             print(f"LLM继续处理工具结果失败: {e}")

@@ -251,7 +251,7 @@ async def chat(request: ChatRequest):
             system_prompt=system_prompt,
             current_message=request.message
         )
-        
+
         # 导入流式工具调用提取器
         from .streaming_tool_extractor import StreamingToolCallExtractor
         tool_extractor = StreamingToolCallExtractor(naga_agent.mcp)

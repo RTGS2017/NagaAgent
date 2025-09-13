@@ -2,7 +2,7 @@
   "name": "系统控制服务",
   "displayName": "系统控制服务",
   "version": "1.0.0",
-  "description": "支持电脑控制：定时关机、定时重启、屏幕亮度调节、音量调节。",
+  "description": "支持电脑控制：执行指令、屏幕亮度调节、音量调节。",
   "author": "NagaAgent",
   "agentType": "mcp",
   "entryPoint": {
@@ -19,33 +19,46 @@
   "capabilities": {
     "invocationCommands": [
       {
-        "command": "定时关机",
-        "description": "定时关机；参数：time（定时关机秒数，可选，默认0立即）",
-        "example": "{\"tool_name\":\"定时关机\",\"time\":60}"
+        "command": "command",
+        "description": "执行系统指令; 参数: command:str (指令内容), cwd:str (工作目录)",
+        "example": "{\"tool_name\":\"command\",\"command\":\"echo helloworld\",\"cwd\":\"/home/\"}"
       },
       {
-        "command": "定时重启",
-        "description": "定时重启；参数：time（定时重启秒数，可选，默认0立即）",
-        "example": "{\"tool_name\":\"定时重启\",\"time\":60}"
-      },
-      {
-        "command": "设置亮度",
+        "command": "brightness",
         "description": "设置屏幕亮度；参数：value（亮度值，0-100）",
-        "example": "{\"tool_name\":\"设置亮度\",\"value\":80}"
+        "example": "{\"tool_name\":\"brightness\",\"value\":80}"
       },
       {
-        "command": "设置音量",
+        "command": "volume",
         "description": "设置系统音量；参数：value（音量值，0-100）",
-        "example": "{\"tool_name\":\"设置音量\",\"value\":50}"
+        "example": "{\"tool_name\":\"volume\",\"value\":50}"
+      },
+      {
+        "command": "read_file",
+        "description": "读取文件内容；参数：file（文件路径，必需），offset（起始行，默认0），lines（读取行数，默认500），encoding（编码，默认UTF-8）",
+        "example": "{\"tool_name\":\"read_file\",\"file\":\"/etc/hosts\",\"offset\":0,\"lines\":50}"
+      },
+      {
+        "command": "apply_diff",
+        "description": "按上下文校验应用差异；参数：file（文件路径，必需），start（开始行，1-based，必需），end（结束行，1-based，必需），diff（包含上下文与替换内容的diff字符串，必需），encoding（可选，默认UTF-8）",
+        "example": "{\"tool_name\":\"apply_diff\",\"file\":\"/tmp/a.txt\",\"start\":10,\"end\":20,\"diff\":\"above1\\nabove2-----DIFF-START-----\\nnew line-----DIFF-END-----\\nbelow1\\nbelow2\"}"
       }
     ]
   },
   "inputSchema": {
     "type": "object",
     "properties": {
-      "tool_name": {"type": "string", "description": "工具名称：定时关机/定时重启/设置亮度/设置音量"},
-      "time": {"type": "integer", "description": "定时关机或重启秒数（定时关机/定时重启时可选）"},
-      "value": {"type": "integer", "description": "亮度或音量值（0-100，设置亮度/设置音量时必需）"}
+      "tool_name": {"type": "string", "description": "工具名称：command/brightness/volume/read_file/apply_diff"},
+      "command": {"type": "string", "description": "要执行的指令, 执行指令时必须"},
+      "cwd": {"type": "string", "description": "工作目录, 执行指令时必须"},
+      "value": {"type": "integer", "description": "亮度或音量值（0-100，设置亮度/设置音量时必需）"},
+      "file": {"type": "string", "description": "文件路径（read_file/apply_diff 必需）"},
+      "offset": {"type": "integer", "description": "起始行（read_file 可选，默认0）"},
+      "lines": {"type": "integer", "description": "读取行数（read_file 可选，默认500）"},
+      "encoding": {"type": "string", "description": "文件编码（read_file/apply_diff 可选，默认UTF-8）"},
+      "start": {"type": "integer", "description": "开始行，1-based（apply_diff 必需）"},
+      "end": {"type": "integer", "description": "结束行，1-based（apply_diff 必需）"},
+      "diff": {"type": "string", "description": "包含上下文的diff字符串（apply_diff 必需）"}
     },
     "required": ["tool_name"]
   },
