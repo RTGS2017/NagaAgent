@@ -174,6 +174,8 @@ class ConfigManager:
             config_path = str(Path(__file__).parent.parent / "config.json")
             if not os.path.exists(config_path):
                 print(f"❌ 配置文件不存在: {config_path}")
+                print(f"❌ 当前工作目录: {os.getcwd()}")
+                print(f"❌ 配置文件父目录: {Path(__file__).parent.parent}")
                 return False
             
             # 加载当前配置

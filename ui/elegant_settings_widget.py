@@ -14,7 +14,9 @@ import os
 import json
 
 # 添加项目根目录到path，以便导入配置
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + '/..'))
+project_root = os.path.abspath(os.path.dirname(__file__) + '/..')
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from system.config import config, AI_NAME
 
@@ -277,8 +279,18 @@ class ElegantSettingsWidget(QWidget):
         self.load_current_settings()
         
         # 添加配置变更监听器，实现实时更新
-        from system.config import add_config_listener
-        add_config_listener(self.on_config_reloaded)
+        try:
+            from system.config import add_config_listener
+            add_config_listener(self.on_config_reloaded)
+        except ImportError as e:
+            # 如果导入失败，尝试重新设置路径
+            import sys
+            import os
+            project_root = os.path.abspath(os.path.dirname(__file__) + '/..')
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from system.config import add_config_listener
+            add_config_listener(self.on_config_reloaded)
         
     def on_config_reloaded(self):
         """配置重新加载后的处理"""
@@ -960,7 +972,16 @@ class ElegantSettingsWidget(QWidget):
                 return
             
             # 使用配置管理器进行统一的配置更新
-            from system.config_manager import update_config
+            try:
+                from system.config_manager import update_config
+            except ImportError as e:
+                # 如果导入失败，尝试重新设置路径
+                import sys
+                import os
+                project_root = os.path.abspath(os.path.dirname(__file__) + '/..')
+                if project_root not in sys.path:
+                    sys.path.insert(0, project_root)
+                from system.config_manager import update_config
             # 将扁平化的配置键值对转换为嵌套字典格式
             nested_updates = self._convert_to_nested_updates(self.pending_changes)
             
@@ -988,7 +1009,9 @@ class ElegantSettingsWidget(QWidget):
             self.settings_changed.emit("all", None)
             
         except Exception as e:
-            self.update_status_label(f"✗ 保存失败: {str(e)}")
+            error_msg = str(e)
+            print(f"设置保存失败: {error_msg}")  # 打印详细错误信息到控制台
+            self.update_status_label(f"✗ 保存失败: {error_msg}")
             
             
     def open_naga_api(self):
