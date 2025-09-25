@@ -12,6 +12,9 @@ build/
 logs/
 *.log
 
+# 五元组文件
+logs/knowledge_graph/quintuples.json
+
 # 环境变量
 .env
 
