@@ -183,6 +183,14 @@ class GameEngine:
             logger.debug(f"第{round_number}轮 - 评估阶段")
             philoss_outputs = await self._evaluation_phase(actor_outputs, previous_rounds)
             
+            # 严格校验：任一阶段无有效结果则本轮失败
+            if not actor_outputs:
+                raise RuntimeError("生成阶段无有效输出")
+            if not critic_outputs:
+                raise RuntimeError("批判阶段无有效输出")
+            if not philoss_outputs:
+                raise RuntimeError("评估阶段无有效输出")
+
             # 创建轮次结果
             game_round = GameRound(
                 round_number=round_number,
@@ -248,7 +256,14 @@ class GameEngine:
                     )
                     generation_tasks.append(task_coroutine)
             
-            actor_outputs = await asyncio.gather(*generation_tasks, return_exceptions=True)
+            # 分批执行以限制并发，降低API超时概率
+            actor_outputs: List[Any] = []
+            if generation_tasks:
+                batch_size = max(1, int(getattr(self.config.system, 'max_concurrent_tasks', 5)))
+                for i in range(0, len(generation_tasks), batch_size):
+                    batch = generation_tasks[i:i+batch_size]
+                    batch_results = await asyncio.gather(*batch, return_exceptions=True)
+                    actor_outputs.extend(batch_results)
             
             # 处理结果
             valid_outputs = []
@@ -259,7 +274,7 @@ class GameEngine:
                 for prev in previous_outputs[-3:]:
                     parts.append(f"- {prev.metadata.get('agent_name','未知')} 第{prev.iteration}轮: {prev.content[:200]}...")
                 prev_context_text = "\n".join(parts)
-            
+ 
             for i, output in enumerate(actor_outputs):
                 if isinstance(output, Exception):
                     logger.error(f"智能体生成失败:{output}")
@@ -269,7 +284,7 @@ class GameEngine:
                 except Exception:
                     pass
                 valid_outputs.append(output)
-            
+             
             logger.debug(f"生成阶段完成:{len(valid_outputs)} 个执行输出(含分支)")
             return valid_outputs
             

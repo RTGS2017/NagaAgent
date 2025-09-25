@@ -114,18 +114,8 @@ class GameCriticizer:
 
         except Exception as e:
             logger.error(f"Criticizer批判失败:{e}")
-            return CriticOutput(
-                target_output_id=actor_output.target_output_id,
-                critic_agent_id=critic_agent.agent_id,
-                overall_score=0.5,
-                satisfaction_score=0.5,
-                dimension_scores=[],
-                summary_critique=f"批判过程出错:{str(e)}",
-                improvement_suggestions=["请重试本轮批判"],
-                critique_time=time.time() - start_time,
-                iteration=self.current_iteration,
-                metadata={'error': True, 'error_message': str(e)},
-            )
+            # 将错误上抛，让引擎感知失败
+            raise
 
     def _build_critique_prompt(
         self,
