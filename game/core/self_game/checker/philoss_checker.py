@@ -83,7 +83,7 @@ class PhilossChecker:
             try:
                 import torch
                 import transformers
-                from transformers import AutoTokenizer, AutoModelForCausalLM
+                from transformers import AutoTokenizer, AutoModel
                 
                 # 自动设备检测：CUDA不可用则使用CPU
                 if not getattr(torch, 'cuda', None) or not torch.cuda.is_available():
@@ -110,14 +110,21 @@ class PhilossChecker:
                     cache_dir=self.config.philoss.cache_dir,
                     local_files_only=self.config.philoss.local_files_only,
                 )
-                self.model = AutoModelForCausalLM.from_pretrained(
+                self.model = AutoModel.from_pretrained(
                     requested,
-                    torch_dtype=dtype,
-                    device_map="auto",
+                    dtype=dtype,
                     trust_remote_code=True,
                     cache_dir=self.config.philoss.cache_dir,
                     local_files_only=self.config.philoss.local_files_only,
                 )
+                # 放到目标设备并 eval()
+                try:
+                    self.model.to(self.device)
+                except Exception as move_err:
+                    logger.warning(f"模型移动到{self.device}失败，回退到CPU: {move_err}")
+                    self.model.to('cpu')
+                    self.device = 'cpu'
+                self.model.eval()
                 logger.info(f"模型加载成功: {requested}")
                  
                 # 冻结主要参数
@@ -177,9 +184,9 @@ class PhilossChecker:
             self.mlp_layer = None
     
     async def evaluate_novelty(self, 
-                              content: str, 
-                              content_id: str,
-                              context: Optional[str] = None) -> PhilossOutput:
+                               content: str, 
+                               content_id: str,
+                               context: Optional[str] = None) -> PhilossOutput:
         """
         评估内容的创新性
         
@@ -313,13 +320,35 @@ class PhilossChecker:
                     return_tensors="pt",
                     truncation=True,
                     max_length=512
-                ).to(self.device)
+                )
+                # 将inputs移动到目标设备
+                for k, v in inputs.items():
+                    if hasattr(v, 'to'):
+                        inputs[k] = v.to(self.device)
                 
                 # 前向传播获取隐藏状态
                 with torch.no_grad():
-                    outputs = self.model(**inputs, output_hidden_states=True)
+                    try:
+                        outputs = self.model(**inputs, output_hidden_states=True)
+                        last_hidden = getattr(outputs, 'hidden_states', None)
+                        if last_hidden is not None:
+                            last_hidden_state = last_hidden[-1]
+                        else:
+                            # 退化到 last_hidden_state/第一输出
+                            if hasattr(outputs, 'last_hidden_state'):
+                                last_hidden_state = outputs.last_hidden_state
+                            else:
+                                # 一些自定义模型可能返回 tuple
+                                last_hidden_state = outputs[0]
+                    except TypeError:
+                        # 不支持 output_hidden_states 参数时，退化处理
+                        outputs = self.model(**inputs)
+                        if hasattr(outputs, 'last_hidden_state'):
+                            last_hidden_state = outputs.last_hidden_state
+                        else:
+                            last_hidden_state = outputs[0]
+                    
                     # 获取最后一层隐藏状态的平均值
-                    last_hidden_state = outputs.hidden_states[-1]
                     pooled_state = torch.mean(last_hidden_state, dim=1).squeeze()
                 
                 # 创建隐藏状态对象
@@ -445,9 +474,9 @@ class PhilossChecker:
             return 5.0
     
     def _get_default_evaluation(self, 
-                               content_id: str, 
-                               content: str, 
-                               start_time: float) -> PhilossOutput:
+                                content_id: str, 
+                                content: str, 
+                                start_time: float) -> PhilossOutput:
         """获取默认评估结果（当评估失败时使用）"""
         # 创建基本的文本块
         text_blocks = [TextBlock(
@@ -481,8 +510,8 @@ class PhilossChecker:
         )
     
     async def batch_evaluate(self, 
-                           contents: List[Tuple[str, str]], 
-                           context: Optional[str] = None) -> List[PhilossOutput]:
+                              contents: List[Tuple[str, str]], 
+                              context: Optional[str] = None) -> List[PhilossOutput]:
         """批量评估多个内容的创新性"""
         logger.info(f"开始批量Philoss评估,内容数量:{len(contents)}")
         
