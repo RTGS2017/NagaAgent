@@ -69,15 +69,9 @@
     NagaAgent使用Neo4j作为知识图谱数据库。我们强烈建议使用Docker来运行它，这是最简单的方式。
 
     ```bash
-    docker run -d \
-      --name naga-neo4j \
-      --restart always \
-      --publish=7474:7474 \
-      --publish=7687:7687 \
-      --env NEO4J_AUTH=neo4j/your_password \
-      --volume=neo4j_data:/data \
-      neo4j:latest
+    docker run -d --name naga-neo4j  --restart always --publish=7474:7474 --publish=7687:7687 --env NEO4J_AUTH=neo4j/your_password --volume=neo4j_data:/data neo4j:latest
     ```
+    - **neo4j_data**: 替换为你的数据存储目录
     - **NEOJ4_AUTH**: 请务必将 `your_password` 替换为您自己的强密码。
     - **端口**: `7474`是Web管理界面端口，`7687`是Bolt驱动程序端口。
 
@@ -270,30 +264,30 @@ NagaAgent/
 ├── 📄 pyproject.toml              # 📦 项目配置与依赖管理 (PEP 621)
 ├── 📄 config.json.example         # ⚙️ 配置文件模板
 ├── 📁 system/                     # 核心系统模块
-│   ├── conversation_core.py      #   - 对话流程核心
-│   ├── config_manager.py         #   - 配置热更新管理器
-│   └── system_checker.py         #   - 系统环境自检
+│   ├── conversation_core.py        #   - 对话流程核心
+│   ├── config_manager.py           #   - 配置热更新管理器
+│   └── system_checker.py           #   - 系统环境自检
 ├── 📁 apiserver/                  # 🌐 API服务器 (FastAPI)
-│   └── api_server.py             #   - API路由定义
+│   └── api_server.py               #   - API路由定义
 ├── 📁 ui/                         # 🖥️ 用户界面 (PyQt5)
-│   ├── pyqt_chat_window.py       #   - 主聊天窗口
-│   ├── message_renderer.py       #   - 消息渲染与格式化
-│   ├── live2d/                   #   - Live2D看板娘模块
-│   └── tray/                     #   - 系统托盘模块
+│   ├── pyqt_chat_window.py         #   - 主聊天窗口
+│   ├── message_renderer.py         #   - 消息渲染与格式化
+│   ├── live2d/                     #   - Live2D看板娘模块
+│   └── tray/                       #   - 系统托盘模块
 ├── 📁 voice/                      # 🎤 语音交互模块
-│   ├── input/                    #   - 语音输入 (ASR)
-│   └── output/                   #   - 语音输出 (TTS)
+│   ├── input/                      #   - 语音输入 (ASR)
+│   └── output/                     #   - 语音输出 (TTS)
 ├── 📁 summer_memory/              # 🧠 GRAG记忆系统
-│   ├── memory_manager.py         #   - 记忆的存取与管理
-│   ├── quintuple_extractor.py    #   - 对话信息五元组提取
-│   └── quintuple_graph.py        #   - Neo4j图操作
+│   ├── memory_manager.py           #   - 记忆的存取与管理
+│   ├── quintuple_extractor.py      #   - 对话信息五元组提取
+│   └── quintuple_graph.py          #   - Neo4j图操作
 ├── 📁 thinking/                   # 🌳 深度思考引擎
-│   ├── tree_thinking.py          #   - 思考树主逻辑
-│   └── genetic_pruning.py        #   - 遗传算法剪枝
+│   ├── tree_thinking.py            #   - 思考树主逻辑
+│   └── genetic_pruning.py          #   - 遗传算法剪枝
 ├── 📁 mcpserver/                  # 🛠️ Agent与MCP服务
-│   ├── agent_manager.py          #   - Agent生命周期管理
-│   ├── mcp_registry.py           #   - Agent/服务动态注册
-│   └── agent_*/                  #   - 具体的Agent实现
+│   ├── agent_manager.py            #   - Agent生命周期管理
+│   ├── mcp_registry.py             #   - Agent/服务动态注册
+│   └── agent_*/                    #   - 具体的Agent实现
 ├── 📁 game/                       # 🎮 游戏化交互模块 (探索中)
 ├── 📁 mqtt_tool/                  # 📡 MQTT物联网工具
 └── 📁 logs/                       # 📝 日志文件
