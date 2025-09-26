@@ -1,13 +1,14 @@
 [project]
 name = "nagaagent"
-version = "3.1.0"
-description = "NagaAgent 3.1 - 智能对话助手，支持多MCP服务、流式语音交互、GRAG知识图谱记忆系统、RESTful API接口、控制台托盘功能"
+version = "3.2.0"
+description = "NagaAgent 3.2 - 智能对话助手，支持多MCP服务、流式语音交互、GRAG知识图谱记忆系统、RESTful API接口、控制台托盘功能"
 authors = [
     {name = "柏斯阔落", email = "1781393885@qq.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.11,<3.12" 
+requires-python = ">=3.11,<=3.12" 
 dependencies = [
+    "nagaagent-core>=1.0.5",
     # 核心依赖
     "mcp>=1.6.0",
     "openai>=1.76.0",
@@ -92,6 +93,7 @@ dependencies = [
     "neo4j>=5.28.2",
     "opensimplex>=0.4.5.1",
     "live2d-py>=0.5.4",
+    "bilibili-api>=4.1.0",
 ]
 
 # 可选依赖组

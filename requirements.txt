@@ -42,4 +42,3 @@ crawl4ai
  
 playwright>=1.52.0
 bilibili-api-python
-bilibili_api

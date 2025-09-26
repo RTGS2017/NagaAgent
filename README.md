@@ -1,9 +1,9 @@
-# NagaAgent 3.1
+# NagaAgent 3.2
 
-![NagaAgent Logo](https://img.shields.io/badge/NagaAgent-3.1-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent Logo](https://img.shields.io/badge/NagaAgent-3.2-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
 ![Star History](https://img.shields.io/github/stars/Xxiii8322766509/NagaAgent?style=social)![Forks](https://img.shields.io/github/forks/Xxiii8322766509/NagaAgent?style=social)![Issues](https://img.shields.io/github/issues/Xxiii8322766509/NagaAgent)![Pull Requests](https://img.shields.io/github/issues-pr/Xxiii8322766509/NagaAgent)
@@ -43,7 +43,7 @@
 ### 📋 系统要求
 
 - **操作系统**: Windows 10/11, macOS 10.15+, Linux
-- **Python**: 3.10+ (推荐 3.11)
+- **Python**: 3.11或3.12
 - **内存**: 建议 4GB 以上
 - **存储**: 建议 2GB 以上可用空间
 
