@@ -24,10 +24,6 @@
 
 <strong>新手入门最佳选择</strong>
 
-</dev>
-
-<div align="center">
-
 [![视频教程](https://img.shields.io/badge/%F0%9F%8E%AC-%E8%A7%86%E9%A2%91%E6%95%99%E7%A8%8B-red?style=for-the-badge&logo=youtube)](https://www.pylindex.top/naga/intro.mp4)
 
 </div>
