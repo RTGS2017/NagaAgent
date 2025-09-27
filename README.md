@@ -1,5 +1,7 @@
 # NagaAgent 3.2.0
 
+<div align="center">
+
 ![NagaAgent Logo](https://img.shields.io/badge/NagaAgent-3.2.0-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
@@ -7,13 +9,18 @@
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 ![Architecture](https://img.shields.io/badge/Architecture-Microservices-orange?style=for-the-badge)
 
-![Star History](https://img.shields.io/github/stars/Xxiii8322766509/NagaAgent?style=social)![Forks](https://img.shields.io/github/forks/Xxiii8322766509/NagaAgent?style=social)![Issues](https://img.shields.io/github/issues/Xxiii8322766509/NagaAgent)![Pull Requests](https://img.shields.io/github/issues-pr/Xxiii8322766509/NagaAgent)
+![GitHub stars](https://img.shields.io/github/stars/Xxiii8322766509/NagaAgent?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Xxiii8322766509/NagaAgent?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Xxiii8322766509/NagaAgent)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/Xxiii8322766509/NagaAgent)
+
+</div>
 
 ---
 
-#### 📺 快速入门视频教程
+#### 🎬 快速入门视频教程
 
-**[https://www.pylindex.top/naga/intro.mp4](https://www.pylindex.top/naga/intro.mp4)**
+[![视频教程](https://img.shields.io/badge/%F0%9F%8E%AC-%E8%A7%86%E9%A2%91%E6%95%99%E7%A8%8B-red?style=for-the-badge&logo=youtube)](https://www.pylindex.top/naga/intro.mp4)
 
 ---
 
@@ -50,8 +57,7 @@ cd NagaAgent
 ```
 
 #### 2. 环境配置
-<details>
-<summary><strong>自动配置</strong></summary>
+
 <details>
 <summary><strong>🪟 Windows 用户</strong></summary>
 
@@ -78,29 +84,35 @@ source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 ```
 </details>
-</details>
+
 
 <details>
 <summary><strong>手动配置</strong></summary>
 ```bash
-# 安装依赖
+# 使用 uv 安装依赖（推荐）
 uv sync
-# 或使用pip
-python -m venv .venv
-source venv/bin/activate  # Linux/macOS
-.\.venv\Scripts\activate # Windows
-pip install -r requirements.txt
 
-# 启动
+# 或使用传统方式安装
+# Linux/macOS
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+# Windows
+python -m venv .venv && .\.venv\Scripts\activate && pip install -r requirements.txt
+
+# 启动应用
 uv run main.py
-# 或使用python
+# 或
 python main.py
 ```
+
+</details>
 <details>
 <summary><strong>问题解决</strong></summary>
-Windows下如果安装依赖时出现编译错误，请安装visual studio并勾选C++桌面开发，然后使用Visual Studio Deloper Shell(x64 Native)重新运行。
-Linux/Mac下请安装gcc。
-</details>
+
+Windows下如果安装依赖时出现编译错误，请安装 Visual Studio 并勾选 "C++ 桌面开发"，然后使用 "Visual Studio Developer Shell (x64 Native)" 重新运行。
+
+Linux/Mac 下请安装 gcc。
+
 </details>
 
 #### 3. 启动Neo4j数据库
@@ -150,6 +162,45 @@ cp config.json.example config.json
 - `api.base_url`: LLM服务地址
 - `api.model`: 使用的模型名称
 - `grag.neo4j_password`: Neo4j数据库密码
+
+**可选配置**：
+```json
+{
+  "api": {
+    "max_tokens": 4096,
+    "temperature": 0.7,
+    "timeout": 30
+  },
+  "grag": {
+    "neo4j_uri": "bolt://localhost:7687",
+    "neo4j_username": "neo4j",
+    "enable_visualization": true
+  },
+  "voice": {
+    "enabled": true,
+    "asr_engine": "whisper",
+    "tts_engine": "edge-tts"
+  },
+  "ui": {
+    "theme": "dark",
+    "live2d_enabled": true,
+    "font_size": 14
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "enable_cors": true
+  }
+}
+```
+
+**配置说明**：
+- `api.max_tokens`: 单次生成的最大token数量
+- `api.temperature`: 生成随机性（0-1）
+- `grag.neo4j_uri`: Neo4j连接地址
+- `voice.enabled`: 是否启用语音功能
+- `ui.theme`: 界面主题（light/dark）
+- `server.port`: API服务端口
 
 ### 🚀 启动应用
 
@@ -270,6 +321,11 @@ NagaAgent采用四层架构，实现高内聚、低耦合的模块化设计：
 
 ```mermaid
 graph TB
+    %% 样式定义
+    classDef layer fill:#f0f8ff,stroke:#333,stroke-width:2px
+    classDef component fill:#ffffff,stroke:#666,stroke-width:1px
+    classDef infra fill:#fff5ee,stroke:#666,stroke-width:1px
+
     subgraph "🎨 用户交互层 (Presentation Layer)"
         A1[PyQt5 GUI<br/>聊天窗口/托盘]
         A2[Voice I/O<br/>ASR/TTS]
@@ -318,6 +374,12 @@ graph TB
     C5 --> D5
 
     B3 -.-> C1 & C2 & C3
+
+    %% 应用样式
+    class A1,A2,A3,A4 component
+    class B1,B2,B3 component
+    class C1,C2,C3,C4,C5 component
+    class D1,D2,D3,D4,D5 infra
 ```
 </div>
 
@@ -497,7 +559,7 @@ NagaAgent/
 - **异步任务**: 支持记忆的异步提取和存储
 - **可视化工具**: 生成知识图谱的交互式图表
 
-#### 🤖 Agent架构 (`mcpserver/`)
+#### 🤖 Agent 架构 (`mcpserver/`)
 - **Manifest机制**: 通过JSON文件定义Agent能力
 - **动态注册**: 运行时自动发现新Agent
 - **统一接口**: 所有Agent遵循统一的调用协议
@@ -607,7 +669,7 @@ async def handle_agent_call(tool_name, params):
 
 ### Agent管理架构
 
-AgentManager是NagaAgent的核心组件，负贵管理和协调整个Agent生态系统：
+AgentManager是NagaAgent的核心组件，负责管理和协调整个Agent生态系统：
 
 <div align="center">
 
@@ -798,9 +860,13 @@ uv sync
 3. 编写清晰的提交信息
 4. 确保可以在全新环境运行
 
+---
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证。详情请参阅 [LICENSE](LICENSE) 文件。
+
+---
 
 ## 🙏 致谢
 
@@ -814,6 +880,9 @@ uv sync
 ---
 
 <div align="center">
-**⭐ 如果这个项目对您有帮助，请不吝给我们一个 Star！ ⭐
+
+**⭐ 如果这个项目对您有帮助，请不吝给我们一个 Star！ ⭐**
+
+[![GitHub stars](https://img.shields.io/github/stars/Xxiii8322766509/NagaAgent?style=for-the-badge&logo=github)](https://github.com/Xxiii8322766509/NagaAgent)
 
 </div>
