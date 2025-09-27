@@ -88,6 +88,7 @@ pip install -r requirements.txt
 
 <details>
 <summary><strong>手动配置</strong></summary>
+
 ```bash
 # 使用 uv 安装依赖（推荐）
 uv sync
