@@ -94,28 +94,18 @@ dependencies = [
     "opensimplex>=0.4.5.1",
     "live2d-py>=0.5.4",
     "bilibili-api>=4.1.0",
-]
-
-# 可选依赖组
-[project.optional-dependencies]
-audio = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.1",
     "pyaudio>=0.2.14",
-]
-
-system-control = [
     "screen-brightness-control",  # 屏幕亮度调节
     "pycaw",  # 系统音量调节（Windows）
     "comtypes",  # pycaw依赖
-]
-
-dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.20.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
 ]
+
 
 [build-system]
 requires = ["hatchling"]
