@@ -56,6 +56,8 @@ opensimplex>=0.4.5.1
 
 # 搜索工具依赖（crawl4ai 需要编译依赖 madoka，Windows/py3.13 下可能失败，先标记为可选）
 langchain-community>=0.3.29
+langchain-core>=0.3.30
+langchain-openai>=0.3.2
 # crawl4ai  # 可选：需要安装 Microsoft C++ Build Tools 后再启用 #
  
 # 可选Agent所需依赖（按需内置，避免运行时缺包）

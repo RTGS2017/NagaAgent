@@ -397,3 +397,4 @@ except Exception:
     # 获取系统用户名失败时，将保留默认值 "用户" 或 config.json 中的空值
     pass
 
+AI_NAME = Field(default="娜杰日达", description="AI助手名称")
