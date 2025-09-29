@@ -111,5 +111,11 @@
     "timestamp": "",
     "python_version": "",
     "project_path": ""
+  },
+  "philoss": {
+    "model_name": "Qwen/Qwen2.5-VL-1B-Instruct",
+    "model_path": "",
+    "local_files_only": false,
+    "hf_token": ""
   }
 }

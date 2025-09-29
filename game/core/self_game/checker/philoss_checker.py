@@ -104,18 +104,24 @@ class PhilossChecker:
                     requested = "Qwen/Qwen2.5-VL-1B-Instruct"
 
                 logger.info(f"加载模型: {requested}")
+                pretrained_source = self.config.philoss.model_path if self.config.philoss.model_path else requested
+                auth_token = (self.config.philoss.hf_token or None)
+                local_only = bool(self.config.philoss.local_files_only)
+
                 self.tokenizer = AutoTokenizer.from_pretrained(
-                    requested,
+                    pretrained_source,
                     trust_remote_code=True,
                     cache_dir=self.config.philoss.cache_dir,
-                    local_files_only=self.config.philoss.local_files_only,
+                    local_files_only=local_only,
+                    use_auth_token=auth_token,
                 )
                 self.model = AutoModel.from_pretrained(
-                    requested,
+                    pretrained_source,
                     dtype=dtype,
                     trust_remote_code=True,
                     cache_dir=self.config.philoss.cache_dir,
-                    local_files_only=self.config.philoss.local_files_only,
+                    local_files_only=local_only,
+                    use_auth_token=auth_token,
                 )
                 # 放到目标设备并 eval()
                 try:

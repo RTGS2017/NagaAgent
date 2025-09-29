@@ -23,6 +23,7 @@ class PhilossConfig:
     cache_dir: str = "models"  # 模型缓存目录（仅忽略仓库根目录 /models）
     local_files_only: bool = False  # 仅使用本地权重（不联网下载）
     exclusive_model_loading: bool = True  # 禁止回退到其他模型
+    hf_token: str = ""  # HuggingFace token（可选，用于需要鉴权的模型）
     
     def __post_init__(self):
         # 如果没有指定本地路径,使用默认路径
