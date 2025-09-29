@@ -47,7 +47,7 @@ class SelfGameConfig:
     enable_thinking_vector: bool = True  # 是否启用思维向量
     thinking_vector_max_depth: int = 5  # 思维向量最大深度
     max_self_route_iterations: int = 10  # 单节点自指最大迭代轮次
-    branches_per_agent: int = 5  # 每个角色并行的自博弈分支数
+    branches_per_agent: int = 1  # 每个角色并行的自博弈分支数（默认1，避免重复执行五次）
 
 
 @dataclass
