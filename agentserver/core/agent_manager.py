@@ -60,9 +60,9 @@ class AgentManager:
         self.agents: Dict[str, AgentConfig] = {}
         self.agent_sessions: Dict[str, Dict[str, AgentSession]] = {}
         
-        # 任务规划相关
-        self.task_planner = None
-        self.task_executor = None
+        # 任务规划相关 - 现在通过apiserver的task_scheduler处理
+        # self.task_planner = None  # 删除重复功能
+        # self.task_executor = None  # 删除重复功能
         
         # 从配置文件读取最大历史轮数
         try:
@@ -91,8 +91,8 @@ class AgentManager:
             # 没有运行的事件循环，跳过定期清理任务
             pass
         
-        # 初始化任务规划器
-        self._init_task_planner()
+        # 任务规划器现在通过apiserver的task_scheduler处理
+        # self._init_task_planner()  # 删除重复功能
         
         logger.info(f"AgentManager初始化完成，已加载 {len(self.agents)} 个Agent")
     
@@ -565,31 +565,12 @@ class AgentManager:
         else:
             return f"请执行动作 '{action}'"
     
-    def _init_task_planner(self):
-        """初始化任务规划器"""
-        try:
-            from .task_planner import TaskPlanner
-            from .task_executor import TaskExecutor
-            
-            # 创建任务规划器
-            self.task_planner = TaskPlanner(
-                agent_manager=self,
-                mcp_manager=None  # 稍后设置
-            )
-            
-            # 创建任务执行器
-            self.task_executor = TaskExecutor(self.task_planner)
-            
-            logger.info("任务规划器和执行器初始化完成")
-            
-        except Exception as e:
-            logger.warning(f"任务规划器初始化失败: {e}")
-            self.task_planner = None
-            self.task_executor = None
+    # 删除重复的任务规划器初始化方法
+    # 现在通过apiserver的task_scheduler处理任务规划
     
     async def process_intelligent_task(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        智能任务处理 - 新增的核心方法
+        智能任务处理 - 核心方法，通过apiserver的task_scheduler处理
         
         Args:
             query: 用户查询
@@ -598,90 +579,51 @@ class AgentManager:
         Returns:
             Dict[str, Any]: 处理结果
         """
-        if not self.task_planner or not self.task_executor:
-            # 降级到传统Agent调用
-            return await self.call_agent("default", query)
-        
         try:
-            # 1. 任务规划
-            task = await self.task_planner.analyze_and_plan(query, context)
-            logger.info(f"任务规划完成: {task.id} - {task.task_type}")
+            # 通过apiserver的task_scheduler处理智能任务
+            from apiserver.task_scheduler import get_task_scheduler
+            task_scheduler = get_task_scheduler()
             
-            # 2. 任务执行
-            result = await self.task_executor.execute_task(task)
+            # 创建任务并调度
+            import uuid
+            task_id = str(uuid.uuid4())
             
-            return {
-                "status": "success" if result.success else "error",
-                "result": result.result,
-                "error": result.error,
-                "task_id": task.id,
-                "execution_time": result.execution_time,
-                "task_type": task.task_type
+            # 注册任务到调度器
+            task_scheduler.task_registry[task_id] = {
+                "id": task_id,
+                "type": "processor",
+                "status": "queued",
+                "params": {"query": query},
+                "context": context
             }
+            
+            # 调度并行执行
+            tasks = [{
+                "type": "processor",
+                "params": {"query": query},
+                "session_id": context.get("session_id") if context else None
+            }]
+            
+            results = await task_scheduler.schedule_parallel_execution(tasks)
+            
+            if results and len(results) > 0:
+                result = results[0]
+                return {
+                    "status": "success" if result.get("success") else "error",
+                    "result": result.get("result"),
+                    "error": result.get("error"),
+                    "task_id": task_id
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": "任务调度失败"
+                }
             
         except Exception as e:
             logger.error(f"智能任务处理失败: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """获取任务状态"""
-        if not self.task_planner:
-            return None
-        
-        task = self.task_planner.get_task(task_id)
-        if not task:
-            return None
-        
-        return {
-            "task_id": task.id,
-            "title": task.title,
-            "task_type": task.task_type,
-            "status": task.status,
-            "priority": task.priority,
-            "created_at": task.created_at.isoformat(),
-            "steps": task.steps,
-            "meta": task.meta
-        }
-    
-    async def get_task_list(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-        """获取任务列表"""
-        if not self.task_planner:
-            return []
-        
-        tasks = self.task_planner.get_task_list(status_filter)
-        return [
-            {
-                "task_id": task.id,
-                "title": task.title,
-                "task_type": task.task_type,
-                "status": task.status,
-                "priority": task.priority,
-                "created_at": task.created_at.isoformat()
-            }
-            for task in tasks
-        ]
-    
-    async def get_execution_stats(self) -> Dict[str, Any]:
-        """获取执行统计信息"""
-        if not self.task_executor:
-            return {}
-        
-        return self.task_executor.get_execution_stats()
-    
-    async def cancel_task(self, task_id: str) -> bool:
-        """取消任务"""
-        if not self.task_executor:
-            return False
-        
-        try:
-            await self.task_executor._terminate_task(task_id)
-            return True
-        except Exception as e:
-            logger.error(f"取消任务失败: {e}")
-            return False
+            # 降级到传统Agent调用
+            return await self.call_agent("default", query)
 
 # 全局Agent管理器实例
 _AGENT_MANAGER = None
@@ -709,28 +651,56 @@ def get_agent_info(agent_name: str) -> Optional[Dict[str, Any]]:
     manager = get_agent_manager()
     return manager.get_agent_info(agent_name)
 
-# 新增的智能任务处理函数
+# 智能任务处理函数 - 通过apiserver处理
 async def process_intelligent_task(query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """便捷的智能任务处理函数"""
+    """便捷的智能任务处理函数 - 通过apiserver的task_scheduler处理"""
     manager = get_agent_manager()
     return await manager.process_intelligent_task(query, context)
 
+# 任务管理函数 - 通过apiserver的task_scheduler处理
 async def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
-    """便捷的任务状态获取函数"""
-    manager = get_agent_manager()
-    return await manager.get_task_status(task_id)
+    """便捷的任务状态获取函数 - 通过apiserver处理"""
+    try:
+        from apiserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        return await task_scheduler.get_task_status(task_id)
+    except Exception as e:
+        logger.error(f"获取任务状态失败: {e}")
+        return None
 
 async def get_task_list(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-    """便捷的任务列表获取函数"""
-    manager = get_agent_manager()
-    return await manager.get_task_list(status_filter)
+    """便捷的任务列表获取函数 - 通过apiserver处理"""
+    try:
+        from apiserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        return await task_scheduler.get_running_tasks()
+    except Exception as e:
+        logger.error(f"获取任务列表失败: {e}")
+        return []
 
 async def get_execution_stats() -> Dict[str, Any]:
-    """便捷的执行统计获取函数"""
-    manager = get_agent_manager()
-    return await manager.get_execution_stats()
+    """便捷的执行统计获取函数 - 通过apiserver处理"""
+    try:
+        from apiserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        return {
+            "total_tasks": len(task_scheduler.task_registry),
+            "running_tasks": len([t for t in task_scheduler.task_registry.values() if t.get("status") == "running"]),
+            "queued_tasks": len([t for t in task_scheduler.task_registry.values() if t.get("status") == "queued"])
+        }
+    except Exception as e:
+        logger.error(f"获取执行统计失败: {e}")
+        return {}
 
 async def cancel_task(task_id: str) -> bool:
-    """便捷的任务取消函数"""
-    manager = get_agent_manager()
-    return await manager.cancel_task(task_id) 
+    """便捷的任务取消函数 - 通过apiserver处理"""
+    try:
+        from apiserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        if task_id in task_scheduler.task_registry:
+            task_scheduler.task_registry[task_id]["status"] = "cancelled"
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"取消任务失败: {e}")
+        return False

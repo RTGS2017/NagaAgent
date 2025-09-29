@@ -7,22 +7,18 @@ pyvis>=0.3.2
 matplotlib>=3.10.0
 neo4j
 
-# API服务器相关依赖 (已整合到nagaagent-core==1.0.1)
-
 # 网络通信相关依赖
 # uvicorn[standard]>=0.34.0  # 已通过 nagaagent_core.api 转发使用 #
 librosa
 accelerate
 torch
  
-
 # AI机器学习相关依赖（已迁移到 nagaagent-core==1.0.1，避免本地编译问题）
 
 # 数据处理相关依赖
 # pydantic>=2.11.3  # 已通过 nagaagent_core.vendors.pydantic 提供 #
 # httpx>=0.28.1     # 已通过 nagaagent_core.vendors.httpx 提供 #
  
-
 # GUI界面相关依赖（显式安装，避免首次运行缺失）
 PyQt5>=5.15.10  # Qt GUI #
 

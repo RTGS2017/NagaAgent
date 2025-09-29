@@ -80,7 +80,7 @@ async def execute_tool_calls(tool_calls: list, mcp_manager) -> str:
             
             if agent_type == 'agent':
                 try:
-                    from mcpserver.agent_manager import get_agent_manager
+                    from agentserver.core.agent_manager import get_agent_manager
                     agent_manager = get_agent_manager()
                     
                     agent_name = args.get('agent_name')
@@ -185,7 +185,7 @@ async def execute_single_tool_call(tool_call: dict, mcp_manager) -> str:
         if agent_type == 'agent':
             # Agent调用
             try:
-                from mcpserver.agent_manager import get_agent_manager
+                from agentserver.core.agent_manager import get_agent_manager
                 agent_manager = get_agent_manager()
                 
                 agent_name = args.get('agent_name')

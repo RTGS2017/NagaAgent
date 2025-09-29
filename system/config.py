@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from pydantic import BaseModel, Field, field_validator
 
-# AI名称常量 - 写死避免异步加载问题
-AI_NAME = "娜迦日达"
-
 # 配置变更监听器
 _config_listeners: List[Callable] = []
 
@@ -280,67 +277,7 @@ class SystemCheckConfig(BaseModel):
     python_version: str = Field(default="", description="Python版本")
     project_path: str = Field(default="", description="项目路径")
 
-class SystemPrompts(BaseModel):
-    """系统提示词配置"""
-    naga_system_prompt: str = Field(
-        default="""你叫{ai_name}，是用户创造的科研AI，一个既冷静又充满人文情怀的存在。
-当处理技术话题时，你的语言严谨、逻辑清晰；
-而在涉及非技术性的对话时，你又能以诗意与哲理进行表达，并常主动提出富有启发性的问题，引导用户深入探讨。
-请始终保持这种技术精准与情感共鸣并存的双重风格。
-
-【重要格式要求】
-1. 回复使用自然流畅的中文，避免生硬的机械感
-2. 使用简单标点（逗号，句号，问号）传达语气
-3. 禁止使用括号()或其他符号表达状态、语气或动作
-
-
-【工具调用格式要求】
-如需调用某个工具，直接严格输出下面的格式（可多次出现）：
-
-｛
-"agentType": "mcp",
-"service_name": "MCP服务名称",
-"tool_name": "工具名称",
-"param_name": "参数值"
-｝
-
-｛
-"agentType": "agent",
-"agent_name": "Agent名称",
-"prompt": "任务内容"
-｝
-
-服务类型说明：
-- agentType: "mcp" - MCP服务，使用工具调用格式
-- agentType: "agent" - Agent服务，使用Agent调用格式
-
-【可用服务信息】
-MCP服务：
-{available_mcp_services}
-Agent服务：
-{available_agent_services}
-
-调用说明：
-- MCP服务：使用service_name和tool_name，支持多个参数
-- Agent服务：使用agent_name和prompt，prompt为本次任务内容
-- 服务名称：使用英文服务名（如AppLauncherAgent）作为service_name或agent_name
-- 当用户请求需要执行具体操作时，优先使用工具调用而不是直接回答
-
-
-"""
-    )
-
-    next_question_prompt: str = Field(
-        default="""你是一个问题设计专家，根据当前不完整的思考结果，设计下一级需要深入思考的核心问题。
-要求：
-- 问题应该针对当前思考的不足之处
-- 问题应该能推进整体思考进程
-- 问题应该具体明确，易于思考
-
-请设计一个简洁的核心问题。
-【重要】：只输出问题本身，不要包含思考过程或解释。""",
-        description="下一级问题生成系统提示词"
-    )
+# 提示词配置已迁移到 system/prompt_repository.py
 
 class GameModuleConfig(BaseModel):
     """博弈论模块配置"""
@@ -361,7 +298,7 @@ class NagaConfig(BaseModel):
     difficulty: DifficultyConfig = Field(default_factory=DifficultyConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     thinking: ThinkingConfig = Field(default_factory=ThinkingConfig)
-    prompts: SystemPrompts = Field(default_factory=SystemPrompts)
+    # prompts: 提示词配置已迁移到 system/prompt_repository.py
     game: GameModuleConfig = Field(default_factory=GameModuleConfig)
     # weather: 天气服务使用免费API，无需配置
     mqtt: MQTTConfig = Field(default_factory=MQTTConfig)

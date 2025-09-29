@@ -1,0 +1,58 @@
+{
+  "name": "computer_control",
+  "displayName": "电脑控制助手",
+  "description": "智能电脑控制服务，支持鼠标键盘操作、屏幕分析、任务自动化",
+  "version": "1.0.0",
+  "agentType": "mcp",
+  "entryPoint": {
+    "module": "agent_computer_control.computer_control_agent",
+    "class": "ComputerControlAgent"
+  },
+  "capabilities": {
+    "invocationCommands": [
+      {
+        "command": "click",
+        "description": "点击屏幕指定位置",
+        "example": "点击桌面上的Chrome图标"
+      },
+      {
+        "command": "type",
+        "description": "输入文本",
+        "example": "在记事本中输入'Hello World'"
+      },
+      {
+        "command": "screenshot",
+        "description": "截取屏幕截图",
+        "example": "截取当前屏幕"
+      },
+      {
+        "command": "find_element",
+        "description": "查找屏幕元素",
+        "example": "找到屏幕上的'确定'按钮"
+      },
+      {
+        "command": "automate_task",
+        "description": "自动化执行复杂任务",
+        "example": "打开浏览器并搜索'Python教程'"
+      }
+    ]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "要执行的操作类型"
+      },
+      "target": {
+        "type": "string",
+        "description": "操作目标描述"
+      },
+      "parameters": {
+        "type": "object",
+        "description": "操作参数"
+      }
+    },
+    "required": ["action"]
+  }
+}

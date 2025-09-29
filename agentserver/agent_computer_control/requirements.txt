@@ -1,0 +1,29 @@
+# 电脑控制核心依赖
+pyautogui==0.9.54
+gui-agents==0.2.5.post2
+opencv-contrib-python==4.10.0.84
+paddleocr==3.1.0
+pytesseract==0.3.13
+paddlepaddle==3.1.0
+
+# 系统控制依赖
+pygetwindow==0.0.9
+pywinauto==0.6.9
+comtypes==1.4.11
+
+# AI模型依赖
+langchain-openai==0.3.30
+openai==1.99.9
+
+# 图像处理依赖
+Pillow==11.3.0
+numpy==1.26.4
+
+# 基础依赖
+asyncio
+logging
+typing
+dataclasses
+pathlib
+json
+time

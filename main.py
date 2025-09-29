@@ -43,6 +43,7 @@ class ServiceManager:
         self.loop = asyncio.new_event_loop()
         self.bg_thread = None
         self.api_thread = None
+        self.agent_thread = None
         self.tts_thread = None
     
     def start_background_services(self):
@@ -124,6 +125,44 @@ class ServiceManager:
             print("   请运行: pip install fastapi uvicorn")
         except Exception as e:
             print(f"❌ API服务器启动异常: {e}")
+    
+    def start_agent_server(self):
+        """启动Agent Server服务"""
+        try:
+            if not self.check_port_available("0.0.0.0", 8001):
+                print(f"⚠️ 端口 8001 已被占用，跳过Agent Server启动")
+                return
+            
+            print("🚀 正在启动Agent Server...")
+            print(f"📍 地址: http://127.0.0.1:8001")
+            print(f"📚 文档: http://127.0.0.1:8001/docs")
+            
+            def run_agent_server():
+                try:
+                    import uvicorn
+                    from agentserver.agent_server import app
+                    
+                    uvicorn.run(
+                        app,
+                        host="0.0.0.0",
+                        port=8001,
+                        log_level="error",
+                        access_log=False,
+                        reload=False
+                    )
+                except Exception as e:
+                    print(f"❌ Agent Server启动失败: {e}")
+            
+            self.agent_thread = threading.Thread(target=run_agent_server, daemon=True)
+            self.agent_thread.start()
+            print("✅ Agent Server已在后台启动")
+            time.sleep(1)
+            
+        except ImportError as e:
+            print(f"⚠️ Agent Server依赖缺失: {e}")
+            print("   请确保agentserver模块可用")
+        except Exception as e:
+            print(f"❌ Agent Server启动异常: {e}")
     
     def start_tts_server(self):
         """启动语音输出服务（TTS）"""
@@ -228,6 +267,9 @@ print("=" * 30)
 # 启动服务
 if config.api_server.enabled and config.api_server.auto_start:
     service_manager.start_api_server()
+
+# 启动Agent Server（基于博弈论架构的意图分析和任务调度服务）
+service_manager.start_agent_server()
 
 service_manager.start_tts_server()
 

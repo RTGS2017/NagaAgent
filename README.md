@@ -831,7 +831,7 @@ AgentManager是一个独立的Agent注册和调用系统，支持从配置文件
 
 #### 基本调用
 ```python
-from mcpserver.agent_manager import get_agent_manager
+from agentserver.core.agent_manager import get_agent_manager
 
 # 获取AgentManager实例
 agent_manager = get_agent_manager()
@@ -846,7 +846,7 @@ result = await agent_manager.call_agent(
 
 #### 便捷函数调用
 ```python
-from mcpserver.agent_manager import call_agent, list_agents, get_agent_info
+from agentserver.core.agent_manager import call_agent, list_agents, get_agent_info
 
 # 便捷调用
 result = await call_agent("ExampleAgent", "你好")

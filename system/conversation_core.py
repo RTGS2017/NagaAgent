@@ -8,7 +8,7 @@ import sys
 import time
 import traceback
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Any
 
 # 第三方库导入
 from nagaagent_core.core import AsyncOpenAI
@@ -17,6 +17,8 @@ from nagaagent_core.core import AsyncOpenAI
 from apiserver.tool_call_utils import tool_call_loop
 from system.config import config, AI_NAME
 from mcpserver.mcp_manager import get_mcp_manager
+from system.background_analyzer import get_background_analyzer
+from system.prompt_repository import get_prompt
 # from thinking import TreeThinkingEngine
 # from thinking.config import COMPLEX_KEYWORDS  # 已废弃，不再使用
 
@@ -79,6 +81,10 @@ class NagaConversation: # 对话主类
         self.dev_mode = False
         self.async_client = AsyncOpenAI(api_key=config.api.api_key, base_url=config.api.base_url.rstrip('/') + '/')
         
+        # 初始化意图分析器（使用新的Agent Server架构）
+        self.agent_server_client = None
+        self._init_agent_server_client()
+        
         # 初始化MCP服务系统
         self._init_mcp_services()
         
@@ -129,6 +135,50 @@ class NagaConversation: # 对话主类
 
         # self.loop = asyncio.get_event_loop()  # 已废弃，不再使用
 
+    def _init_agent_server_client(self):
+        """初始化Agent Server客户端"""
+        try:
+            import aiohttp
+            self.agent_server_client = aiohttp.ClientSession()
+            logger.info("Agent Server客户端初始化成功")
+        except Exception as e:
+            logger.warning(f"Agent Server客户端初始化失败: {e}")
+            self.agent_server_client = None
+
+    async def _call_agent_server_analyze(self, messages: List[Dict[str, str]], session_id: str) -> Dict[str, Any]:
+        """调用Agent Server进行意图分析"""
+        try:
+            if not self.agent_server_client:
+                return {"has_tasks": False, "reason": "Agent Server客户端未初始化", "tasks": [], "priority": "low"}
+            
+            # 调用Agent Server的意图分析接口
+            url = "http://localhost:8001/analyze_and_plan"
+            payload = {
+                "messages": messages,
+                "session_id": session_id
+            }
+            
+            async with self.agent_server_client.post(url, json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if result.get("success"):
+                        # 返回分析结果（这里需要根据实际API调整）
+                        return {
+                            "has_tasks": True,
+                            "reason": "Agent Server分析完成",
+                            "tasks": [],  # 实际任务由Agent Server后台处理
+                            "priority": "medium"
+                        }
+                    else:
+                        return {"has_tasks": False, "reason": "Agent Server分析失败", "tasks": [], "priority": "low"}
+                else:
+                    logger.error(f"Agent Server调用失败: {response.status}")
+                    return {"has_tasks": False, "reason": f"HTTP错误: {response.status}", "tasks": [], "priority": "low"}
+                    
+        except Exception as e:
+            logger.error(f"调用Agent Server失败: {e}")
+            return {"has_tasks": False, "reason": f"调用失败: {e}", "tasks": [], "priority": "low"}
+
     def _load_persistent_context(self):
         """从日志文件加载历史对话上下文"""
         if not config.api.context_parse_logs:
@@ -151,8 +201,12 @@ class NagaConversation: # 对话主类
                 logger.info(f"✅ 从日志文件加载了 {len(self.messages)} 条历史对话")
                 
                 # 显示统计信息
-                stats = parser.get_context_statistics(config.api.context_load_days)
-                logger.info(f"📊 上下文统计: {stats['total_files']}个文件, {stats['total_messages']}条消息")
+                try:
+                    from apiserver.message_manager import parser
+                    stats = parser.get_context_statistics(config.api.context_load_days)
+                    logger.info(f"📊 上下文统计: {stats['total_files']}个文件, {stats['total_messages']}条消息")
+                except ImportError:
+                    logger.info("📊 上下文统计: 日志解析器不可用")
             else:
                 logger.info("📝 未找到历史对话记录，将开始新的对话")
                 
@@ -354,7 +408,7 @@ class NagaConversation: # 对话主类
     #             yield ("娜迦", line)
     #     return text_stream()
 
-    def _format_services_for_prompt(self, available_services: dict) -> str:
+    def _format_services_for_prompt(self, available_services: dict, intent_analysis: dict = None) -> str:
         """格式化可用服务列表为prompt字符串，MCP服务和Agent服务分开，包含具体调用格式"""
         mcp_services = available_services.get("mcp_services", [])
         agent_services = available_services.get("agent_services", [])
@@ -438,7 +492,7 @@ class NagaConversation: # 对话主类
         
         # 2. 直接从AgentManager获取已注册的Agent
         try:
-            from mcpserver.agent_manager import get_agent_manager
+            from agentserver.core.agent_manager import get_agent_manager
             agent_manager = get_agent_manager()
             agent_manager_agents = agent_manager.get_available_agents()
             
@@ -460,9 +514,23 @@ class NagaConversation: # 对话主类
         # 添加本地信息说明
         local_info = f"\n\n【当前环境信息】\n- 本地城市: {local_city}\n- 当前时间: {current_time}\n\n【使用说明】\n- 天气/时间查询时，请使用上述本地城市信息作为city参数\n- 所有时间相关查询都基于当前系统时间"
         
+        # 添加意图分析结果（如果有）
+        intent_info = ""
+        if intent_analysis and intent_analysis.get("has_tasks", False):
+            tasks = intent_analysis.get("tasks", [])
+            priority = intent_analysis.get("priority", "medium")
+            reason = intent_analysis.get("reason", "")
+            
+            intent_info = f"\n\n【意图分析结果】\n- 检测到 {len(tasks)} 个潜在任务 (优先级: {priority})\n- 分析原因: {reason}\n"
+            if tasks:
+                intent_info += "- 建议优先处理的任务:\n"
+                for i, task in enumerate(tasks, 1):
+                    intent_info += f"  {i}. {task}\n"
+            intent_info += "\n【重要】如果用户请求与上述任务相关，请优先使用工具调用来执行任务，而不是仅提供建议。"
+        
         # 返回格式化的服务列表
         result = {
-            "available_mcp_services": "\n".join(mcp_list) + local_info if mcp_list else "无" + local_info,
+            "available_mcp_services": "\n".join(mcp_list) + local_info + intent_info if mcp_list else "无" + local_info + intent_info,
             "available_agent_services": "\n".join(agent_list) if agent_list else "无"
         }
         
@@ -480,13 +548,52 @@ class NagaConversation: # 对话主类
             # 只在语音输入时显示处理提示
             if is_voice_input:
                 print(f"开始处理用户输入：{now()}")  # 语音转文本结束，开始处理
+            
+            # 异步启动意图分析（使用Agent Server）
+            intent_analysis_task = None
+            if not self.dev_mode and self.agent_server_client:  # 开发者模式跳过意图分析
+                try:
+                    # 构建分析用的消息格式
+                    analysis_messages = []
+                    for msg in self.messages[-5:]:  # 只分析最近5条消息
+                        analysis_messages.append({
+                            "role": msg.get("role", "user"),
+                            "content": msg.get("content", "")
+                        })
+                    # 添加当前用户消息
+                    analysis_messages.append({
+                        "role": "user", 
+                        "content": u
+                    })
+                    
+                    # 异步启动意图分析（通过Agent Server）
+                    intent_analysis_task = asyncio.create_task(
+                        self._call_agent_server_analyze(analysis_messages, "main_session")
+                    )
+                    print(f"🧠 启动意图分析：{now()}")
+                except Exception as e:
+                    logger.debug(f"意图分析启动失败: {e}")
+                    intent_analysis_task = None
                      
             # 获取过滤后的服务列表
             available_services = self.mcp.get_available_services_filtered()
-            services_text = self._format_services_for_prompt(available_services)
+            
+            # 检查意图分析是否完成
+            intent_analysis = None
+            if intent_analysis_task and intent_analysis_task.done():
+                try:
+                    intent_analysis = intent_analysis_task.result()
+                    print(f"🧠 意图分析完成：{now()}")
+                    if intent_analysis.get("has_tasks", False):
+                        tasks = intent_analysis.get("tasks", [])
+                        print(f"   发现 {len(tasks)} 个潜在任务")
+                except Exception as e:
+                    logger.debug(f"获取意图分析结果失败: {e}")
+            
+            services_text = self._format_services_for_prompt(available_services, intent_analysis)
             
             # 添加handoff提示词 - 先获取服务信息再格式化
-            system_prompt = config.prompts.naga_system_prompt.format(ai_name=AI_NAME, **services_text)
+            system_prompt = get_prompt("naga_system_prompt", ai_name=AI_NAME, **services_text)
             
             # 使用消息管理器统一的消息拼接逻辑（UI界面使用）
             from apiserver.message_manager import message_manager
@@ -655,6 +762,19 @@ class NagaConversation: # 对话主类
                             yield result
                         elif isinstance(result, str):
                             yield (AI_NAME, result)
+                
+                # 等待意图分析完成（最多等待2秒）
+                if intent_analysis_task and not intent_analysis_task.done():
+                    try:
+                        await asyncio.wait_for(intent_analysis_task, timeout=2.0)
+                        final_intent_analysis = intent_analysis_task.result()
+                        if final_intent_analysis.get("has_tasks", False):
+                            tasks = final_intent_analysis.get("tasks", [])
+                            print(f"🧠 意图分析最终结果：发现 {len(tasks)} 个潜在任务")
+                    except asyncio.TimeoutError:
+                        print(f"🧠 意图分析超时，继续处理")
+                    except Exception as e:
+                        logger.debug(f"等待意图分析完成失败: {e}")
                 
                 # 保存对话历史（使用前端显示的纯文本）
                 print(f"[DEBUG] 最终display_text长度: {len(display_text)}")

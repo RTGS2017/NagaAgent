@@ -42,11 +42,13 @@ from .prompt_logger import prompt_logger  # 导入prompt日志记录器
 # 导入配置系统
 try:
     from system.config import config, AI_NAME  # 使用新的配置系统
+    from system.prompt_repository import get_prompt  # 导入提示词仓库
 except ImportError:
     import sys
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from system.config import config, AI_NAME  # 使用新的配置系统
+    from system.prompt_repository import get_prompt  # 导入提示词仓库
 from ui.response_utils import extract_message  # 导入消息提取工具
 
 # 全局NagaAgent实例 - 延迟导入避免循环依赖
@@ -336,7 +338,7 @@ async def chat(request: ChatRequest):
         # 构建系统提示词
         available_services = naga_agent.mcp.get_available_services_filtered()
         services_text = naga_agent._format_services_for_prompt(available_services)
-        system_prompt = config.prompts.naga_system_prompt.format(ai_name=AI_NAME, **services_text)
+        system_prompt = get_prompt("naga_system_prompt", ai_name=AI_NAME, **services_text)
         
         # 使用消息管理器构建完整的对话消息
         messages = message_manager.build_conversation_messages(
@@ -419,6 +421,20 @@ async def chat(request: ChatRequest):
         # 保存成功的prompt日志
         prompt_logger.log_prompt(session_id, messages, {"content": pure_text_content[0]}, api_status="success")
         
+        # 异步触发后台意图分析 - 基于博弈论的背景分析机制
+        try:
+            from agentserver.task_scheduler import get_task_scheduler
+            task_scheduler = get_task_scheduler()
+            
+            # 获取最近对话历史
+            recent_messages = message_manager.get_recent_messages(session_id, count=6)
+            
+            # 异步执行后台分析，不阻塞主流程
+            asyncio.create_task(task_scheduler.schedule_background_analysis(session_id, recent_messages))
+        except Exception as e:
+            # 后台分析失败不影响主对话
+            print(f"后台意图分析触发失败: {e}")
+        
         return ChatResponse(
             response=extract_message(pure_text_content[0]) if pure_text_content[0] else pure_text_content[0],
             session_id=session_id,
@@ -449,7 +465,7 @@ async def chat_stream(request: ChatRequest):
             # 构建系统提示词
             available_services = naga_agent.mcp.get_available_services_filtered()
             services_text = naga_agent._format_services_for_prompt(available_services)
-            system_prompt = config.prompts.naga_system_prompt.format(ai_name=AI_NAME, **services_text)
+            system_prompt = get_prompt("naga_system_prompt", ai_name=AI_NAME, **services_text)
             
             # 使用消息管理器构建完整的对话消息
             messages = message_manager.build_conversation_messages(
@@ -571,6 +587,20 @@ async def chat_stream(request: ChatRequest):
             
             # 保存成功的prompt日志
             prompt_logger.log_prompt(session_id, messages, {"content": pure_text_content[0]}, api_status="success")
+            
+            # 异步触发后台意图分析 - 基于博弈论的背景分析机制
+            try:
+                from agentserver.task_scheduler import get_task_scheduler
+                task_scheduler = get_task_scheduler()
+                
+                # 获取最近对话历史
+                recent_messages = message_manager.get_recent_messages(session_id, count=6)
+                
+                # 异步执行后台分析，不阻塞主流程
+                asyncio.create_task(task_scheduler.schedule_background_analysis(session_id, recent_messages))
+            except Exception as e:
+                # 后台分析失败不影响主对话
+                print(f"后台意图分析触发失败: {e}")
             
             yield "data: [DONE]\n\n"
             
@@ -1051,6 +1081,168 @@ async def load_log_context(days: int = 3, max_messages: int = None):
         print(f"加载日志上下文错误: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"加载上下文失败: {str(e)}")
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """获取任务状态 - 基于博弈论的任务管理功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        task_status = await task_scheduler.get_task_status(task_id)
+        if not task_status:
+            raise HTTPException(status_code=404, detail="任务未找到")
+        
+        return task_status
+    except Exception as e:
+        print(f"获取任务状态错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.get("/tasks")
+async def list_tasks():
+    """获取任务列表 - 基于博弈论的任务管理功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        running_tasks = await task_scheduler.get_running_tasks()
+        return {
+            "status": "success",
+            "tasks": running_tasks,
+            "count": len(running_tasks)
+        }
+    except Exception as e:
+        print(f"获取任务列表错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.get("/computer-use/status")
+async def get_computer_use_status():
+    """获取电脑控制状态 - 基于博弈论的电脑控制管理功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        status = task_scheduler.get_computer_use_status()
+        return {
+            "status": "success",
+            "computer_use": status
+        }
+    except Exception as e:
+        print(f"获取电脑控制状态错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.post("/computer-use/schedule")
+async def schedule_computer_use_task(request: Dict[str, Any]):
+    """调度电脑控制任务 - 基于博弈论的computer_use调度功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        import uuid
+        
+        task_scheduler = get_task_scheduler()
+        
+        task_id = str(uuid.uuid4())
+        instruction = request.get("instruction", "")
+        screenshot = request.get("screenshot")
+        session_id = request.get("session_id")
+        
+        if not instruction:
+            raise HTTPException(status_code=400, detail="缺少instruction参数")
+        
+        await task_scheduler.schedule_computer_use_task(task_id, instruction, screenshot, session_id)
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "电脑控制任务已调度"
+        }
+    except Exception as e:
+        print(f"调度电脑控制任务错误: {e}")
+        raise HTTPException(status_code=500, detail=f"调度失败: {str(e)}")
+
+@app.get("/capabilities")
+async def get_capabilities():
+    """获取能力列表 - 基于博弈论的能力管理功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        capabilities = await task_scheduler.refresh_capabilities()
+        return {
+            "status": "success",
+            "capabilities": capabilities
+        }
+    except Exception as e:
+        print(f"获取能力列表错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.get("/mcp/availability")
+async def get_mcp_availability():
+    """获取MCP可用性 - 基于博弈论的能力检查功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        availability = task_scheduler.get_mcp_availability()
+        return availability
+    except Exception as e:
+        print(f"获取MCP可用性错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.get("/computer-use/availability")
+async def get_computer_use_availability():
+    """获取电脑控制可用性 - 基于博弈论的能力检查功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        availability = task_scheduler.get_computer_use_availability()
+        return availability
+    except Exception as e:
+        print(f"获取电脑控制可用性错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+@app.post("/agent/flags")
+async def set_agent_flags(request: Dict[str, Any]):
+    """设置代理标志 - 基于博弈论的策略控制功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        flags = {
+            "mcp_enabled": request.get("mcp_enabled"),
+            "computer_use_enabled": request.get("computer_use_enabled")
+        }
+        
+        # 过滤掉None值
+        flags = {k: v for k, v in flags.items() if v is not None}
+        
+        if flags:
+            task_scheduler.set_agent_flags(flags)
+        
+        current_flags = task_scheduler.get_agent_flags()
+        return {
+            "status": "success",
+            "agent_flags": current_flags
+        }
+    except Exception as e:
+        print(f"设置代理标志错误: {e}")
+        raise HTTPException(status_code=500, detail=f"设置失败: {str(e)}")
+
+@app.get("/agent/flags")
+async def get_agent_flags():
+    """获取代理标志 - 基于博弈论的策略查询功能"""
+    try:
+        from agentserver.task_scheduler import get_task_scheduler
+        task_scheduler = get_task_scheduler()
+        
+        flags = task_scheduler.get_agent_flags()
+        return {
+            "status": "success",
+            "agent_flags": flags
+        }
+    except Exception as e:
+        print(f"获取代理标志错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 if __name__ == "__main__":
     import argparse

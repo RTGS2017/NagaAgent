@@ -1,5 +1,6 @@
 import json as _json
 from py2neo import Graph, Node, Relationship
+from py2neo.errors import ServiceUnavailable
 import logging
 import sys
 import os
@@ -17,7 +18,17 @@ try:
     NEO4J_DATABASE = config.grag.neo4j_database
     
     try:
-        graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), name=NEO4J_DATABASE) if GRAG_ENABLED else None
+        if GRAG_ENABLED:
+            graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), name=NEO4J_DATABASE)
+            try:
+                graph.service.kernel_version
+                print("[GRAG] 成功连接到 Neo4j。")
+            except ServiceUnavailable:
+                print("[GRAG] 未能连接到 Neo4j，图数据库功能已临时禁用。请检查 Neo4j 是否正在运行以及配置是否正确。", file=sys.stderr)
+                graph = None
+                GRAG_ENABLED = False
+        else:
+            graph = None
     except Exception as e:
         print(f"[GRAG] Neo4j连接失败: {e}", file=sys.stderr)
         graph = None
@@ -36,7 +47,17 @@ except Exception as e:
         NEO4J_DATABASE = grag_cfg['neo4j_database']
         GRAG_ENABLED = grag_cfg.get('enabled', True)
         try:
-            graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), name=NEO4J_DATABASE) if GRAG_ENABLED else None
+            if GRAG_ENABLED:
+                graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), name=NEO4J_DATABASE)
+                try:
+                    graph.service.kernel_version
+                    print("[GRAG] 成功连接到 Neo4j。")
+                except ServiceUnavailable:
+                    print("[GRAG] 未能连接到 Neo4j，图数据库功能已临时禁用。请检查 Neo4j 是否正在运行以及配置是否正确。", file=sys.stderr)
+                    graph = None
+                    GRAG_ENABLED = False
+            else:
+                graph = None
         except Exception as e:
             print(f"[GRAG] Neo4j连接失败: {e}", file=sys.stderr)
             graph = None

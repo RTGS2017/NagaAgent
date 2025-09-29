@@ -74,7 +74,7 @@ def scan_and_register_mcp_agents(mcp_dir: str = 'mcpserver') -> list:
             elif agent_type == 'agent':
                 # Agent类型：转交给AgentManager处理
                 try:
-                    from mcpserver.agent_manager import get_agent_manager
+                    from agentserver.core.agent_manager import get_agent_manager
                     agent_manager = get_agent_manager()
                     
                     # 从manifest构建Agent配置
