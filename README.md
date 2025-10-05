@@ -12,7 +12,6 @@
 
 ---
 
-**🐍 智能对话助手 | 多平台支持 | 丰富生态 | 易于扩展**
 <a href="https://www.star-history.com/#Xxiii8322766509/NagaAgent&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Xxiii8322766509/NagaAgent&type=Date&theme=dark" />
@@ -23,9 +22,13 @@
 
 ---
 
+**🐍 智能对话助手 | 多平台支持 | 丰富生态 | 易于扩展**
+
+---
+
 ## 🎬 快速入门视频
 
-**[点击观看 NagaAgent 4.0 介绍视频](https://www.pylindex.top/naga/intro.mp4)**
+**[点击观看 NagaAgent 快速入门视频](https://www.pylindex.top/naga/intro.mp4)**
 
 ---
 
@@ -36,15 +39,25 @@ NagaAgent 是一个功能强大的智能对话助手，集成了先进的人工�
 ### 🎯 项目亮点
 
 ✅ **🧠 智能记忆**: 基于 Neo4j 的 GRAG 知识图谱记忆系统，自动提取和记忆对话内容
+
 ✅ **🔧 丰富生态**: 内置 20+ MCP 服务，涵盖文件操作、浏览器控制、系统管理等领域
+
 ✅ **🎤 语音交互**: 支持实时语音输入输出，兼容 OpenAI TTS API
+
 ✅ **🖥️ 现代界面**: 基于 PyQt5 的精美 GUI，支持 Live2D 虚拟形象
+
 ✅ **🌐 完整 API**: RESTful API 接口，支持流式输出和 SSE
+
 ✅ **📱 系统托盘**: 完整的后台运行和自启动支持
+
 ✅ **🤖 多Agent协作**: 智能任务调度和多 Agent 协同工作
+
 ✅ **🌳 深度思考**: 基于遗传算法的多分支思考引擎
+
 ✅ **🔄 配置热更新**: 实时配置变更，无需重启应用
+
 ✅ **💾 持久化上下文**: 重启后自动恢复历史对话
+
 ✅ **🛡️ 安全可靠**: 会话隔离和权限管理
 
 ---
@@ -112,7 +125,7 @@ cd NagaAgent
 cp config.json.example config.json
 
 # 配置 API 密钥
-nano config.json
+vi config.json
 ```
 </details>
 
@@ -164,12 +177,12 @@ cd NagaAgent
 cp config.json.example config.json
 
 # 4. 使用 uv 创建虚拟环境并安装依赖
-uv venv
-uv pip install -r requirements.txt
+uv sync
 
 # 5. 激活虚拟环境（可选，uv 会自动处理）
 source .venv/bin/activate  # Linux/macOS
 .venv\Scripts\activate   # Windows
+# 也可以使用uv run main.py直接启动
 
 # 6. 配置 API 密钥
 # 编辑 config.json 文件，填入你的 API 密钥
@@ -197,6 +210,7 @@ docker run -d \
 ```bash
 --publish=8474:7474 --publish=8687:7687
 ```
+并相应修改config.json中的配置
 </details>
 
 <details>
@@ -228,10 +242,7 @@ docker run -d \
 
 <details>
 <summary><strong>Windows 启动方式</strong></summary>
-
-```powershell
-.\start_with_tray.bat
-```
+打开start_with_tray.bat
 </details>
 
 <details>
@@ -321,8 +332,7 @@ NagaAgent 使用 `nagaagent-core` 核心包整合了主要依赖：
 pip install -r requirements.txt
 
 # 或使用 uv（更快）
-pip install uv
-uv pip install -r requirements.txt
+uv sync
 ```
 
 ### 🔍 系统环境检测
@@ -793,7 +803,7 @@ A: 修改 `config.json`：
 
 感谢以下开源项目和贡献者：
 
-- [OpenAI](https://openai.com/) - 强大的 AI 模型
+- [OpenAI](https://openai.com/) - 强大的 AI 模型以及库支持
 - [Neo4j](https://neo4j.com/) - 图数据库
 - [PyQt5](https://riverbankcomputing.com/software/pyqt/) - GUI 框架
 - [FastAPI](https://fastapi.tiangolo.com/) - 现代 Web 框架
@@ -805,8 +815,6 @@ A: 修改 `config.json`：
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
----
 
 <div align="center">⭐ 如果这个项目对您有帮助，请考虑给我们一个 Star！
 </div>
