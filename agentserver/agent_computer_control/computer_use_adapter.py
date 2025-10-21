@@ -67,9 +67,6 @@ class ComputerUseAdapter:
                 self.scale_x = self.screen_width / max(1, self.scaled_width)
                 self.scale_y = self.screen_height / max(1, self.scaled_height)
                 
-                logger.info(f"缩放后尺寸: {self.scaled_width}x{self.scaled_height}")
-                logger.info(f"缩放因子: x={self.scale_x:.2f}, y={self.scale_y:.2f}")
-                
             except Exception as e:
                 logger.warning(f"获取屏幕尺寸失败: {e}")
                 # 使用默认值

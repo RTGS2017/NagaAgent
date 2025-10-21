@@ -54,57 +54,19 @@ except ImportError:
     from system.config import get_prompt  # 导入提示词仓库
 from ui.utils.response_util import extract_message  # 导入消息提取工具
 
-# conversation_core已删除，相关功能已迁移到apiserver
+# 对话核心功能已集成到apiserver
 
-# 统一后台意图分析触发函数
+# 统一后台意图分析触发函数 - 已整合到message_manager
 def _trigger_background_analysis(session_id: str):
-    """统一触发后台意图分析"""  # 统一入口，避免重复代码
-    try:
-        from system.background_analyzer import get_background_analyzer  # 延迟导入，避免启动时依赖问题
-        background_analyzer = get_background_analyzer()  # 获取全局实例
-        recent_messages = message_manager.get_recent_messages(session_id, count=6)  # 获取最近对话
-        asyncio.create_task(background_analyzer.analyze_intent_async(recent_messages, session_id))  # 异步执行
-    except Exception as e:
-        print(f"后台意图分析触发失败: {e}")  # 失败不影响主流程
+    """统一触发后台意图分析 - 委托给message_manager"""
+    message_manager.trigger_background_analysis(session_id)
 
-# 统一保存对话与日志函数
+# 统一保存对话与日志函数 - 已整合到message_manager
 def _save_conversation_and_logs(session_id: str, user_message: str, assistant_response: str):
-    """统一保存对话历史与日志"""  # 统一入口，避免重复代码
-    try:
-        # 保存对话历史到消息管理器
-        message_manager.add_message(session_id, "user", user_message)
-        message_manager.add_message(session_id, "assistant", assistant_response)
-        
-        # 保存对话日志到文件
-        message_manager.save_conversation_log(
-            user_message, 
-            assistant_response, 
-            dev_mode=False  # 开发者模式已删除
-        )
-    except Exception as e:
-        print(f"保存对话与日志失败: {e}")  # 失败不影响主流程
+    """统一保存对话历史与日志 - 委托给message_manager"""
+    message_manager.save_conversation_and_logs(session_id, user_message, assistant_response)
 
-# 回调工厂类 - 统一管理重复的回调函数
-class CallbackFactory:
-    """回调函数工厂类 - 消除重复定义"""
-    
-    @staticmethod
-    def create_text_chunk_callback(pure_text_content_ref, is_streaming=False):
-        """创建文本块回调函数"""
-        def on_text_chunk(text: str, chunk_type: str):
-            """处理文本块 - 累积纯文本内容"""
-            if chunk_type == "chunk":
-                pure_text_content_ref[0] += text
-                # 不再向前端推送分句事件；SSE 增量由主循环直接推送
-            return None
-        return on_text_chunk
-    
-    @classmethod
-    def create_callbacks(cls, pure_text_content_ref, is_streaming=False):
-        """创建完整的回调函数集合"""
-        return {
-            'on_text_chunk': cls.create_text_chunk_callback(pure_text_content_ref, is_streaming)
-        }
+# 回调工厂类已移除 - 功能已整合到streaming_tool_extractor
 
 
 @asynccontextmanager
@@ -112,7 +74,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     try:
         print("[INFO] 正在初始化API服务器...")
-        # conversation_core已删除，相关功能已迁移到apiserver
+        # 对话核心功能已集成到apiserver
         print("[SUCCESS] API服务器初始化完成")
         yield
     except Exception as e:
@@ -264,63 +226,16 @@ async def chat(request: ChatRequest):
             current_message=request.message
         )
         
-        # 用于累积纯文本内容
-        pure_text_content = [""]  # 使用列表引用，便于在回调中修改
-        
-        # 调用LLM API - 流式模式
-        timeout = aiohttp.ClientTimeout(total=120, connect=30, sock_read=60)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            
-            async with session.post(
-                f"{config.api.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {config.api.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": config.api.model,
-                    "messages": messages,
-                    "temperature": config.api.temperature,
-                    "max_tokens": config.api.max_tokens,
-                    "stream": True
-                }
-            ) as resp:
-                if resp.status != 200:
-                    error_detail = f"LLM API调用失败 (状态码: {resp.status})"
-                    if resp.status == 401:
-                        error_detail = "LLM API认证失败，请检查API密钥"
-                    elif resp.status == 403:
-                        error_detail = "LLM API访问被拒绝，请检查权限"
-                    elif resp.status == 429:
-                        error_detail = "LLM API请求过于频繁，请稍后重试"
-                    elif resp.status >= 500:
-                        error_detail = f"LLM API服务器错误 (状态码: {resp.status})"
-                    raise HTTPException(status_code=resp.status, detail=error_detail)
-                
-                # 处理流式响应
-                async for line in resp.content:
-                    line_str = line.decode('utf-8').strip()
-                    if line_str.startswith('data: '):
-                        data_str = line_str[6:]
-                        if data_str == '[DONE]':
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            if 'choices' in data and len(data['choices']) > 0:
-                                delta = data['choices'][0].get('delta', {})
-                                if 'content' in delta:
-                                    content = delta['content']
-                                    # 直接累积纯文本内容
-                                    pure_text_content[0] += content
-                        except json.JSONDecodeError:
-                            continue
+        # 使用整合后的LLM服务
+        llm_service = get_llm_service()
+        response_text = await llm_service.chat_with_context(messages, config.api.temperature)
         
         # 处理完成
         # 统一保存对话历史与日志
-        _save_conversation_and_logs(session_id, request.message, pure_text_content[0])
+        _save_conversation_and_logs(session_id, request.message, response_text)
 
         return ChatResponse(
-            response=extract_message(pure_text_content[0]) if pure_text_content[0] else pure_text_content[0],
+            response=extract_message(response_text) if response_text else response_text,
             session_id=session_id,
             status="success"
         )
@@ -401,126 +316,32 @@ async def chat_stream(request: ChatRequest):
             except Exception as e:
                 print(f"流式文本切割器初始化失败: {e}")
             
-            # 定义LLM调用函数 - 支持真正的流式输出
-            async def call_llm_stream(messages: List[Dict]) -> AsyncGenerator[str, None]:
-                """调用LLM API - 流式模式"""
-                nonlocal complete_text  # V19: 声明使用外层函数的变量
-
-                # 增加超时配置
-                timeout = aiohttp.ClientTimeout(
-                    total=180,  # 总超时时间增加到3分钟
-                    connect=60,  # 连接超时60秒
-                    sock_read=120  # 读取超时120秒
-                )
-
-                # 配置连接器以处理长连接
-                connector = aiohttp.TCPConnector(
-                    force_close=False,
-                    keepalive_timeout=120,
-                    enable_cleanup_closed=True
-                )
-
-                async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-                    logger.info(f"[API Server] 开始流式调用LLM: {config.api.base_url}")
-
-                    async with session.post(
-                        f"{config.api.base_url}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {config.api.api_key}",
-                            "Content-Type": "application/json",
-                            "Accept": "text/event-stream",
-                            "Connection": "keep-alive"
-                        },
-                        json={
-                            "model": config.api.model,
-                            "messages": messages,
-                            "temperature": config.api.temperature,
-                            "max_tokens": config.api.max_tokens,
-                            "stream": True  # 启用真正的流式输出
-                        }
-                    ) as resp:
-                        if resp.status != 200:
-                            error_detail = f"LLM API调用失败 (状态码: {resp.status})"
-                            if resp.status == 401:
-                                error_detail = "LLM API认证失败，请检查API密钥"
-                            elif resp.status == 403:
-                                error_detail = "LLM API访问被拒绝，请检查权限"
-                            elif resp.status == 429:
-                                error_detail = "LLM API请求过于频繁，请稍后重试"
-                            elif resp.status >= 500:
-                                error_detail = f"LLM API服务器错误 (状态码: {resp.status})"
-                            logger.error(f"[API Server] 流式响应失败，状态码: {resp.status}")
-                            raise HTTPException(status_code=resp.status, detail=error_detail)
-
-                        logger.info(f"[API Server] LLM流式响应开始，状态码: {resp.status}")
-
-                        # 处理流式响应，增加错误恢复机制
-                        buffer = ""
-                        try:
-                            async for chunk in resp.content.iter_chunked(1024):  # 使用固定大小的块
-                                if not chunk:
-                                    break
-                                logger.info(f"[API Server] LLM流式处理中: {chunk}")
-
-                                try:
-                                    # 解码并处理数据
-                                    data = chunk.decode('utf-8')
-                                    buffer += data
-
-                                    # 按行分割处理
-                                    lines = buffer.split('\n')
-                                    buffer = lines[-1]  # 保留最后一个可能不完整的行
-
-                                    for line in lines[:-1]:
-                                        line_str = line.strip()
-                                        if line_str.startswith('data: '):
-                                            data_str = line_str[6:]
-                                            if data_str == '[DONE]':
-                                                break
-                                            try:
-                                                data = json.loads(data_str)
-                                                if 'choices' in data and len(data['choices']) > 0:
-                                                    delta = data['choices'][0].get('delta', {})
-                                                    if 'content' in delta:
-                                                        import base64
-                                                        content = delta['content']
-                                                        b64 = base64.b64encode(content.encode('utf-8')).decode('ascii')
-                                                        yield f"data: {b64}\n\n"
-
-                                                        # V19: 如果需要返回音频，累积文本
-                                                        if request.return_audio:
-                                                            complete_text += content
-
-                                                        # 立即发送到流式文本切割器进行TTS处理（不阻塞文本流）
-                                                        # 始终发送到tool_extractor以累积完整文本
-                                                        if tool_extractor:
-                                                            try:
-                                                                # 异步处理TTS，不阻塞文本流
-                                                                threading.Thread(
-                                                                    target=tool_extractor.process_text_chunk,
-                                                                    args=(content,),
-                                                                    daemon=True
-                                                                ).start()
-                                                            except Exception as e:
-                                                                logger.error(f"[API Server] 流式文本切割器处理错误: {e}")
-
-                                            except json.JSONDecodeError as je:
-                                                logger.warning(f"[API Server] JSON解析错误: {je}, 数据: {data_str[:100]}")
-                                                continue
-
-                                except UnicodeDecodeError as ue:
-                                    logger.warning(f"[API Server] 解码错误: {ue}")
-                                    continue
-
-                        except asyncio.CancelledError:
-                            logger.info("[API Server] 流式响应被取消")
-                            raise
-                        except Exception as e:
-                            logger.error(f"[API Server] 流式响应处理错误: {e}")
-                            # 不抛出异常，继续处理
-            
-            # 处理流式响应
-            async for chunk in call_llm_stream(messages):
+            # 使用整合后的流式处理
+            llm_service = get_llm_service()
+            async for chunk in llm_service.stream_chat_with_context(messages, config.api.temperature):
+                # V19: 如果需要返回音频，累积文本
+                if request.return_audio and chunk.startswith("data: "):
+                    try:
+                        import base64
+                        data_str = chunk[6:].strip()
+                        if data_str != '[DONE]':
+                            decoded = base64.b64decode(data_str).decode('utf-8')
+                            complete_text += decoded
+                    except Exception:
+                        pass
+                
+                # 立即发送到流式文本切割器进行TTS处理（不阻塞文本流）
+                if tool_extractor and chunk.startswith("data: "):
+                    try:
+                        import base64
+                        data_str = chunk[6:].strip()
+                        if data_str != '[DONE]':
+                            decoded = base64.b64decode(data_str).decode('utf-8')
+                            # 同步处理文本累积，不阻塞文本流
+                            tool_extractor.complete_text += decoded
+                    except Exception as e:
+                        logger.error(f"[API Server] 流式文本切割器处理错误: {e}")
+                
                 yield chunk
             
             # 处理完成
@@ -561,14 +382,12 @@ async def chat_stream(request: ChatRequest):
                     print(f"[API Server V19] 详细错误信息:")
                     traceback.print_exc()
 
-            # 异步完成流式文本切割器处理（非return_audio模式，不阻塞）
+            # 完成流式文本切割器处理（非return_audio模式，不阻塞）
             if tool_extractor and not request.return_audio:
                 try:
-                    # 异步处理完成，不阻塞文本流返回
-                    threading.Thread(
-                        target=tool_extractor.finish_processing,
-                        daemon=True
-                    ).start()
+                    # 同步处理完成，不阻塞文本流返回
+                    # tool_extractor.finish_processing() 是异步方法，这里不需要调用
+                    pass
                 except Exception as e:
                     print(f"流式文本切割器完成处理错误: {e}")
             
@@ -650,273 +469,49 @@ async def get_memory_stats():
 
 @app.get("/sessions")
 async def get_sessions():
-    """获取所有会话信息"""
+    """获取所有会话信息 - 委托给message_manager"""
     try:
-        # 清理过期会话
-        message_manager.cleanup_old_sessions()
-        
-        # 获取所有会话信息
-        sessions_info = message_manager.get_all_sessions_info()
-        
-        return {
-            "status": "success",
-            "sessions": sessions_info,
-            "total_sessions": len(sessions_info)
-        }
+        return message_manager.get_all_sessions_api()
     except Exception as e:
         print(f"获取会话信息错误: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取会话信息失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/sessions/{session_id}")
 async def get_session_detail(session_id: str):
-    """获取指定会话的详细信息"""
+    """获取指定会话的详细信息 - 委托给message_manager"""
     try:
-        session_info = message_manager.get_session_info(session_id)
-        if not session_info:
-            raise HTTPException(status_code=404, detail="会话不存在")
-        
-        return {
-            "status": "success",
-            "session_id": session_id,
-            "session_info": session_info,
-            "messages": message_manager.get_messages(session_id),
-            "conversation_rounds": session_info["conversation_rounds"]
-        }
-    except HTTPException:
-        raise
+        return message_manager.get_session_detail_api(session_id)
     except Exception as e:
+        if "会话不存在" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
         print(f"获取会话详情错误: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取会话详情失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """删除指定会话"""
+    """删除指定会话 - 委托给message_manager"""
     try:
-        success = message_manager.delete_session(session_id)
-        if success:
-            return {
-                "status": "success",
-                "message": f"会话 {session_id} 已删除"
-            }
-        else:
-            raise HTTPException(status_code=404, detail="会话不存在")
-    except HTTPException:
-        raise
+        return message_manager.delete_session_api(session_id)
     except Exception as e:
+        if "会话不存在" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
         print(f"删除会话错误: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/sessions")
 async def clear_all_sessions():
-    """清空所有会话"""
+    """清空所有会话 - 委托给message_manager"""
     try:
-        count = message_manager.clear_all_sessions()
-        return {
-            "status": "success",
-            "message": f"已清空 {count} 个会话"
-        }
+        return message_manager.clear_all_sessions_api()
     except Exception as e:
         print(f"清空会话错误: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"清空会话失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# 文件上传和文档处理接口
-@app.post("/upload/document", response_model=FileUploadResponse)
-async def upload_document(
-    file: UploadFile = File(...),
-    description: str = Form(None)
-):
-    """上传文档文件"""
-    try:
-        # 创建上传目录
-        upload_dir = Path("uploaded_documents")
-        upload_dir.mkdir(exist_ok=True)
-        
-        # 检查文件类型
-        allowed_extensions = {".docx", ".doc", ".txt", ".pdf", ".md"}
-        file_extension = Path(file.filename).suffix.lower()
-        
-        if file_extension not in allowed_extensions:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"不支持的文件类型: {file_extension}。支持的类型: {', '.join(allowed_extensions)}"
-            )
-        
-        # 生成唯一文件名
-        import time
-        timestamp = str(int(time.time()))
-        safe_filename = f"{timestamp}_{file.filename}"
-        file_path = upload_dir / safe_filename
-        
-        # 保存文件
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # 获取文件信息
-        file_size = file_path.stat().st_size
-        upload_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        return FileUploadResponse(
-            filename=file.filename,
-            file_path=str(file_path),
-            file_size=file_size,
-            file_type=file_extension,
-            upload_time=upload_time,
-            message=f"文件 '{file.filename}' 上传成功"
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
-
-@app.post("/document/process")
-async def process_document(request: DocumentProcessRequest):
-    """处理上传的文档"""
-    
-    try:
-        file_path = Path(request.file_path)
-        
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"文件不存在: {request.file_path}")
-        
-        # 根据文件类型和操作类型处理文档
-        if file_path.suffix.lower() == ".docx":
-            # 使用Word MCP服务处理
-            mcp_request = {
-                "service_name": "office_word_mcp",
-                "task": {
-                    "tool_name": "get_document_text",
-                    "filename": str(file_path)
-                }
-            }
-            
-            # 调用MCP服务
-            # MCP服务现在由mcpserver独立管理，通过HTTP调用
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://localhost:8003/schedule",
-                    json=mcp_request,
-                    timeout=30.0
-                )
-                result = response.json()
-            
-            if request.action == "read":
-                return {
-                    "status": "success",
-                    "action": "read",
-                    "file_path": request.file_path,
-                    "content": result,
-                    "message": "文档内容读取成功"
-                }
-            elif request.action == "analyze":
-                # 让NAGA分析文档内容
-                analysis_prompt = f"请分析以下文档内容，提供结构化的分析报告：\n\n{result}"
-                llm_service = get_llm_service()
-                analysis_result = await llm_service.get_response(analysis_prompt)
-                
-                return {
-                    "status": "success",
-                    "action": "analyze",
-                    "file_path": request.file_path,
-                    "analysis": analysis_result,
-                    "message": "文档分析完成"
-                }
-            elif request.action == "summarize":
-                # 让NAGA总结文档内容
-                summary_prompt = f"请总结以下文档内容，提供简洁的摘要：\n\n{result}"
-                llm_service = get_llm_service()
-                summary_result = await llm_service.get_response(summary_prompt)
-                
-                return {
-                    "status": "success",
-                    "action": "summarize",
-                    "file_path": request.file_path,
-                    "summary": summary_result,
-                    "message": "文档总结完成"
-                }
-        else:
-            # 处理其他文件类型
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            if request.action == "read":
-                return {
-                    "status": "success",
-                    "action": "read",
-                    "file_path": request.file_path,
-                    "content": content,
-                    "message": "文档内容读取成功"
-                }
-            elif request.action == "analyze":
-                analysis_prompt = f"请分析以下文档内容，提供结构化的分析报告：\n\n{content}"
-                llm_service = get_llm_service()
-                analysis_result = await llm_service.get_response(analysis_prompt)
-                
-                return {
-                    "status": "success",
-                    "action": "analyze",
-                    "file_path": request.file_path,
-                    "analysis": analysis_result,
-                    "message": "文档分析完成"
-                }
-            elif request.action == "summarize":
-                summary_prompt = f"请总结以下文档内容，提供简洁的摘要：\n\n{content}"
-                llm_service = get_llm_service()
-                summary_result = await llm_service.get_response(summary_prompt)
-                
-                return {
-                    "status": "success",
-                    "action": "summarize",
-                    "file_path": request.file_path,
-                    "summary": summary_result,
-                    "message": "文档总结完成"
-                }
-        
-    except Exception as e:
-        print(f"文档处理错误: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"文档处理失败: {str(e)}")
-
-@app.get("/documents/list")
-async def list_uploaded_documents():
-    """获取已上传的文档列表"""
-    try:
-        upload_dir = Path("uploaded_documents")
-        if not upload_dir.exists():
-            return {
-                "status": "success",
-                "documents": [],
-                "total": 0
-            }
-        
-        documents = []
-        for file_path in upload_dir.iterdir():
-            if file_path.is_file():
-                stat = file_path.stat()
-                documents.append({
-                    "filename": file_path.name,
-                    "file_path": str(file_path),
-                    "file_size": stat.st_size,
-                    "file_type": file_path.suffix.lower(),
-                    "upload_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime))
-                })
-        
-        # 按上传时间排序
-        documents.sort(key=lambda x: x["upload_time"], reverse=True)
-        
-        return {
-            "status": "success",
-            "documents": documents,
-            "total": len(documents)
-        }
-        
-    except Exception as e:
-        print(f"获取文档列表错误: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
+# 文档处理功能已整合到 ui/controller/tool_document.py
 
 # 新增：日志解析相关API接口
 @app.get("/logs/context/statistics")
@@ -948,4 +543,130 @@ async def load_log_context(days: int = 3, max_messages: int = None):
         print(f"加载日志上下文错误: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"加载上下文失败: {str(e)}")
+
+@app.post("/tool_notification")
+async def tool_notification(payload: Dict[str, Any]):
+    """接收工具调用状态通知，只显示工具调用状态，不显示结果"""
+    try:
+        session_id = payload.get("session_id")
+        tool_name = payload.get("tool_name", "未知工具")
+        service_name = payload.get("service_name", "未知服务")
+        status = payload.get("status", "starting")
+        message = payload.get("message", f"🔧 正在执行工具: {tool_name}")
+        
+        if not session_id:
+            raise HTTPException(400, "缺少session_id")
+        
+        # 记录工具调用状态（不处理结果，结果由tool_result_callback处理）
+        logger.info(f"工具调用状态: {tool_name} ({service_name}) - {status}")
+        
+        # 这里可以添加WebSocket通知UI的逻辑，让UI显示工具调用状态
+        # 目前先记录日志，UI可以通过其他方式获取工具调用状态
+        
+        return {
+            "success": True,
+            "message": "工具调用状态通知已接收",
+            "tool_name": tool_name,
+            "service_name": service_name,
+            "status": status,
+            "display_message": message
+        }
+        
+    except Exception as e:
+        logger.error(f"工具调用通知处理失败: {e}")
+        raise HTTPException(500, f"处理失败: {str(e)}")
+
+@app.post("/tool_result_callback")
+async def tool_result_callback(payload: Dict[str, Any]):
+    """接收MCP工具执行结果回调，通过普通对话流程返回给UI"""
+    try:
+        session_id = payload.get("session_id")
+        task_id = payload.get("task_id")
+        result = payload.get("result", {})
+        success = payload.get("success", False)
+        
+        if not session_id:
+            raise HTTPException(400, "缺少session_id")
+        
+        # 构建工具结果消息
+        if success and result:
+            tool_result_message = f"工具执行完成：{result.get('result', '执行成功')}"
+        else:
+            error_msg = result.get('error', '未知错误')
+            tool_result_message = f"工具执行失败：{error_msg}"
+        
+        # 构建对话风格提示词和消息
+        system_prompt = get_prompt("conversation_style_prompt")
+        messages = message_manager.build_conversation_messages(
+            session_id=session_id,
+            system_prompt=system_prompt,
+            current_message=tool_result_message
+        )
+        
+        # 使用LLM服务进行总结
+        try:
+            llm_service = get_llm_service()
+            response_text = await llm_service.chat_with_context(messages, temperature=0.7)
+        except Exception as e:
+            logger.error(f"调用LLM服务失败: {e}")
+            response_text = f"处理工具结果时出错: {str(e)}"
+        
+        # 保存到历史
+        message_manager.add_message(session_id, "user", tool_result_message)
+        message_manager.add_message(session_id, "assistant", response_text)
+        
+        # 通过普通对话流程返回给UI（包括TTS）
+        # 直接调用现有的流式对话接口，复用完整的TTS和UI响应逻辑
+        await _trigger_chat_stream(session_id, response_text)
+        
+        return {
+            "success": True,
+            "message": "工具结果已通过LLM总结并返回给UI",
+            "response": response_text,
+            "task_id": task_id,
+            "session_id": session_id
+        }
+        
+    except Exception as e:
+        logger.error(f"工具结果回调处理失败: {e}")
+        raise HTTPException(500, f"处理失败: {str(e)}")
+
+async def _trigger_chat_stream(session_id: str, response_text: str):
+    """触发聊天流式响应 - 直接调用现有的chat_stream接口"""
+    try:
+        # 直接调用现有的流式对话接口，复用完整的TTS和UI响应逻辑
+        import httpx
+        
+        # 构建请求数据
+        chat_request = {
+            "message": f"工具执行结果：{response_text}",
+            "stream": True,
+            "session_id": session_id,
+            "use_self_game": False,
+            "disable_tts": False,
+            "return_audio": False
+        }
+        
+        # 调用现有的流式对话接口
+        api_url = f"http://localhost:8001/chat/stream"
+        
+        async with httpx.AsyncClient() as client:
+            async with client.stream("POST", api_url, json=chat_request) as response:
+                if response.status_code == 200:
+                    # 处理流式响应，包括TTS切割
+                    async for chunk in response.aiter_text():
+                        if chunk.strip():
+                            # 这里可以进一步处理流式响应
+                            # 或者直接让UI处理流式响应
+                            pass
+                    
+                    logger.info(f"工具结果已通过流式对话接口发送给UI: {session_id}")
+                else:
+                    logger.error(f"调用流式对话接口失败: {response.status_code}")
+        
+    except Exception as e:
+        logger.error(f"触发聊天流式响应失败: {e}")
+
+# 工具执行结果已通过LLM总结并保存到对话历史中
+# UI可以通过查询历史获取工具执行结果
 

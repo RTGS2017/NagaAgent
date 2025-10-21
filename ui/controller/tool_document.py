@@ -6,6 +6,8 @@ from pathlib import Path
 from system.config import config, AI_NAME, logger
 import os
 import requests
+import time
+import shutil
 from . import chat
 
 
@@ -150,7 +152,7 @@ class DocumentTool():
         dialog.exec_()
     
     def process_document(self, file_path, action, dialog=None):
-        """处理文档"""
+        """处理文档 - 整合文档处理逻辑"""
         if dialog:
             dialog.close()
         
@@ -159,37 +161,182 @@ class DocumentTool():
             self.progress_widget.set_thinking_mode()
             self.progress_widget.status_label.setText("处理文档中...")
             
-            # 调用API处理文档
-            # 使用配置中的API服务器地址和端口
-            api_url = f"http://{config.api_server.host}:{config.api_server.port}/document/process"
-            data = {
-                "file_path": file_path,
-                "action": action
-            }
+            # 直接处理文档，不通过API
+            result = self._process_document_locally(file_path, action)
             
-            response = requests.post(api_url, json=data, timeout=60)
-            
-            if response.status_code == 200:
-                result = response.json()
-                self.progress_widget.stop_loading()
-                
-                
-                if action == "read":
-                    chat.add_user_message(AI_NAME, f"📖 文档内容:\n\n{result['content']}")
-                elif action == "analyze":
-                    chat.add_user_message(AI_NAME, f"🔍 文档分析:\n\n{result['analysis']}")
-                elif action == "summarize":
-                    chat.add_user_message(AI_NAME, f"📝 文档摘要:\n\n{result['summary']}")
-            else:
-                self.progress_widget.stop_loading()
-                chat.add_user_message("系统", f"❌ 文档处理失败: {response.text}")
-                
-        except requests.exceptions.ConnectionError:
             self.progress_widget.stop_loading()
-            chat.add_user_message("系统", "❌ 无法连接到API服务器，请确保服务器正在运行")
+            
+            if action == "read":
+                chat.add_user_message(AI_NAME, f"📖 文档内容:\n\n{result['content']}")
+            elif action == "analyze":
+                chat.add_user_message(AI_NAME, f"🔍 文档分析:\n\n{result['analysis']}")
+            elif action == "summarize":
+                chat.add_user_message(AI_NAME, f"📝 文档摘要:\n\n{result['summary']}")
+                
         except Exception as e:
             self.progress_widget.stop_loading()
             chat.add_user_message("系统", f"❌ 文档处理失败: {str(e)}")
+    
+    def _process_document_locally(self, file_path, action):
+        """本地处理文档 - 整合apiserver中的文档处理逻辑"""
+        try:
+            file_path = Path(file_path)
+            
+            if not file_path.exists():
+                raise Exception(f"文件不存在: {file_path}")
+            
+            # 根据文件类型和操作类型处理文档
+            if file_path.suffix.lower() == ".docx":
+                # 使用Word MCP服务处理
+                result = self._process_word_document(file_path, action)
+            else:
+                # 处理其他文件类型
+                result = self._process_text_document(file_path, action)
+            
+            return result
+            
+        except Exception as e:
+            raise Exception(f"文档处理失败: {str(e)}")
+    
+    def _process_word_document(self, file_path, action):
+        """处理Word文档"""
+        try:
+            # 调用MCP服务处理Word文档
+            mcp_request = {
+                "query": f"处理Word文档: {file_path.name}",
+                "tool_calls": [{
+                    "service_name": "office_word_mcp",
+                    "tool_name": "get_document_text",
+                    "params": {"filename": str(file_path)},
+                    "agentType": "mcp"
+                }],
+                "session_id": "document_processing",
+                "callback_url": None  # 同步处理
+            }
+            
+            # 调用MCP服务
+            import httpx
+            with httpx.Client() as client:
+                response = client.post(
+                    "http://localhost:8003/schedule",
+                    json=mcp_request,
+                    timeout=30.0
+                )
+                mcp_result = response.json()
+            
+            content = mcp_result.get("result", {}).get("result", "无法读取文档内容")
+            
+            if action == "read":
+                return {"content": content}
+            elif action == "analyze":
+                # 让NAGA分析文档内容
+                analysis_result = self._analyze_content_with_llm(content)
+                return {"analysis": analysis_result}
+            elif action == "summarize":
+                # 让NAGA总结文档内容
+                summary_result = self._summarize_content_with_llm(content)
+                return {"summary": summary_result}
+                
+        except Exception as e:
+            raise Exception(f"Word文档处理失败: {str(e)}")
+    
+    def _process_text_document(self, file_path, action):
+        """处理文本文档"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            if action == "read":
+                return {"content": content}
+            elif action == "analyze":
+                # 让NAGA分析文档内容
+                analysis_result = self._analyze_content_with_llm(content)
+                return {"analysis": analysis_result}
+            elif action == "summarize":
+                # 让NAGA总结文档内容
+                summary_result = self._summarize_content_with_llm(content)
+                return {"summary": summary_result}
+                
+        except Exception as e:
+            raise Exception(f"文本文档处理失败: {str(e)}")
+    
+    def _analyze_content_with_llm(self, content):
+        """使用LLM分析内容"""
+        try:
+            # 调用LLM服务分析内容
+            api_url = f"http://{config.api_server.host}:{config.api_server.port}/llm/chat"
+            data = {
+                "prompt": f"请分析以下文档内容，提供结构化的分析报告：\n\n{content}",
+                "temperature": 0.7
+            }
+            
+            response = requests.post(api_url, json=data, timeout=60)
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "分析失败")
+            else:
+                return "LLM分析服务不可用"
+                
+        except Exception as e:
+            return f"分析失败: {str(e)}"
+    
+    def _summarize_content_with_llm(self, content):
+        """使用LLM总结内容"""
+        try:
+            # 调用LLM服务总结内容
+            api_url = f"http://{config.api_server.host}:{config.api_server.port}/llm/chat"
+            data = {
+                "prompt": f"请总结以下文档内容，提供简洁的摘要：\n\n{content}",
+                "temperature": 0.7
+            }
+            
+            response = requests.post(api_url, json=data, timeout=60)
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "总结失败")
+            else:
+                return "LLM总结服务不可用"
+                
+        except Exception as e:
+            return f"总结失败: {str(e)}"
+    
+    def list_uploaded_documents(self):
+        """获取已上传的文档列表 - 整合apiserver中的文档列表功能"""
+        try:
+            upload_dir = Path("uploaded_documents")
+            if not upload_dir.exists():
+                return {
+                    "status": "success",
+                    "documents": [],
+                    "total": 0
+                }
+            
+            documents = []
+            for file_path in upload_dir.iterdir():
+                if file_path.is_file():
+                    stat = file_path.stat()
+                    documents.append({
+                        "filename": file_path.name,
+                        "file_path": str(file_path),
+                        "file_size": stat.st_size,
+                        "file_type": file_path.suffix.lower(),
+                        "upload_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime))
+                    })
+            
+            # 按上传时间排序
+            documents.sort(key=lambda x: x["upload_time"], reverse=True)
+            
+            return {
+                "status": "success",
+                "documents": documents,
+                "total": len(documents)
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"获取文档列表失败: {str(e)}"
+            }
     
 from ..utils.lazy import lazy
 @lazy

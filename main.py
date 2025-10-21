@@ -77,8 +77,6 @@ class ServiceManager:
     
     def start_background_services(self):
         """启动后台服务 - 异步非阻塞"""
-        logger.info("正在启动后台服务...")
-        
         # 启动后台任务管理器
         self.bg_thread = threading.Thread(target=self._run_event_loop, daemon=True)
         self.bg_thread.start()
@@ -97,8 +95,8 @@ class ServiceManager:
         """初始化后台服务 - 优化启动流程"""
         logger.info("正在启动后台服务...")
         try:
-            # 启动任务管理器
-            await start_task_manager()
+            # 任务管理器由memory_manager自动启动，无需手动启动
+            # await start_task_manager()
             
             # 标记服务就绪
             self._services_ready = True
@@ -414,41 +412,6 @@ class ServiceManager:
         except Exception as e:
             print(f"❌ 物联网通讯连接启动失败: {e}")
     
-    def _load_persistent_context(self):
-        """从日志文件加载历史对话上下文"""
-        if not config.api.context_parse_logs:
-            return
-            
-        try:
-            from apiserver.message_manager import message_manager
-            
-            # 计算最大消息数量
-            max_messages = config.api.max_history_rounds * 2
-            
-            # 加载历史对话
-            recent_messages = message_manager.load_recent_context(
-                days=config.api.context_load_days,
-                max_messages=max_messages
-            )
-            
-            if recent_messages:
-                logger.info(f"✅ 从日志文件加载了 {len(recent_messages)} 条历史对话")
-                
-                # 显示统计信息
-                try:
-                    from apiserver.message_manager import parser
-                    stats = parser.get_context_statistics(config.api.context_load_days)
-                    logger.info(f"📊 上下文统计: {stats['total_files']}个文件, {stats['total_messages']}条消息")
-                except ImportError:
-                    logger.info("📊 上下文统计: 日志解析器不可用")
-            else:
-                logger.info("📝 未找到历史对话记录，将开始新的对话")
-                
-        except ImportError:
-            logger.warning("⚠️ 日志解析器模块未找到，跳过持久化上下文加载")
-        except Exception as e:
-            logger.error(f"❌ 加载持久化上下文失败: {e}")
-            # 失败时不影响正常使用，继续使用空上下文
     
     def _init_voice_system(self):
         """初始化语音处理系统"""
@@ -550,7 +513,7 @@ def _lazy_init_services():
         service_manager._init_mcp_services()
         service_manager._init_voice_system()
         service_manager._init_memory_system()
-        service_manager._load_persistent_context()
+        # service_manager._load_persistent_context()  # 删除重复加载，UI渲染时会自动加载
         
         # 初始化进度文件
         with open('./ui/styles/progress.txt', 'w') as f:

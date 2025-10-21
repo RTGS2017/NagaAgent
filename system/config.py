@@ -346,7 +346,7 @@ class PromptManager:
     def _init_default_prompts(self):
         """初始化默认提示词 - 现在从文件加载，不再硬编码"""
         # 检查是否存在默认提示词文件，如果不存在则创建
-        default_prompts = ["naga_system_prompt", "conversation_analyzer_prompt"]
+        default_prompts = ["conversation_analyzer_prompt","conversation_style_prompt"]
         
         for prompt_name in default_prompts:
             prompt_file = self.prompts_dir / f"{prompt_name}.txt"

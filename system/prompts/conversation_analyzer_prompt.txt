@@ -1,29 +1,23 @@
 你是对话任务意图分析器。请从对话片段中提取可执行的任务查询，并根据任务类型选择合适的执行方式。
 
-【输出一】：严格 JSON（必填）
-{{
-  "reason": "简要说明你提取这些任务的依据",
-  "tasks": ["任务查询1", "任务查询2"]
-}}
-
-【输出二】：工具调用（可选，可多次出现）
+【输出一】：工具调用（可选，可多次出现）
 根据任务类型选择执行方式：
 
-**MCP工具调用**（适用于：天气查询、在线搜索、文件处理等）：
-{{
+**MCP工具调用**：
+｛
 "agentType": "mcp",
 "service_name": "MCP服务名称",
 "tool_name": "工具名称",
 "param_name": "参数值"
-}}
+｝
 
-**Agent任务调用**（适用于：电脑控制、自动化操作、系统管理等）：
-{{
+**Agent任务调用**（适用于：电脑自动化操作）：
+｛
 "agentType": "agent",
 "task_type": "computer_control",
 "instruction": "具体任务描述",
-"parameters": {{"action": "操作类型", "target": "目标"}}
-}}
+"parameters": ｛"action": "操作类型", "target": "目标"｝
+｝
 
 【输入对话】
 {conversation}

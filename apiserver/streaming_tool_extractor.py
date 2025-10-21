@@ -11,7 +11,7 @@ import logging
 import asyncio
 import sys
 import os
-from typing import Callable, Optional, Dict, Any, Union
+from typing import Callable, Optional, Dict, Any, Union, List
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,7 +75,7 @@ class StreamingToolCallExtractor:
         # 语音集成（可选）
         self.voice_integration = None
         
-        # 工具调用相关已移除
+        # 工具调用功能已移除
         self.tool_calls_queue = None
         
     def set_callbacks(self, 
@@ -143,7 +143,7 @@ class StreamingToolCallExtractor:
             except Exception as e:
                 logger.error(f"发送到语音集成失败: {e}")
     
-    # 工具调用相关方法已移除
+    # 工具调用相关方法已移除，功能已迁移到background_analyzer
     
     def finish_processing(self):
         """完成处理，清理剩余内容"""
@@ -165,4 +165,31 @@ class StreamingToolCallExtractor:
         """重置提取器状态"""
         self.text_buffer = ""
         self.complete_text = ""
+    
+    async def process_streaming_response(self, llm_service, messages: List[Dict], 
+                                       temperature: float = 0.7, voice_integration=None):
+        """处理流式响应，整合LLM调用和TTS处理"""
+        if voice_integration:
+            self.voice_integration = voice_integration
+        
+        async for chunk in llm_service.stream_chat_with_context(messages, temperature):
+            if chunk.startswith("data: "):
+                # 解码base64内容
+                try:
+                    import base64
+                    data_str = chunk[6:].strip()
+                    if data_str == '[DONE]':
+                        break
+                    decoded = base64.b64decode(data_str).decode('utf-8')
+                    await self.process_text_chunk(decoded)
+                except Exception as e:
+                    logger.error(f"处理流式响应块失败: {e}")
+                    continue
+            else:
+                # 直接处理文本内容
+                await self.process_text_chunk(chunk)
+        
+        # 完成处理
+        await self.finish_processing()
+        return self.get_complete_text()
 

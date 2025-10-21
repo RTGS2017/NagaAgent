@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 from system.config import config, logger
 
-# 已移除独立的能力管理器，能力信息从注册中心获取或由上层管理
+# 能力信息从注册中心获取，由上层管理
 
 
 @dataclass
@@ -56,8 +56,6 @@ class MCPScheduler:
     
     async def _worker(self, worker_name: str):
         """工作线程"""
-        logger.info(f"MCP调度器工作线程 {worker_name} 启动")
-        
         while not self.shutdown_event.is_set():
             try:
                 # 等待任务或关闭信号
@@ -153,11 +151,11 @@ class MCPScheduler:
                 "completed_at": task.completed_at,
             }
             async with aiohttp.ClientSession() as session:
-                # 调用MCPServer内部的工具结果回调端点
+                # 直接调用外部回调URL（通常是apiserver的tool_result_callback）
                 callback_url = task.callback_url
                 if not callback_url.startswith('http'):
                     # 如果是相对路径，构建完整URL
-                    callback_url = f"http://localhost:8003/tool_result_callback"
+                    callback_url = f"http://localhost:8001/tool_result_callback"
                 
                 async with session.post(callback_url, json=payload) as response:
                     if response.status == 200:
@@ -172,7 +170,15 @@ class MCPScheduler:
         try:
             service_name = tool_call.get("service_name", "")
             tool_name = tool_call.get("tool_name", "")
-            args = {k: v for k, v in tool_call.items() if k not in ["agentType", "service_name", "tool_name"]}
+            
+            # 修正参数处理：保留所有非标准字段作为参数
+            args = {}
+            for key, value in tool_call.items():
+                if key not in ["agentType", "service_name", "tool_name"]:
+                    args[key] = value
+            
+            logger.info(f"执行工具调用: {service_name}.{tool_name} with args: {args}")
+            
             if self.mcp_manager and service_name and tool_name:
                 result = await self.mcp_manager.unified_call(service_name, tool_name, args)
                 return {

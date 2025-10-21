@@ -499,13 +499,13 @@ class Live2DSideWidget(QWidget):
                 self.expand_button.move(button_x, button_y)
                 self.expand_button.raise_()
 
-        # 首次显示时尝试初始化Live2D
-        if not hasattr(self, '_initialized'):
-            self._initialized = True
-            if self.live2d_enabled and LIVE2D_AVAILABLE:
-                # 延迟初始化Live2D，确保窗口完全显示
-                from nagaagent_core.vendors.PyQt5.QtCore import QTimer as QT
-                QT.singleShot(500, self.initialize_live2d)
+        # 首次显示时尝试初始化Live2D - 已删除重复初始化
+        # if not hasattr(self, '_initialized'):
+        #     self._initialized = True
+        #     if self.live2d_enabled and LIVE2D_AVAILABLE:
+        #         # 延迟初始化Live2D，确保窗口完全显示
+        #         from nagaagent_core.vendors.PyQt5.QtCore import QTimer as QT
+        #         QT.singleShot(500, self.initialize_live2d)
     
     def _delayed_resize(self):
         """延迟执行的大小调整"""

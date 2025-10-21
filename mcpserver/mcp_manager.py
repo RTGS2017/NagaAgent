@@ -349,7 +349,7 @@ class MCPManager:
             return None
 
     async def unified_call(self, service_name: str, tool_name: str, args: dict):
-        """统一调用接口，支持MCP服务和Agent服务
+        """简化的统一调用接口 - 只支持MCP服务
         
         Args:
             service_name: 服务名称
@@ -360,29 +360,35 @@ class MCPManager:
             调用结果
         """
         try:
-            # 首先尝试作为handoff服务调用
-            if service_name in self.services:
-                return await self.handoff(service_name, args)
-            
-            # 然后尝试作为MCP服务调用
+            # 只支持MCP服务调用（通过MCP_REGISTRY）
             if service_name in MCP_REGISTRY:
                 agent = MCP_REGISTRY[service_name]
-                if hasattr(agent, 'handle_handoff'):
-                    return await agent.handle_handoff(args)
-                elif hasattr(agent, tool_name):
+                if hasattr(agent, tool_name):
                     method = getattr(agent, tool_name)
                     if callable(method):
                         # 过滤掉元数据字段，只保留实际参数
                         filtered_args = {k: v for k, v in args.items() 
                                        if k not in ['tool_name', 'service_name', 'agentType']}
-                        return await method(**filtered_args) if asyncio.iscoroutinefunction(method) else method(**filtered_args)
-            
-            # 最后尝试作为传统MCP服务调用
-            return await self.call_service_tool(service_name, tool_name, args)
+                        
+                        logger.info(f"MCP调用: {service_name}.{tool_name} with filtered_args: {filtered_args}")
+                        
+                        # 调用方法
+                        if asyncio.iscoroutinefunction(method):
+                            result = await method(**filtered_args)
+                        else:
+                            result = method(**filtered_args)
+                        
+                        logger.info(f"MCP调用结果: {result}")
+                        return result
+                else:
+                    logger.error(f"MCP服务 {service_name} 没有工具 {tool_name}")
+                    return f"工具 {tool_name} 不存在于服务 {service_name}"
+            else:
+                logger.error(f"MCP服务 {service_name} 未注册")
+                return f"服务 {service_name} 未注册"
             
         except Exception as e:
-            logger.error(f"统一调用失败 {service_name}.{tool_name}: {str(e)}")
-            import traceback;traceback.print_exc(file=sys.stderr)
+            logger.error(f"MCP调用失败 {service_name}.{tool_name}: {str(e)}")
             return f"调用失败: {str(e)}"
             
     def get_available_services(self) -> list:

@@ -7,7 +7,7 @@ LLM服务模块
 import logging
 import sys
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -78,6 +78,87 @@ class LLMService:
     def is_available(self) -> bool:
         """检查LLM服务是否可用"""
         return self.async_client is not None
+    
+    async def chat_with_context(self, messages: List[Dict], temperature: float = 0.7) -> str:
+        """带上下文的聊天调用"""
+        if not self.async_client:
+            self._initialize_client()
+            if not self.async_client:
+                return f"LLM服务不可用: 客户端初始化失败"
+        
+        try:
+            response = await self.async_client.chat.completions.create(
+                model=config.api.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=config.api.max_tokens
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"上下文聊天调用失败: {e}")
+            return f"聊天调用出错: {str(e)}"
+    
+    async def stream_chat_with_context(self, messages: List[Dict], temperature: float = 0.7):
+        """带上下文的流式聊天调用"""
+        if not self.async_client:
+            self._initialize_client()
+            if not self.async_client:
+                yield f"LLM服务不可用: 客户端初始化失败"
+                return
+        
+        try:
+            import aiohttp
+            timeout = aiohttp.ClientTimeout(total=180, connect=60, sock_read=120)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    f"{config.api.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {config.api.api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "text/event-stream",
+                        "Connection": "keep-alive"
+                    },
+                    json={
+                        "model": config.api.model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": config.api.max_tokens,
+                        "stream": True
+                    }
+                ) as resp:
+                    if resp.status != 200:
+                        yield f"LLM API调用失败 (状态码: {resp.status})"
+                        return
+                    
+                    async for chunk in resp.content.iter_chunked(1024):
+                        if not chunk:
+                            break
+                        try:
+                            data = chunk.decode('utf-8')
+                            lines = data.split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line.startswith('data: '):
+                                    data_str = line[6:]
+                                    if data_str == '[DONE]':
+                                        return
+                                    try:
+                                        import json
+                                        data = json.loads(data_str)
+                                        if 'choices' in data and len(data['choices']) > 0:
+                                            delta = data['choices'][0].get('delta', {})
+                                            if 'content' in delta:
+                                                import base64
+                                                content = delta['content']
+                                                b64 = base64.b64encode(content.encode('utf-8')).decode('ascii')
+                                                yield f"data: {b64}\n\n"
+                                    except json.JSONDecodeError:
+                                        continue
+                        except UnicodeDecodeError:
+                            continue
+        except Exception as e:
+            logger.error(f"流式聊天调用失败: {e}")
+            yield f"data: 流式调用出错: {str(e)}\n\n"
 
 # 全局LLM服务实例
 _llm_service: Optional[LLMService] = None

@@ -100,7 +100,6 @@ class MessageDialog(QFrame):
 
     def update_content(self, new_content):
         """更新对话内容"""
-        logger.info(f"更新对话内容：{new_content}")
         self.content = new_content
         self.content_label.setText(new_content)
         # 确保立即更新显示

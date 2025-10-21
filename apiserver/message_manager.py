@@ -72,11 +72,18 @@ class MessageManager:
         return str(uuid.uuid4())
     
     def create_session(self, session_id: Optional[str] = None) -> str:
-        """创建新会话"""
+        """获取或创建会话"""
         if not session_id:
             session_id = self.generate_session_id()
         
-        # 初始化会话
+        # 检查会话是否已存在
+        if session_id in self.sessions:
+            logger.debug(f"使用现有会话: {session_id}")
+            # 更新最后活动时间
+            self.sessions[session_id]["last_activity"] = asyncio.get_event_loop().time()
+            return session_id
+        
+        # 初始化新会话
         self.sessions[session_id] = {
             "created_at": asyncio.get_event_loop().time(),
             "messages": [],
@@ -539,6 +546,103 @@ class MessageManager:
             
         except Exception as e:
             logger.error(f"保存对话日志失败: {e}")
+    
+    def save_conversation_and_logs(self, session_id: str, user_message: str, assistant_response: str):
+        """统一保存对话历史与日志 - 整合重复逻辑"""
+        try:
+            # 保存对话历史到消息管理器
+            self.add_message(session_id, "user", user_message)
+            self.add_message(session_id, "assistant", assistant_response)
+            
+            # 保存对话日志到文件
+            self.save_conversation_log(
+                user_message, 
+                assistant_response, 
+                dev_mode=False  # 开发者模式已禁用
+            )
+        except Exception as e:
+            logger.error(f"保存对话与日志失败: {e}")
+    
+    def trigger_background_analysis(self, session_id: str):
+        """统一触发后台意图分析 - 整合重复逻辑"""
+        try:
+            import asyncio
+            from system.background_analyzer import get_background_analyzer
+            from system.config import config
+            background_analyzer = get_background_analyzer()
+            
+            # 根据配置获取意图分析轮数，默认3轮
+            intent_rounds = getattr(config.api, 'intent_analysis_rounds', 3)
+            max_messages = intent_rounds * 2  # 每轮包含用户和助手各一条消息
+            
+            recent_messages = self.get_recent_messages(session_id, count=max_messages)
+            logger.info(f"[博弈论] 分析最近 {intent_rounds} 轮对话，共 {len(recent_messages)} 条消息")
+            asyncio.create_task(background_analyzer.analyze_intent_async(recent_messages, session_id))
+        except Exception as e:
+            logger.error(f"后台意图分析触发失败: {e}")
+    
+    def get_all_sessions_api(self):
+        """获取所有会话信息 - API接口"""
+        try:
+            # 清理过期会话
+            self.cleanup_old_sessions()
+            
+            # 获取所有会话信息
+            sessions_info = self.get_all_sessions_info()
+            
+            return {
+                "status": "success",
+                "sessions": sessions_info,
+                "total_sessions": len(sessions_info)
+            }
+        except Exception as e:
+            logger.error(f"获取会话信息错误: {e}")
+            raise Exception(f"获取会话信息失败: {str(e)}")
+    
+    def get_session_detail_api(self, session_id: str):
+        """获取指定会话的详细信息 - API接口"""
+        try:
+            session_info = self.get_session_info(session_id)
+            if not session_info:
+                raise Exception("会话不存在")
+            
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "session_info": session_info,
+                "messages": self.get_messages(session_id),
+                "conversation_rounds": session_info["conversation_rounds"]
+            }
+        except Exception as e:
+            logger.error(f"获取会话详情错误: {e}")
+            raise Exception(f"获取会话详情失败: {str(e)}")
+    
+    def delete_session_api(self, session_id: str):
+        """删除指定会话 - API接口"""
+        try:
+            success = self.delete_session(session_id)
+            if success:
+                return {
+                    "status": "success",
+                    "message": f"会话 {session_id} 已删除"
+                }
+            else:
+                raise Exception("会话不存在")
+        except Exception as e:
+            logger.error(f"删除会话错误: {e}")
+            raise Exception(f"删除会话失败: {str(e)}")
+    
+    def clear_all_sessions_api(self):
+        """清空所有会话 - API接口"""
+        try:
+            count = self.clear_all_sessions()
+            return {
+                "status": "success",
+                "message": f"已清空 {count} 个会话"
+            }
+        except Exception as e:
+            logger.error(f"清空会话错误: {e}")
+            raise Exception(f"清空会话失败: {str(e)}")
 
 # 全局消息管理器实例
 message_manager = MessageManager() 

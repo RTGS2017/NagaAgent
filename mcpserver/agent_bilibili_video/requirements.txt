@@ -1,1 +1,0 @@
-bilibili-api-python>=17.3.0

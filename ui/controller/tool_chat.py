@@ -293,7 +293,6 @@ class ChatTool():
     def update_last_message(self, new_text):
         """更新最后一条消息的内容"""
         line=new_text.count('\n')
-        logger.info(f"更新最后一条消息（换行数：{line}）：{new_text}")
         # 处理消息格式化
         msg = extract_message(new_text)
         from markdown import markdown
@@ -481,6 +480,9 @@ class ChatTool():
         self.progress_widget.status_label.setText(f"✅ {result[:50]}...")
         logger.debug(f"工具结果: {result}")
 
+# 工具执行结果已通过LLM总结并保存到对话历史中
+# UI可以通过查询历史获取工具执行结果
+
     # ------------------------------
     # 滚动控制
     # ------------------------------
@@ -495,12 +497,11 @@ class ChatTool():
             return
 
         scrollbar = self.chat_scroll_area.verticalScrollBar()
-        is_at_bottom = (scrollbar.value() >= (scrollbar.maximum() - 1000))
+        is_at_bottom = (scrollbar.value() >= (scrollbar.maximum() - 500))  # 修改距离阈值从1000改为500
         logger.debug(f"移动到末尾的距离检测：{is_at_bottom} 数值：{scrollbar.maximum() - scrollbar.value()} ")
         if is_at_bottom:
             def to_bottom():
                 scrollbar.setValue(scrollbar.maximum())
-                logger.info("scroll to bottom")
 
             self.scroll_timer.singleShot(10, to_bottom)
 
