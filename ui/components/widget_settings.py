@@ -24,7 +24,7 @@ from nagaagent_core.vendors.PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxL
 from nagaagent_core.vendors.PyQt5.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve  # 统一入口 #
 from nagaagent_core.vendors.PyQt5.QtGui import QFont, QPainter, QColor  # 统一入口 #
 
-from system.config import config, AI_NAME
+from system.config import config, AI_NAME, UIConfig
 from ui.styles.settings_styles import (
     SYSTEM_PROMPT_CARD_STYLE, SYSTEM_PROMPT_EDITOR_STYLE, 
     SYSTEM_PROMPT_TITLE_STYLE, SYSTEM_PROMPT_DESC_STYLE,
@@ -291,6 +291,7 @@ class ElegantSettingsWidget(QWidget):
         
         # 创建设置组
         self.create_system_group(scroll_layout)
+        self.create_ui_style_group(scroll_layout)
         self.create_naga_portal_group(scroll_layout)
         self.create_api_group(scroll_layout)
         self.create_xiayuan_group(scroll_layout)
@@ -530,6 +531,125 @@ class ElegantSettingsWidget(QWidget):
 
         group.set_collapsed(True)  # 默认收起系统配置 #
         parent_layout.addWidget(group)
+
+    def create_ui_style_group(self, parent_layout):
+        group = SettingGroup("UI 风格配置")
+
+        reset_btn = QPushButton("重置为默认值")
+        reset_btn.setFixedSize(120, 36)
+        reset_btn.setStyleSheet(RESET_BUTTON_STYLE)
+        reset_btn.clicked.connect(self.reset_ui_style_defaults)
+        group.set_right_widget(reset_btn)
+
+        user_name_input = QLineEdit()
+        user_name_input.setText(config.ui.user_name)
+        user_name_input.setStyleSheet(INPUT_STYLE)
+        user_name_card = SettingCard("用户昵称", "聊天窗口显示的用户昵称", user_name_input, "ui.user_name")
+        user_name_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(user_name_card)
+        self.ui_user_name_input = user_name_input
+
+        bg_alpha_spin = QDoubleSpinBox()
+        bg_alpha_spin.setRange(0.0, 1.0)
+        bg_alpha_spin.setDecimals(2)
+        bg_alpha_spin.setSingleStep(0.05)
+        bg_alpha_spin.setValue(config.ui.bg_alpha)
+        bg_alpha_spin.setStyleSheet(SPIN_STYLE)  # 使用统一的样式
+        bg_alpha_card = SettingCard("聊天背景透明度", "影响聊天区域卡片背景的透明度（0=完全透明）", bg_alpha_spin, "ui.bg_alpha")
+        bg_alpha_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(bg_alpha_card)
+        self.ui_bg_alpha_spin = bg_alpha_spin
+
+        window_alpha_spin = QSpinBox()
+        window_alpha_spin.setRange(0, 255)
+        window_alpha_spin.setValue(config.ui.window_bg_alpha)
+        window_alpha_spin.setStyleSheet(SPIN_STYLE)
+        window_alpha_card = SettingCard("窗口背景透明度", "控制主窗口背景的不透明度", window_alpha_spin, "ui.window_bg_alpha")
+        window_alpha_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(window_alpha_card)
+        self.ui_window_alpha_spin = window_alpha_spin
+
+        mac_btn_size_spin = QSpinBox()
+        mac_btn_size_spin.setRange(10, 100)
+        mac_btn_size_spin.setValue(config.ui.mac_btn_size)
+        mac_btn_size_spin.setStyleSheet(SPIN_STYLE)
+        mac_btn_size_card = SettingCard("标题栏按钮尺寸", "调整标题栏圆形按钮的大小", mac_btn_size_spin, "ui.mac_btn_size")
+        mac_btn_size_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(mac_btn_size_card)
+        self.ui_mac_btn_size_spin = mac_btn_size_spin
+
+        mac_btn_margin_spin = QSpinBox()
+        mac_btn_margin_spin.setRange(0, 50)
+        mac_btn_margin_spin.setValue(config.ui.mac_btn_margin)
+        mac_btn_margin_spin.setStyleSheet(SPIN_STYLE)
+        mac_btn_margin_card = SettingCard("标题栏按钮边距", "调整按钮距离窗口右侧的边距", mac_btn_margin_spin, "ui.mac_btn_margin")
+        mac_btn_margin_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(mac_btn_margin_card)
+        self.ui_mac_btn_margin_spin = mac_btn_margin_spin
+
+        mac_btn_gap_spin = QSpinBox()
+        mac_btn_gap_spin.setRange(0, 30)
+        mac_btn_gap_spin.setValue(config.ui.mac_btn_gap)
+        mac_btn_gap_spin.setStyleSheet(SPIN_STYLE)
+        mac_btn_gap_card = SettingCard("标题栏按钮间距", "调整两个按钮之间的距离", mac_btn_gap_spin, "ui.mac_btn_gap")
+        mac_btn_gap_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(mac_btn_gap_card)
+        self.ui_mac_btn_gap_spin = mac_btn_gap_spin
+
+        animation_duration_spin = QSpinBox()
+        animation_duration_spin.setRange(100, 2000)
+        animation_duration_spin.setSingleStep(50)
+        animation_duration_spin.setValue(config.ui.animation_duration)
+        animation_duration_spin.setStyleSheet(SPIN_STYLE)
+        animation_duration_card = SettingCard("界面动画时长", "控制侧边栏等动画的持续时间（毫秒）", animation_duration_spin, "ui.animation_duration")
+        animation_duration_card.value_changed.connect(self.on_setting_changed)
+        group.add_card(animation_duration_card)
+        self.ui_animation_duration_spin = animation_duration_spin
+
+        group.set_collapsed(True)
+        parent_layout.addWidget(group)
+
+    def reset_ui_style_defaults(self):
+        """重置 UI 风格相关设置为默认值"""
+        defaults = UIConfig()
+        updates = {
+            "ui.user_name": defaults.user_name,
+            "ui.bg_alpha": defaults.bg_alpha,
+            "ui.window_bg_alpha": defaults.window_bg_alpha,
+            "ui.mac_btn_size": defaults.mac_btn_size,
+            "ui.mac_btn_margin": defaults.mac_btn_margin,
+            "ui.mac_btn_gap": defaults.mac_btn_gap,
+            "ui.animation_duration": defaults.animation_duration,
+        }
+
+        widget_mapping = {
+            "ui_user_name_input": ("setText", updates["ui.user_name"]),
+            "ui_bg_alpha_spin": ("setValue", updates["ui.bg_alpha"]),
+            "ui_window_alpha_spin": ("setValue", updates["ui.window_bg_alpha"]),
+            "ui_mac_btn_size_spin": ("setValue", updates["ui.mac_btn_size"]),
+            "ui_mac_btn_margin_spin": ("setValue", updates["ui.mac_btn_margin"]),
+            "ui_mac_btn_gap_spin": ("setValue", updates["ui.mac_btn_gap"]),
+            "ui_animation_duration_spin": ("setValue", updates["ui.animation_duration"]),
+        }
+
+        for attr_name, (setter_name, value) in widget_mapping.items():
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            try:
+                widget.blockSignals(True)
+            except AttributeError:
+                pass
+            setter = getattr(widget, setter_name, None)
+            if callable(setter):
+                setter(value)
+            try:
+                widget.blockSignals(False)
+            except AttributeError:
+                pass
+
+        self.pending_changes.update(updates)
+        self.update_status_label("UI 风格已恢复默认值，记得保存生效")
 
     def create_naga_portal_group(self, parent_layout):
         group = SettingGroup("娜迦官网API申请")  # 折叠组 #
@@ -1087,6 +1207,20 @@ class ElegantSettingsWidget(QWidget):
                 self.history_spin.setValue(config.api.max_history_rounds)
             if hasattr(self, 'context_days_spin'):
                 self.context_days_spin.setValue(config.api.context_load_days)
+            if hasattr(self, 'ui_user_name_input'):
+                self.ui_user_name_input.setText(config.ui.user_name)
+            if hasattr(self, 'ui_bg_alpha_spin'):
+                self.ui_bg_alpha_spin.setValue(config.ui.bg_alpha)
+            if hasattr(self, 'ui_window_alpha_spin'):
+                self.ui_window_alpha_spin.setValue(config.ui.window_bg_alpha)
+            if hasattr(self, 'ui_mac_btn_size_spin'):
+                self.ui_mac_btn_size_spin.setValue(config.ui.mac_btn_size)
+            if hasattr(self, 'ui_mac_btn_margin_spin'):
+                self.ui_mac_btn_margin_spin.setValue(config.ui.mac_btn_margin)
+            if hasattr(self, 'ui_mac_btn_gap_spin'):
+                self.ui_mac_btn_gap_spin.setValue(config.ui.mac_btn_gap)
+            if hasattr(self, 'ui_animation_duration_spin'):
+                self.ui_animation_duration_spin.setValue(config.ui.animation_duration)
             
             # 电脑控制设置
             if hasattr(self, 'computer_control_model_input'):
@@ -1189,6 +1323,8 @@ class ElegantSettingsWidget(QWidget):
             # 将扁平化的配置键值对转换为嵌套字典格式
             nested_updates = self._convert_to_nested_updates(self.pending_changes)
             
+            ui_updates = nested_updates.get('ui', {}) if nested_updates else {}
+
             # 特殊处理API密钥 - 先写入.env文件
             if 'api.api_key' in self.pending_changes:
                 self.write_api_key_to_env(self.pending_changes['api.api_key'])
@@ -1202,6 +1338,18 @@ class ElegantSettingsWidget(QWidget):
                     return
 
             # 保存系统提示词到文件 #
+            if success and ui_updates:
+                for attr, value in ui_updates.items():
+                    try:
+                        setattr(config.ui, attr, value)
+                    except Exception:
+                        pass
+            if success and hasattr(config, 'window') and getattr(config, 'window', None):
+                try:
+                    config.window.apply_ui_style()
+                except Exception:
+                    pass
+
             if prompt_changes_count > 0:
                 try:
                     from system.config import save_prompt  # 延迟导入 #

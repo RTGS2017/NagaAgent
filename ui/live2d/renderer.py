@@ -12,6 +12,7 @@ import json
 import glob
 from typing import Optional, Callable, Dict, List, Any
 from enum import Enum
+from .auto_configurator import Live2DAutoConfigurator
 
 logger = logging.getLogger("live2d.renderer")
 
@@ -19,44 +20,47 @@ logger = logging.getLogger("live2d.renderer")
 LIVE2D_AVAILABLE = False
 live2d = None
 
-# 保存当前路径
-original_path = sys.path.copy()
-
-# 临时移除当前目录和其父目录，确保导入系统包而非本地目录
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-grandparent_dir = os.path.dirname(parent_dir)
-
-paths_to_remove = [current_dir, parent_dir, grandparent_dir, '.', '']
-temp_removed_paths = []
-
-for path in paths_to_remove:
-    if path in sys.path:
-        sys.path.remove(path)
-        temp_removed_paths.append(path)
-
 try:
-    # 清理已加载的模块
-    modules_to_remove = [key for key in sys.modules.keys() if key.startswith('live2d')]
-    for module_name in modules_to_remove:
-        del sys.modules[module_name]
+    import sys
+    import os
 
-    # 现在导入系统的live2d包
+    # 保存当前路径
+    original_path = sys.path.copy()
+
+    # 临时移除当前目录和父目录，避免导入本地的live2d目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))  # ui/live2d
+    parent_dir = os.path.dirname(current_dir)  # ui
+    grandparent_dir = os.path.dirname(parent_dir)  # NagaAgent
+
+    # 创建需要临时移除的路径列表
+    paths_to_remove = [
+        current_dir,
+        parent_dir,
+        grandparent_dir,
+        os.getcwd(),
+        '.',
+        ''
+    ]
+
+    # 临时移除这些路径
+    temp_sys_path = [p for p in sys.path if p not in paths_to_remove]
+    sys.path = temp_sys_path
+
+    # 现在导入系统的live2d包（不会找到本地的ui/live2d）
     import live2d.v3 as live2d_v3
     live2d = live2d_v3
     LIVE2D_AVAILABLE = True
-    logger.info("Live2D模块加载成功")
+    logger.debug("Live2D模块加载成功")
+
+    # 恢复原始路径
+    sys.path = original_path
 
 except ImportError as e:
+    # 恢复路径（如果导入失败）
+    if 'original_path' in locals():
+        sys.path = original_path
     LIVE2D_AVAILABLE = False
     logger.warning(f"Live2D模块未安装: {e}")
-    logger.info("请安装 live2d-py: pip install live2d-py")
-
-finally:
-    # 恢复原始路径
-    for path in temp_removed_paths:
-        if path not in sys.path:
-            sys.path.append(path)
 
 
 class RendererState(Enum):
@@ -99,7 +103,7 @@ class Live2DRenderer:
             live2d.init()
             live2d.glewInit()
             self.state = RendererState.INITIALIZED
-            logger.info("Live2D渲染器初始化成功")
+            logger.debug("Live2D渲染器初始化成功")
             return True
 
         except Exception as e:
@@ -108,7 +112,7 @@ class Live2DRenderer:
             return False
 
     def load_model(self, model_path: str, progress_callback: Optional[Callable[[float], None]] = None) -> bool:
-        """加载Live2D模型"""
+        """加载Live2D模型 - 带自动配置功能"""
         if not LIVE2D_AVAILABLE or self.state == RendererState.UNINITIALIZED:
             logger.error("渲染器未初始化")
             return False
@@ -120,6 +124,27 @@ class Live2DRenderer:
 
         try:
             if progress_callback:
+                progress_callback(0.05)
+
+            # 自动配置模型（如果需要）
+            logger.debug("检查模型配置...")
+            auto_config = Live2DAutoConfigurator()
+
+            # 先验证配置
+            validation = auto_config.validate_configuration(model_path)
+            if validation['unconfigured_files']:
+                logger.debug(f"发现 {len(validation['unconfigured_files'])} 个未配置的文件，开始自动配置...")
+                if auto_config.auto_configure_model(model_path, backup=True):
+                    logger.debug("模型自动配置成功")
+                    # 重新验证
+                    validation = auto_config.validate_configuration(model_path)
+                    logger.debug(f"配置后状态: {validation['configured_expressions']} 个表情, {validation['configured_motions']} 个动作")
+                else:
+                    logger.warning("自动配置失败，继续使用现有配置")
+            else:
+                logger.debug(f"模型配置完整: {validation['configured_expressions']} 个表情, {validation['configured_motions']} 个动作")
+
+            if progress_callback:
                 progress_callback(0.1)
 
             self.model = live2d.LAppModel()
@@ -127,6 +152,7 @@ class Live2DRenderer:
             if progress_callback:
                 progress_callback(0.3)
 
+            # 加载模型配置（包含自动配置的表情和动作）
             self.model.LoadModelJson(model_path)
 
             if progress_callback:
@@ -159,7 +185,7 @@ class Live2DRenderer:
 
             self.model_path = model_path
             self.state = RendererState.MODEL_LOADED
-            logger.info(f"模型加载成功: {model_path}")
+            logger.debug(f"模型加载成功: {model_path}")
             return True
 
         except Exception as e:
@@ -185,83 +211,81 @@ class Live2DRenderer:
                 logger.debug(f"动作文件处理失败 {motion_file}: {e}")
 
     def _load_expressions(self, model_dir: str):
-        """加载表情文件 - 增强版，自动扫描目录"""
+        """从模型配置中获取已加载的表情"""
+        self.loaded_expressions = {}
+
+        # 尝试从模型获取已加载的表情
+        try:
+            if hasattr(self.model, 'GetExpressionIds'):
+                loaded_ids = self.model.GetExpressionIds()
+                if loaded_ids:
+                    self.loaded_expressions = {exp_id: exp_id for exp_id in loaded_ids}
+                    logger.debug(f"从模型获取到 {len(self.loaded_expressions)} 个表情")
+                    return
+        except Exception as e:
+            logger.debug(f"无法从模型获取表情: {e}")
+
+        # 如果无法从模型获取，扫描表情目录
+        self._scan_expression_dir(model_dir)
+
+    def _scan_expression_dir(self, model_dir: str):
+        """扫描表情目录并记录表情文件"""
         expression_dir = os.path.join(model_dir, "Expressions")
         if not os.path.exists(expression_dir):
             return
 
-        # 记录加载的表情
-        self.loaded_expressions = {}  # 原始名称 -> 加载名称的映射
-
-        # 扫描目录中的所有表情文件
         expression_files = glob.glob(os.path.join(expression_dir, "*.exp3.json"))
-        logger.info(f"在 {expression_dir} 找到 {len(expression_files)} 个表情文件")
-
         for exp_file in expression_files:
-            try:
-                # 获取表情名称（不含扩展名）- 保持原始名称
-                exp_name = os.path.basename(exp_file).replace(".exp3.json", "")
+            exp_name = os.path.basename(exp_file).replace(".exp3.json", "")
+            self.loaded_expressions[exp_name] = exp_name
 
-                # 尝试直接加载表情文件到模型，使用原始名称
-                if hasattr(self.model, 'LoadExpression'):
-                    self.model.LoadExpression(exp_name, exp_file)
-                    self.loaded_expressions[exp_name] = exp_name
-                    logger.info(f"加载表情: '{exp_name}' 从 {exp_file}")
-            except Exception as e:
-                logger.error(f"表情文件加载失败 {exp_file}: {e}")
+        if expression_files:
+            logger.debug(f"从目录扫描到 {len(self.loaded_expressions)} 个表情")
 
-        logger.info(f"成功加载 {len(self.loaded_expressions)} 个表情: {list(self.loaded_expressions.keys())}")
+    def _handle_operation_error(self, error_counter_name: str, error: Exception, operation_name: str):
+        """通用的操作错误处理"""
+        counter = getattr(self, error_counter_name)
+        counter += 1
+        setattr(self, error_counter_name, counter)
+
+        if counter < 3:
+            logger.error(f"模型{operation_name}失败: {error}")
+        elif counter == 3:
+            logger.warning(f"模型{operation_name}持续失败，后续错误将静默处理")
+
+        # 检查是否需要重置模型
+        if counter >= self._max_errors_before_reset:
+            logger.error(f"模型{operation_name}错误过多，尝试重置状态")
+            self._reset_model_state()
 
     def update(self):
-        """更新模型状态 - 带错误恢复"""
+        """更新模型状态"""
         if not self.has_model():
             return
 
         try:
             self.model.Update()
-            # 成功更新，重置错误计数
             self._update_errors = 0
         except Exception as e:
-            self._update_errors += 1
-            if self._update_errors < 3:
-                # 前几次错误正常记录
-                logger.error(f"模型更新失败: {e}")
-            elif self._update_errors == 3:
-                # 多次错误后降低日志级别
-                logger.warning("模型更新持续失败，后续错误将静默处理")
-
-            # 检查是否需要重置模型
-            if self._update_errors >= self._max_errors_before_reset:
-                logger.error("模型更新错误过多，尝试重置状态")
-                self._reset_model_state()
+            self._handle_operation_error('_update_errors', e, '更新')
 
     def draw(self):
-        """绘制模型 - 带错误恢复"""
+        """绘制模型"""
         if not self.has_model():
             return
 
         try:
             live2d.clearBuffer()
             self.model.Draw()
-            # 成功绘制，重置错误计数
             self._draw_errors = 0
         except Exception as e:
-            self._draw_errors += 1
-            if self._draw_errors < 3:
-                logger.error(f"模型绘制失败: {e}")
-            elif self._draw_errors == 3:
-                logger.warning("模型绘制持续失败，后续错误将静默处理")
-
-            # 检查是否需要重置模型
-            if self._draw_errors >= self._max_errors_before_reset:
-                logger.error("模型绘制错误过多，尝试重置状态")
-                self._reset_model_state()
+            self._handle_operation_error('_draw_errors', e, '绘制')
 
     def _reset_model_state(self):
         """重置模型状态"""
         try:
             if self.model_path and self.state == RendererState.MODEL_LOADED:
-                logger.info("正在重置模型状态...")
+                logger.debug("正在重置模型状态...")
                 # 保存当前路径
                 path = self.model_path
                 # 清理现有模型
@@ -272,7 +296,7 @@ class Live2DRenderer:
                 # 重置错误计数
                 self._update_errors = 0
                 self._draw_errors = 0
-                logger.info("模型状态重置完成")
+                logger.debug("模型状态重置完成")
         except Exception as e:
             logger.error(f"模型状态重置失败: {e}")
             self.state = RendererState.ERROR
@@ -338,26 +362,25 @@ class Live2DRenderer:
     def trigger_expression(self, expression_id: str):
         """触发表情"""
         if not self.has_model():
-            logger.warning(f"无法触发表情 '{expression_id}': 模型未加载")
+            return
+
+        # 检查表情是否存在
+        if expression_id not in self.loaded_expressions:
+            logger.debug(f"表情 '{expression_id}' 不存在")
             return
 
         try:
-            # 直接使用原始名称触发表情
-            logger.info(f"正在触发表情: '{expression_id}'")
             self.model.SetExpression(expression_id)
-            logger.info(f"表情 '{expression_id}' 触发成功")
+            logger.debug(f"触发表情: '{expression_id}'")
         except Exception as e:
-            logger.error(f"触发表情失败 '{expression_id}': {e}")
-            # 打印所有已加载的表情供调试
-            if hasattr(self, 'loaded_expressions'):
-                logger.info(f"已加载的表情列表: {list(self.loaded_expressions.keys())}")
+            logger.error(f"触发表情异常 '{expression_id}': {e}")
 
     def cleanup(self):
         """清理资源"""
         try:
             if self.model:
                 self.model = None
-                logger.info("模型资源已清理")
+                logger.debug("模型资源已清理")
 
             self.state = RendererState.UNINITIALIZED
             self.model_path = None
@@ -415,57 +438,42 @@ class Live2DRenderer:
             'model_loaded': self.has_model()
         }
 
-    def _get_emoji_for_motion(self, motion_name: str) -> str:
-        """获取动作对应的emoji"""
+    def _get_emoji(self, name: str, type: str, default_emoji: str) -> str:
+        """获取动作或表情对应的emoji"""
+        if not self.model_path:
+            return default_emoji
+
         # 获取当前模型的自定义映射
-        model_name = os.path.basename(os.path.dirname(self.model_path)) if self.model_path else ""
-        custom_mapping = self.emoji_mapping.get("custom_model_emoji", {}).get(model_name, {}).get("motions", {})
+        model_name = os.path.basename(os.path.dirname(self.model_path))
+        custom_mapping = self.emoji_mapping.get("custom_model_emoji", {}).get(model_name, {}).get(f"{type}s", {})
 
         # 优先使用模型特定的映射
-        if motion_name in custom_mapping:
-            return custom_mapping[motion_name]
+        if name in custom_mapping:
+            return custom_mapping[name]
 
         # 然后使用通用映射
-        motion_map = self.emoji_mapping.get("motion_emoji_map", {})
+        emoji_map = self.emoji_mapping.get(f"{type}_emoji_map", {})
 
         # 尝试完全匹配
-        if motion_name in motion_map:
-            return motion_map[motion_name]
+        if name in emoji_map:
+            return emoji_map[name]
 
         # 尝试部分匹配
-        motion_lower = motion_name.lower()
-        for key, emoji in motion_map.items():
-            if key.lower() in motion_lower:
+        name_lower = name.lower()
+        for key, emoji in emoji_map.items():
+            if key.lower() in name_lower:
                 return emoji
 
         # 返回默认图标
-        return motion_map.get("default", "🎭")
+        return emoji_map.get("default", default_emoji)
+
+    def _get_emoji_for_motion(self, motion_name: str) -> str:
+        """获取动作对应的emoji"""
+        return self._get_emoji(motion_name, "motion", "🎭")
 
     def _get_emoji_for_expression(self, exp_name: str) -> str:
         """获取表情对应的emoji"""
-        # 获取当前模型的自定义映射
-        model_name = os.path.basename(os.path.dirname(self.model_path)) if self.model_path else ""
-        custom_mapping = self.emoji_mapping.get("custom_model_emoji", {}).get(model_name, {}).get("expressions", {})
-
-        # 优先使用模型特定的映射
-        if exp_name in custom_mapping:
-            return custom_mapping[exp_name]
-
-        # 然后使用通用映射
-        exp_map = self.emoji_mapping.get("expression_emoji_map", {})
-
-        # 尝试完全匹配
-        if exp_name in exp_map:
-            return exp_map[exp_name]
-
-        # 尝试部分匹配
-        exp_lower = exp_name.lower()
-        for key, emoji in exp_map.items():
-            if key.lower() in exp_lower:
-                return emoji
-
-        # 返回默认图标
-        return exp_map.get("default", "😀")
+        return self._get_emoji(exp_name, "expression", "😀")
 
     def detect_model_actions(self) -> Dict[str, List[Dict[str, str]]]:
         """从model3.json和目录扫描检测模型定义的动作和表情"""
@@ -532,5 +540,5 @@ class Live2DRenderer:
                     "icon": emoji
                 })
 
-        logger.info(f"从model3.json和目录扫描检测到动作: {len(result['motions'])}个, 表情: {len(result['expressions'])}个")
+        logger.debug(f"从model3.json和目录扫描检测到动作: {len(result['motions'])}个, 表情: {len(result['expressions'])}个")
         return result

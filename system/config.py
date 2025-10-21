@@ -243,7 +243,7 @@ class UIConfig(BaseModel):
     """用户界面配置"""
     user_name: str = Field(default="用户", description="默认用户名")
     bg_alpha: float = Field(default=0.5, ge=0.0, le=1.0, description="聊天背景透明度")
-    window_bg_alpha: int = Field(default=110, ge=0, le=255, description="主窗口背景透明度")
+    window_bg_alpha: int = Field(default=128, ge=0, le=255, description="主窗口背景透明度")
     mac_btn_size: int = Field(default=36, ge=10, le=100, description="Mac按钮大小")
     mac_btn_margin: int = Field(default=16, ge=0, le=50, description="Mac按钮边距")
     mac_btn_gap: int = Field(default=12, ge=0, le=30, description="Mac按钮间距")

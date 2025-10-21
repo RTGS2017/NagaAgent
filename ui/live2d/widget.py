@@ -71,35 +71,33 @@ class Live2DWidget(QOpenGLWidget):
     def initializeGL(self):
         """初始化OpenGL上下文"""
         try:
-            success = self.renderer.initialize()
-
-            if success:
+            if self.renderer.initialize():
                 # 创建动画器
                 self.animator = Live2DAnimator(self.renderer)
-                logger.info("OpenGL初始化成功")
+                logger.debug("OpenGL初始化成功")
                 self.gl_initialized.emit(True)
 
                 # 检查是否有待加载的模型
                 if self._pending_load_model:
-                    logger.info(f"发现待加载模型: {self._pending_load_model}")
-                    # 延迟加载模型，确保OpenGL上下文完全就绪
+                    logger.debug(f"发现待加载模型: {self._pending_load_model}")
                     QTimer.singleShot(100, self.update)
             else:
-                error_msg = self.renderer.get_error_reason() if hasattr(self.renderer, 'get_error_reason') else "初始化失败"
-                logger.error(f"OpenGL初始化失败: {error_msg}")
-                self.error_occurred.emit(error_msg)
-                self.gl_initialized.emit(False)
+                self._handle_init_error("初始化失败")
 
         except Exception as e:
-            logger.error(f"OpenGL初始化异常: {e}")
-            self.error_occurred.emit(str(e))
-            self.gl_initialized.emit(False)
+            self._handle_init_error(str(e))
+
+    def _handle_init_error(self, error_msg: str):
+        """处理初始化错误"""
+        logger.error(f"OpenGL初始化失败: {error_msg}")
+        self.error_occurred.emit(error_msg)
+        self.gl_initialized.emit(False)
 
     def load_model(self, model_path: str, progress_callback: Optional[Callable[[float], None]] = None) -> bool:
         """加载Live2D模型"""
         # 如果渲染器还未初始化，保存请求等待初始化完成
         if self.renderer.state == RendererState.UNINITIALIZED:
-            logger.info("渲染器未初始化，保存模型加载请求")
+            logger.debug("渲染器未初始化，保存模型加载请求")
             self._pending_load_model = model_path
             self._pending_load_callback = progress_callback
             # 如果Widget已经显示，触发更新以初始化OpenGL
@@ -138,7 +136,7 @@ class Live2DWidget(QOpenGLWidget):
             if success:
                 self._start_render_timer()
                 self.model_loaded.emit(True)
-                logger.info(f"模型加载成功: {model_path}")
+                logger.debug(f"模型加载成功: {model_path}")
             else:
                 self.model_loaded.emit(False)
                 self.error_occurred.emit(f"模型加载失败: {model_path}")
@@ -183,7 +181,7 @@ class Live2DWidget(QOpenGLWidget):
             # 成功更新，重置连续错误计数
             if self._consecutive_frame_errors > 0:
                 self._consecutive_frame_errors = 0
-                logger.info("Live2D恢复正常渲染")
+                logger.debug("Live2D恢复正常渲染")
 
         except Exception as e:
             self._consecutive_frame_errors += 1
@@ -220,7 +218,7 @@ class Live2DWidget(QOpenGLWidget):
         if not self._fallback_mode:
             return
 
-        logger.info("尝试从降级模式恢复...")
+        logger.debug("尝试从降级模式恢复...")
         self._fallback_mode = False
         self._consecutive_frame_errors = 0
 
@@ -231,7 +229,7 @@ class Live2DWidget(QOpenGLWidget):
         # 重启渲染定时器
         if self.render_timer and self.renderer.has_model():
             self._start_render_timer()
-            logger.info("Live2D已从降级模式恢复")
+            logger.debug("Live2D已从降级模式恢复")
 
     def set_emotion(self, emotion: str, intensity: float = 1.0):
         """设置情绪"""
@@ -278,7 +276,7 @@ class Live2DWidget(QOpenGLWidget):
             if self.renderer:
                 self.renderer.cleanup()
 
-            logger.info("Live2D Widget资源已清理")
+            logger.debug("Live2D Widget资源已清理")
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
 
@@ -329,5 +327,5 @@ def create_widget_from_config(parent=None, config=None):
         scale_factor=scale_factor
     )
 
-    logger.info(f"从配置创建Widget，FPS: {target_fps}, 缩放: {scale_factor}")
+    logger.debug(f"从配置创建Widget，FPS: {target_fps}, 缩放: {scale_factor}")
     return widget

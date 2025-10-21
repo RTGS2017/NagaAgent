@@ -147,7 +147,7 @@ QSlider::handle:horizontal:hover {
 
 # 数字输入框样式
 SPIN_STYLE = """
-QSpinBox {
+QSpinBox, QDoubleSpinBox {
     background: rgba(17,17,17,180);
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 50);

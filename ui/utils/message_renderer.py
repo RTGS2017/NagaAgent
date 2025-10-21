@@ -1,17 +1,21 @@
-# message_renderer.py # 独立的消息渲染器
+﻿# message_renderer.py # 独立的消息渲染器
 import sys, os;
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + '/..'))
 from typing import List
-from nagaagent_core.vendors.PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget, QSizePolicy, QPushButton, \
-    QHBoxLayout  # 统一入口 #
+from nagaagent_core.vendors.PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget, QSizePolicy, QPushButton, QHBoxLayout  # 统一入口 #
 from nagaagent_core.vendors.PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer  # 统一入口 #
 from nagaagent_core.vendors.PyQt5.QtGui import QFont  # 统一入口 #
-from system.config import config, logger
+from system.config import config,logger
 
 # 使用统一配置系统
 BG_ALPHA = config.ui.bg_alpha
 ANIMATION_DURATION = config.ui.animation_duration
+
+def refresh_style_constants():
+    global BG_ALPHA, ANIMATION_DURATION
+    BG_ALPHA = config.ui.bg_alpha
+    ANIMATION_DURATION = config.ui.animation_duration
 
 
 class MessageDialog(QFrame):

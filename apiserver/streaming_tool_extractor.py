@@ -86,10 +86,10 @@ class StreamingToolCallExtractor:
         self.callback_manager.register_callback("text_chunk", on_text_chunk)
         self.voice_integration = voice_integration
     
-    async def process_text_chunk(self, text_chunk: str):
+    def process_text_chunk(self, text_chunk: str):
         """
         处理文本块，实时按句切割并发送给语音集成
-        
+
         处理流程：
         1. 累积完整文本（用于最终保存）
         2. 逐字符检查句子结束符
@@ -98,13 +98,6 @@ class StreamingToolCallExtractor:
         """
         if not text_chunk:
             return None
-        
-        
-        # 调用文本块回调，将文本发送到前端
-        results = []
-        result = await self.callback_manager.call_callback("text_chunk", text_chunk, "chunk")
-        if result:
-            results.append(result)
 
         # 累积完整文本（用于最终保存到数据库）
         self.complete_text += text_chunk
@@ -124,14 +117,14 @@ class StreamingToolCallExtractor:
                     # 保留未完成的句子部分，继续累积
                     remaining_sentences = [s for s in sentences[1:] if s.strip()]
                     self.text_buffer = "".join(remaining_sentences)
-        return results if results else None
+        return None
     
-    async def _flush_text_buffer(self):
+    def _flush_text_buffer(self):
         """刷新文本缓冲区 - 处理流式结束时的剩余文本"""
         if self.text_buffer:
             # 立即发送剩余的未完成句子到语音集成（不阻塞）
             self._send_to_voice_integration(self.text_buffer)
-            
+
             self.text_buffer = ""
             return None
         return None
@@ -152,16 +145,16 @@ class StreamingToolCallExtractor:
     
     # 工具调用相关方法已移除
     
-    async def finish_processing(self):
+    def finish_processing(self):
         """完成处理，清理剩余内容"""
         results = []
-        
+
         # 处理剩余的文本
         if self.text_buffer:
-            result = await self._flush_text_buffer()
+            result = self._flush_text_buffer()
             if result:
                 results.append(result)
-        
+
         return results if results else None
     
     def get_complete_text(self) -> str:
