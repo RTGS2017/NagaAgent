@@ -526,8 +526,9 @@ def _lazy_init_services():
         # service_manager._load_persistent_context()  # 删除重复加载，UI渲染时会自动加载
         
         # 初始化进度文件
-        with open('./ui/styles/progress.txt', 'w') as f:
-            f.write('0')
+        #with open('./ui/styles/progress.txt', 'w') as f:
+            #f.write('0')
+        #何意味？注释了 by Null
         
         # 显示系统状态
         print("=" * 30)

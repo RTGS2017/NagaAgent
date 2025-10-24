@@ -17,6 +17,7 @@ dependencies = [
     "charset-normalizer>=3.4.3",
     "json5>=0.12.1",
     "markdown>=3.9",
+    "pyneo>=0.2.0",
 ]
 
 # 可选依赖组
