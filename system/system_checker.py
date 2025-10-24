@@ -97,7 +97,7 @@ class SystemChecker:
             ("端口可用性", self.check_port_availability),
             ("系统资源", self.check_system_resources),
             ("Neo4j连接", self.check_neo4j_connection),
-            ("环境变量", self.check_environment_variables)
+            #("环境变量", self.check_environment_variables)
         ]
         
         all_passed = True
@@ -413,7 +413,7 @@ class SystemChecker:
             print(f"   ❌ Neo4j检测异常: {e}")
             return False
 
-
+    '''
     def check_environment_variables(self) -> bool:
         """检测环境变量"""
         important_env_vars = [
@@ -442,7 +442,8 @@ class SystemChecker:
                     all_good = False
 
         return all_good
-    
+   '''
+
     def find_python311(self) -> Optional[str]:
         """查找Python 3.11解释器"""
         python_commands = [
@@ -464,7 +465,8 @@ class SystemChecker:
                 continue
         
         return None
-    
+
+    '''
     def download_python311(self) -> Optional[str]:
         """下载Python 3.11（Windows）"""
         if platform.system() != "Windows":
@@ -505,7 +507,8 @@ class SystemChecker:
         except Exception as e:
             print(f"   ❌ 下载Python 3.11失败: {e}")
             return None
-    
+    '''
+            
     def create_virtual_environment(self) -> bool:
         """创建虚拟环境"""
         try:
@@ -514,11 +517,9 @@ class SystemChecker:
             # 查找Python 3.11
             python_cmd = self.find_python311()
             if not python_cmd:
-                print("   📥 未找到Python 3.11，尝试下载...")
-                python_cmd = self.download_python311()
-                if not python_cmd:
-                    print("   ❌ 无法获取Python 3.11")
-                    return False
+                print("   📥 未找到Python 3.11")
+                #python_cmd = self.download_python311()
+                return False
             
             # 创建虚拟环境
             venv_cmd = [python_cmd, "-m", "venv", str(self.venv_path)]
