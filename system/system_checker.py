@@ -48,15 +48,7 @@ class SystemChecker:
 
         # 核心依赖包（更新为nagaagent-core包含的依赖）
         self.core_dependencies = [
-            "nagaagent_core",
-            "fastapi",
-            "openai",
-            "requests",
-            "PyQt5",
-            "torch",
-            "numpy",
-            "pandas",
-            "matplotlib"
+            "nagaagent_core"
         ]
 
         # 重要可选依赖
