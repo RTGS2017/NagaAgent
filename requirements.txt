@@ -13,3 +13,6 @@ json5
 # All other runtime dependencies have been migrated into nagaagent-core.
 # If you need to pin extra versions locally, append them below.
 markdown
+pyneo
+Pillow
+playwright

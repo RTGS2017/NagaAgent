@@ -16,7 +16,6 @@ sdist/
 var/
 wheels/
 *.manifest
-*.spec
 
 # Virtual Environment
 .venv/

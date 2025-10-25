@@ -190,6 +190,6 @@ def auto_register_mcp():
     sys.stderr.write(f"MCP注册完成，共注册 {len(registered)} 个服务: {registered}\n")
     return registered
 
-# 执行自动注册
-auto_register_mcp()
+# 延迟自动注册，避免循环导入死锁
+# auto_register_mcp()  # 注释掉立即执行，改为在需要时调用
 

@@ -38,6 +38,12 @@ async def lifespan(app: FastAPI):
         from mcpserver.mcp_manager import get_mcp_manager
         Modules.mcp_manager = get_mcp_manager()
         logger.info("MCP管理器初始化完成")
+
+        # 手动触发MCP服务注册，避免循环导入死锁
+        from mcpserver.mcp_registry import auto_register_mcp
+        auto_register_mcp()
+        logger.info("MCP服务自动注册完成")
+
     except Exception as e:
         logger.warning(f"MCP管理器初始化失败: {e}")
         Modules.mcp_manager = None

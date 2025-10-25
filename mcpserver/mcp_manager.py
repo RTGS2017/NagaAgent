@@ -13,7 +13,8 @@ from pathlib import Path
 
 from nagaagent_core.core import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from mcpserver.mcp_registry import MCP_REGISTRY # MCP服务注册表
+# 延迟导入MCP_REGISTRY，避免循环导入死锁
+# from mcpserver.mcp_registry import MCP_REGISTRY # MCP服务注册表
 
 from system.config import config, AI_NAME, logger
 
@@ -254,6 +255,7 @@ class MCPManager:
             Optional[ClientSession]: 成功返回会话对象，失败返回None
         """
         # 直接返回None，或根据MCP_REGISTRY判断服务是否存在
+        from mcpserver.mcp_registry import MCP_REGISTRY # 延迟导入
         if service_name not in MCP_REGISTRY:
             logger.warning(f"MCP服务 {service_name} 不存在")
             return None
@@ -361,6 +363,7 @@ class MCPManager:
         """
         try:
             # 只支持MCP服务调用（通过MCP_REGISTRY）
+            from mcpserver.mcp_registry import MCP_REGISTRY # 延迟导入
             if service_name in MCP_REGISTRY:
                 agent = MCP_REGISTRY[service_name]
                 if hasattr(agent, tool_name):
@@ -549,8 +552,12 @@ class MCPManager:
             logger.error(f"清理MCP服务连接时出错: {str(e)}")
             import traceback;traceback.print_exc(file=sys.stderr)
 
-    def get_mcp(self, name): return MCP_REGISTRY.get(name) # 获取MCP服务
-    def list_mcps(self): return list(MCP_REGISTRY.keys()) # 列出所有MCP服务 
+    def get_mcp(self, name):
+        from mcpserver.mcp_registry import MCP_REGISTRY # 延迟导入
+        return MCP_REGISTRY.get(name) # 获取MCP服务
+    def list_mcps(self):
+        from mcpserver.mcp_registry import MCP_REGISTRY # 延迟导入
+        return list(MCP_REGISTRY.keys()) # 列出所有MCP服务 
 
     def auto_register_services(self):
         """自动注册所有MCP服务和handoff"""

@@ -1,4 +1,7 @@
-from nagaagent_core.vendors.pil import Image
+import sys
+if 'nagaagent_core.vendors.pil' in sys.modules:
+    del sys.modules['nagaagent_core.vendors.pil']
+from PIL import Image
 
 from .jm_exception import *
 

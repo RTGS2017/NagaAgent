@@ -830,7 +830,10 @@ class LongImgPlugin(JmOptionPlugin):
             jm_log('wrong_usage', 'long_img必须运行在after_photo或after_album时')
 
         try:
-            from nagaagent_core.vendors.pil import Image
+            import sys
+            if 'nagaagent_core.vendors.pil' in sys.modules:
+                del sys.modules['nagaagent_core.vendors.pil']
+            from PIL import Image
         except ImportError:
             self.warning_lib_not_install('PIL')
             return
@@ -849,7 +852,10 @@ class LongImgPlugin(JmOptionPlugin):
 
     def write_img_2_long_img(self, long_img_path, album: JmAlbumDetail, photo: JmPhotoDetail) -> List[str]:
         import itertools
-        from nagaagent_core.vendors.pil import Image
+        import sys
+        if 'nagaagent_core.vendors.pil' in sys.modules:
+            del sys.modules['nagaagent_core.vendors.pil']
+        from PIL import Image
 
         if album is None:
             img_dir_items = [self.option.decide_image_save_dir(photo)]

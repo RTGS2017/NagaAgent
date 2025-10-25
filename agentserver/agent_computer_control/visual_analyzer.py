@@ -6,7 +6,10 @@ AI坐标定位算法升级
 
 import logging
 from typing import Dict, Any, Optional, Tuple, List
-from nagaagent_core.vendors.pil import Image
+import sys
+if 'nagaagent_core.vendors.pil' in sys.modules:
+    del sys.modules['nagaagent_core.vendors.pil']
+from PIL import Image
 import io
 import base64
 import re

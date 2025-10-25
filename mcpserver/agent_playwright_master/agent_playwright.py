@@ -4,7 +4,7 @@ import json
 import sys
 import os
 import platform
-from nagaagent_core.vendors.playwright.async_api import async_playwright
+from playwright.async_api import async_playwright
 from nagaagent_core.vendors.agents import Agent  # 统一代理 #
 from system.config import config
 

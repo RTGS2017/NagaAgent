@@ -1,8 +1,15 @@
 # registry_app_scanner.py # Windows注册表应用扫描器
-import winreg  # Windows注册表 #
+import platform  # 平台检测 #
 import os  # 操作系统 #
 from typing import List, Dict, Optional  # 类型 #
 import json  # JSON #
+
+# 平台特定导入
+if platform.system() == 'Windows':
+    import winreg  # Windows注册表 #
+else:
+    # 在非Windows平台上，winreg模块不可用
+    winreg = None
 
 class RegistryAppScanner:
     """Windows注册表应用扫描器 #"""
@@ -14,7 +21,13 @@ class RegistryAppScanner:
     def _scan_registry(self):
         """扫描Windows注册表获取应用信息 #"""
         apps = []
-        
+
+        # 非Windows平台直接返回空列表
+        if platform.system() != 'Windows' or winreg is None:
+            print(f"注册表扫描功能仅在Windows平台上可用，当前平台: {platform.system()}")
+            self.apps_cache = []
+            return
+
         # 扫描HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths") as key:
@@ -30,7 +43,7 @@ class RegistryAppScanner:
                                     if exe_path and os.path.exists(exe_path):
                                         # 获取应用名称（去掉.exe后缀）
                                         display_name = app_name[:-4] if app_name.endswith('.exe') else app_name
-                                        
+
                                         # 尝试从注册表获取更友好的显示名称
                                         try:
                                             friendly_name, _ = winreg.QueryValueEx(app_key, "FriendlyAppName")
@@ -38,7 +51,7 @@ class RegistryAppScanner:
                                                 display_name = friendly_name
                                         except:
                                             pass
-                                        
+
                                         apps.append({
                                             "name": display_name,
                                             "path": exe_path,
@@ -51,7 +64,7 @@ class RegistryAppScanner:
                         continue
         except Exception as e:
             print(f"扫描App Paths注册表失败: {e}")
-        
+
         # 扫描HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") as key:
@@ -65,7 +78,7 @@ class RegistryAppScanner:
                                 display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
                                 # 获取安装位置
                                 install_location, _ = winreg.QueryValueEx(subkey, "InstallLocation")
-                                
+
                                 if display_name and install_location:
                                     # 查找可执行文件
                                     exe_files = self._find_exe_files(install_location)
@@ -82,7 +95,7 @@ class RegistryAppScanner:
                         continue
         except Exception as e:
             print(f"扫描Uninstall注册表失败: {e}")
-        
+
         # 扫描HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") as key:
@@ -96,7 +109,7 @@ class RegistryAppScanner:
                                 display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
                                 # 获取安装位置
                                 install_location, _ = winreg.QueryValueEx(subkey, "InstallLocation")
-                                
+
                                 if display_name and install_location:
                                     # 查找可执行文件
                                     exe_files = self._find_exe_files(install_location)
@@ -113,18 +126,18 @@ class RegistryAppScanner:
                         continue
         except Exception as e:
             print(f"扫描用户Uninstall注册表失败: {e}")
-        
+
         # 去重并排序
         unique_apps = {}
         for app in apps:
             name = app["name"]
             if name not in unique_apps or app["type"] == "registry":
                 unique_apps[name] = app
-        
+
         self.apps_cache = list(unique_apps.values())
         # 按名称排序
         self.apps_cache.sort(key=lambda x: x["name"].lower())
-        
+
         print(f"✅ 从注册表扫描到 {len(self.apps_cache)} 个应用")
     
     def _find_exe_files(self, directory: str) -> List[str]:

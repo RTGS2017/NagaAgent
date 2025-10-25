@@ -1,4 +1,4 @@
-from nagaagent_core.vendors.playwright.async_api import Page
+from playwright.async_api import Page
 import asyncio
 import sys
 import re
@@ -195,7 +195,7 @@ async def search_web(query: str, engine: str = "google") -> Dict[str, Any]:
         搜索结果字典
     """
     # 动态导入，避免循环引用
-    from nagaagent_core.vendors.playwright.async_api import async_playwright
+    from playwright.async_api import async_playwright
     
     # 尝试从config导入，如果失败则使用默认值
     try:

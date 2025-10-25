@@ -17,16 +17,22 @@ dependencies = [
     "charset-normalizer>=3.4.3",
     "json5>=0.12.1",
     "markdown>=3.9",
+    "pyneo>=0.2.0",
+    "pillow>=12.0.0",
+    "playwright>=1.55.0",
 ]
 
 # 可选依赖组
-[project.optional-dependencies]
+[dependency-groups]
 #其余依赖组已经整合进入主依赖项
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.20.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
+]
+build = [
+    "pyinstaller"
 ]
 
 [build-system]
