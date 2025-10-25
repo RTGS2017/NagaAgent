@@ -8,7 +8,10 @@ import time
 import platform
 import logging
 from typing import Dict, Any, Optional, Tuple
-from nagaagent_core.vendors.pil import Image
+import sys
+if 'nagaagent_core.vendors.pil' in sys.modules:
+    del sys.modules['nagaagent_core.vendors.pil']
+from PIL import Image
 import asyncio
 
 # 尝试导入依赖包
