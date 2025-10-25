@@ -55,7 +55,11 @@ def is_uv_available() -> bool:
     """
     检查是否安装并在 PATH 中可用的 `uv` 工具
     """
-    return shutil.which("uv") is not None
+    proc = subprocess.run(["uv", "-V"], capture_output=True, text=True)
+    out = (proc.stdout or proc.stderr).strip()
+    if out:
+        return True
+    return False
 
 if __name__ == "__main__":
     print("开始进行初始化")
