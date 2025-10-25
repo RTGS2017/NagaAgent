@@ -163,6 +163,11 @@ python main.py --quick-check
 
 欢迎提交Issue和Pull Request！
 
+### 构建
+```bash
+python build.py
+```
+
 <div align="center">
 
 ---
