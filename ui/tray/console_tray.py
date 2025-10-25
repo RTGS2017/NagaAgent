@@ -25,6 +25,8 @@ else:
     except ImportError:
         plistlib = None
         shutil = None
+    # 在非Windows平台上，winreg模块不可用
+    winreg = None
 
 
 class ConsoleTrayManager(QObject):
@@ -313,21 +315,26 @@ class ConsoleTrayManager(QObject):
     
     def _enable_auto_start_windows(self):
         """Windows平台启用自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            print("Windows自启动功能仅在Windows平台上可用")
+            self.auto_start_action.setChecked(False)
+            return
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0, winreg.KEY_SET_VALUE
             )
-            
+
             # 获取启动命令
             command = self._get_startup_command()
-            
+
             winreg.SetValueEx(key, "NagaAgent4.0", 0, winreg.REG_SZ, command)
             winreg.CloseKey(key)
             self.is_auto_start = True
             print("自启动已启用")
-            
+
         except Exception as e:
             print(f"启用自启动失败: {e}")
             self.auto_start_action.setChecked(False)
@@ -405,6 +412,11 @@ StartupNotify=false
     
     def _disable_auto_start_windows(self):
         """Windows平台禁用自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            print("Windows自启动功能仅在Windows平台上可用")
+            self.auto_start_action.setChecked(False)
+            return
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -415,7 +427,7 @@ StartupNotify=false
             winreg.CloseKey(key)
             self.is_auto_start = False
             print("自启动已禁用")
-            
+
         except Exception as e:
             print(f"禁用自启动失败: {e}")
             self.auto_start_action.setChecked(True)
@@ -463,6 +475,9 @@ StartupNotify=false
     
     def _check_auto_start_windows(self):
         """Windows平台检查自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            return False
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,

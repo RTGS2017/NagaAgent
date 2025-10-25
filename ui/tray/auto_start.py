@@ -4,9 +4,16 @@
 """
 import os
 import sys
-import winreg
+import platform
 import subprocess
 from pathlib import Path
+
+# 平台特定导入
+if platform.system() == 'Windows':
+    import winreg
+else:
+    # 在非Windows平台上，winreg模块不可用
+    winreg = None
 
 
 class AutoStartManager:
@@ -18,6 +25,9 @@ class AutoStartManager:
     
     def is_enabled(self):
         """检查是否已启用自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            return False
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -32,26 +42,34 @@ class AutoStartManager:
     
     def enable(self):
         """启用自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            print("自启动功能仅在Windows平台上可用")
+            return False
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 self.registry_key,
                 0, winreg.KEY_SET_VALUE
             )
-            
+
             # 获取启动命令
             command = self._get_startup_command()
-            
+
             winreg.SetValueEx(key, self.app_name, 0, winreg.REG_SZ, command)
             winreg.CloseKey(key)
             return True
-            
+
         except Exception as e:
             print(f"启用自启动失败: {e}")
             return False
     
     def disable(self):
         """禁用自启动"""
+        if platform.system() != 'Windows' or winreg is None:
+            print("自启动功能仅在Windows平台上可用")
+            return False
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -61,7 +79,7 @@ class AutoStartManager:
             winreg.DeleteValue(key, self.app_name)
             winreg.CloseKey(key)
             return True
-            
+
         except Exception as e:
             print(f"禁用自启动失败: {e}")
             return False
@@ -157,32 +175,45 @@ class StartupFolderManager:
     
     def _get_startup_folder(self):
         """获取启动文件夹路径"""
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
-            )
-            startup_folder = winreg.QueryValueEx(key, "Startup")[0]
-            winreg.CloseKey(key)
-            return startup_folder
-        except:
-            # 默认启动文件夹
+        if platform.system() == 'Windows' and winreg is not None:
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+                )
+                startup_folder = winreg.QueryValueEx(key, "Startup")[0]
+                winreg.CloseKey(key)
+                return startup_folder
+            except:
+                pass
+
+        # 默认启动文件夹（Windows）
+        if platform.system() == 'Windows':
             return os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+        elif platform.system() == 'Darwin':
+            # macOS启动文件夹
+            return os.path.expanduser("~/Library/LaunchAgents")
+        else:
+            # Linux启动文件夹
+            return os.path.expanduser("~/.config/autostart")
     
     def create_shortcut(self, target_path):
         """创建快捷方式"""
+        if platform.system() != 'Windows':
+            print(f"快捷方式创建功能仅在Windows平台上可用，在 {platform.system()} 上跳过")
+            return False
+
         try:
             import winshell
             from win32com.client import Dispatch
-            
+
             shell = Dispatch('WScript.Shell')
             shortcut = shell.CreateShortCut(self.shortcut_path)
             shortcut.Targetpath = target_path
             shortcut.WorkingDirectory = os.path.dirname(target_path)
             shortcut.save()
             return True
-            
+
         except Exception as e:
             print(f"创建快捷方式失败: {e}")
             return False

@@ -1,10 +1,17 @@
 # comprehensive_app_scanner.py # 综合应用扫描器（注册表+快捷方式）
-import winreg  # Windows注册表 #
+import platform  # 平台检测 #
 import os  # 操作系统 #
 import glob  # 文件匹配 #
 import asyncio  # 异步 #
 from typing import List, Dict, Optional  # 类型 #
 import json  # JSON #
+
+# 平台特定导入
+if platform.system() == 'Windows':
+    import winreg  # Windows注册表 #
+else:
+    # 在非Windows平台上，winreg模块不可用
+    winreg = None
 
 class ComprehensiveAppScanner:
     """综合应用扫描器：结合注册表扫描和快捷方式扫描 #"""
@@ -49,7 +56,12 @@ class ComprehensiveAppScanner:
     def _scan_registry_sync(self) -> List[Dict]:
         """同步扫描Windows注册表获取应用信息 #"""
         apps = []
-        
+
+        # 非Windows平台直接返回空列表
+        if platform.system() != 'Windows' or winreg is None:
+            print(f"注册表扫描功能仅在Windows平台上可用，当前平台: {platform.system()}")
+            return apps
+
         # 扫描HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths") as key:
@@ -65,7 +77,7 @@ class ComprehensiveAppScanner:
                                     if exe_path and os.path.exists(exe_path):
                                         # 获取应用名称（去掉.exe后缀）
                                         display_name = app_name[:-4] if app_name.endswith('.exe') else app_name
-                                        
+
                                         # 尝试从注册表获取更友好的显示名称
                                         try:
                                             friendly_name, _ = winreg.QueryValueEx(app_key, "FriendlyAppName")
@@ -73,7 +85,7 @@ class ComprehensiveAppScanner:
                                                 display_name = friendly_name
                                         except:
                                             pass
-                                        
+
                                         apps.append({
                                             "name": display_name,
                                             "path": exe_path,
@@ -87,7 +99,7 @@ class ComprehensiveAppScanner:
                         continue
         except Exception as e:
             print(f"扫描App Paths注册表失败: {e}")
-        
+
         # 扫描HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") as key:
@@ -101,7 +113,7 @@ class ComprehensiveAppScanner:
                                 display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
                                 # 获取安装位置
                                 install_location, _ = winreg.QueryValueEx(subkey, "InstallLocation")
-                                
+
                                 if display_name and install_location:
                                     # 查找可执行文件
                                     exe_files = self._find_exe_files(install_location)
@@ -119,7 +131,7 @@ class ComprehensiveAppScanner:
                         continue
         except Exception as e:
             print(f"扫描Uninstall注册表失败: {e}")
-        
+
         # 扫描HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") as key:
@@ -133,7 +145,7 @@ class ComprehensiveAppScanner:
                                 display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
                                 # 获取安装位置
                                 install_location, _ = winreg.QueryValueEx(subkey, "InstallLocation")
-                                
+
                                 if display_name and install_location:
                                     # 查找可执行文件
                                     exe_files = self._find_exe_files(install_location)
@@ -151,7 +163,7 @@ class ComprehensiveAppScanner:
                         continue
         except Exception as e:
             print(f"扫描用户Uninstall注册表失败: {e}")
-        
+
         return apps
     
     async def _scan_shortcuts_async(self) -> List[Dict]:
