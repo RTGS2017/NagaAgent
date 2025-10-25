@@ -21,14 +21,10 @@ class NagaPortalClient:
 
     def _init_user_id_cache(self):  # 初始化用户ID缓存 #
         """项目启动时获取并缓存用户ID #"""
-        try:
-            from .portal_login_manager import get_user_id
-            self._cached_user_id = get_user_id()
-            self._user_id_initialized = True
-            # 静默处理，不打印调试信息 #
-        except Exception as e:
-            # 如果获取失败，不影响正常使用
-            pass
+        # 延迟初始化，避免循环导入死锁
+        # 在实际使用时再获取用户ID
+        self._cached_user_id = None
+        self._user_id_initialized = False
 
     async def _ensure_client(self):  # 确保客户端 #
         if self._client is None:  # 未创建则创建 #
@@ -163,7 +159,15 @@ class NagaPortalClient:
             self._client.cookies.update(self._saved_cookies)  # 更新cookie #
 
     def get_cached_user_id(self) -> Optional[int]:  # 获取缓存的用户ID #
-        """获取项目启动时缓存的用户ID #"""
+        """获取缓存的用户ID，延迟初始化避免循环导入 #"""
+        if not self._user_id_initialized:
+            try:
+                from .portal_login_manager import get_user_id
+                self._cached_user_id = get_user_id()
+                self._user_id_initialized = True
+            except Exception as e:
+                # 如果获取失败，不影响正常使用
+                pass
         return self._cached_user_id
 
     async def recharge(self, amount: str, payment_type: str = "wxpay") -> Dict[str, Any]:  # 额度充值(长期缓存版) #
