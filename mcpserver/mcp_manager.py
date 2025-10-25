@@ -352,12 +352,12 @@ class MCPManager:
 
     async def unified_call(self, service_name: str, tool_name: str, args: dict):
         """简化的统一调用接口 - 只支持MCP服务
-        
+
         Args:
             service_name: 服务名称
             tool_name: 工具名称
             args: 工具参数
-            
+
         Returns:
             调用结果
         """
@@ -366,30 +366,32 @@ class MCPManager:
             from mcpserver.mcp_registry import MCP_REGISTRY # 延迟导入
             if service_name in MCP_REGISTRY:
                 agent = MCP_REGISTRY[service_name]
-                if hasattr(agent, tool_name):
-                    method = getattr(agent, tool_name)
-                    if callable(method):
-                        # 过滤掉元数据字段，只保留实际参数
-                        filtered_args = {k: v for k, v in args.items() 
-                                       if k not in ['tool_name', 'service_name', 'agentType']}
-                        
-                        logger.info(f"MCP调用: {service_name}.{tool_name} with filtered_args: {filtered_args}")
-                        
-                        # 调用方法
-                        if asyncio.iscoroutinefunction(method):
-                            result = await method(**filtered_args)
-                        else:
-                            result = method(**filtered_args)
-                        
-                        logger.info(f"MCP调用结果: {result}")
-                        return result
+
+                # 对于MCP类型的agent，统一使用handle_handoff方法
+                if hasattr(agent, 'handle_handoff'):
+                    # 构建handoff请求数据
+                    handoff_data = {
+                        "tool_name": tool_name,
+                        **args
+                    }
+
+                    logger.info(f"MCP调用: {service_name}.{tool_name} with args: {args}")
+
+                    # 调用handle_handoff方法
+                    if asyncio.iscoroutinefunction(agent.handle_handoff):
+                        result = await agent.handle_handoff(handoff_data)
+                    else:
+                        result = agent.handle_handoff(handoff_data)
+
+                    logger.info(f"MCP调用结果: {result}")
+                    return result
                 else:
-                    logger.error(f"MCP服务 {service_name} 没有工具 {tool_name}")
-                    return f"工具 {tool_name} 不存在于服务 {service_name}"
+                    logger.error(f"MCP服务 {service_name} 没有handle_handoff方法")
+                    return f"服务 {service_name} 不支持标准MCP调用"
             else:
                 logger.error(f"MCP服务 {service_name} 未注册")
                 return f"服务 {service_name} 未注册"
-            
+
         except Exception as e:
             logger.error(f"MCP调用失败 {service_name}.{tool_name}: {str(e)}")
             return f"调用失败: {str(e)}"
