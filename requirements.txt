@@ -14,3 +14,4 @@ json5
 # If you need to pin extra versions locally, append them below.
 markdown
 pyneo
+Pillow
