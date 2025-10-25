@@ -213,9 +213,6 @@ async def chat(request: ChatRequest):
         # 获取或创建会话ID
         session_id = message_manager.create_session(request.session_id)
         
-        # 并行触发后台意图分析 - 在对话开始时就分析用户意图
-        _trigger_background_analysis(session_id=session_id)
-        
         # 构建系统提示词（只使用对话风格提示词）
         system_prompt = get_prompt("conversation_style_prompt")
         
@@ -233,6 +230,9 @@ async def chat(request: ChatRequest):
         # 处理完成
         # 统一保存对话历史与日志
         _save_conversation_and_logs(session_id, request.message, response_text)
+
+        # 在用户消息保存到历史后触发后台意图分析
+        _trigger_background_analysis(session_id=session_id)
 
         return ChatResponse(
             response=extract_message(response_text) if response_text else response_text,
@@ -260,8 +260,7 @@ async def chat_stream(request: ChatRequest):
             # 发送会话ID信息
             yield f"data: session_id: {session_id}\n\n"
             
-            # 并行触发后台意图分析 - 在流式响应开始时就分析用户意图
-            _trigger_background_analysis(session_id)
+            # 注意：这里不触发后台分析，将在对话保存后触发
             
             # 构建系统提示词（只使用对话风格提示词）
             system_prompt = get_prompt("conversation_style_prompt")
@@ -415,6 +414,9 @@ async def chat_stream(request: ChatRequest):
             
             # 统一保存对话历史与日志
             _save_conversation_and_logs(session_id, request.message, complete_response)
+
+            # 在用户消息保存到历史后触发后台意图分析
+            _trigger_background_analysis(session_id)
 
             yield "data: [DONE]\n\n"
             
@@ -648,7 +650,7 @@ async def _trigger_chat_stream(session_id: str, response_text: str):
         }
         
         # 调用现有的流式对话接口
-        api_url = f"http://localhost:8001/chat/stream"
+        api_url = f"http://localhost:8000/chat/stream"
         
         async with httpx.AsyncClient() as client:
             async with client.stream("POST", api_url, json=chat_request) as response:
