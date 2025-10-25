@@ -59,7 +59,7 @@ class SystemChecker:
             "matplotlib",
             "markdown",
             "json5",
-            "charseDt_normalizer",
+            "charset_normalizer",
             "pyneo"
         ]
 
