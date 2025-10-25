@@ -25,6 +25,7 @@ class SimpleHttpClient(QThread):
         self.url = url
         self.payload = payload
         self._cancelled = False
+        self.last_session_id = None  # 保存从服务器返回的会话ID
         
     def cancel(self):
         """取消请求"""
@@ -71,7 +72,9 @@ class SimpleHttpClient(QThread):
                             if data_str == '[DONE]':
                                 break
                             elif data_str.startswith('session_id: '):
-                                continue  # 忽略会话ID
+                                # 保存会话ID
+                                self.last_session_id = data_str[len('session_id: '):].strip()
+                                continue
                             elif data_str.startswith('audio_url: '):
                                 continue  # 忽略音频URL，由apiserver处理
                             else:
@@ -111,6 +114,7 @@ class SimpleBatchClient(QThread):
         self.url = url
         self.payload = payload
         self._cancelled = False
+        self.last_session_id = None  # 保存从服务器返回的会话ID
         
     def cancel(self):
         """取消请求"""
@@ -136,6 +140,8 @@ class SimpleBatchClient(QThread):
             try:
                 result = response.json()
                 response_text = result.get("response", "")
+                # 保存会话ID
+                self.last_session_id = result.get("session_id")
             except:
                 response_text = response.text
                 

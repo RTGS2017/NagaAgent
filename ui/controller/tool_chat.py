@@ -198,7 +198,12 @@ class ChatTool(QObject):
     # 保留必要的工具方法（未过度拆分）
     def _build_request_data(self, user_input, stream, use_self_game):
         """构建请求数据（复用逻辑）"""
-        data = {"message": user_input, "stream": stream, "use_self_game": use_self_game}
+        data = {
+            "message": user_input,
+            "stream": stream,
+            "use_self_game": use_self_game,
+            "session_id": self._get_current_session_id()
+        }
         from system.config import config as _cfg
         if _cfg.system.voice_enabled and _cfg.voice_realtime.voice_mode in ["hybrid", "end2end"]:
             data["return_audio"] = True
@@ -519,12 +524,83 @@ class ChatTool(QObject):
                 logger.info(f"[UI] 直接显示完整AI回复")
                 self.add_ai_message(ai_response)
                 logger.info(f"[UI] AI回复已直接添加到聊天界面")
+
+                # 保存对话历史到API服务器
+                self._save_tool_conversation_to_history(ai_response)
             else:
                 logger.warning(f"[UI] 收到空的AI回复")
 
         except Exception as e:
             logger.error(f"[UI] 处理工具完成后的AI回复失败: {e}")
             self.add_system_message(f"❌ 显示工具结果失败: {str(e)}")
+
+    def _save_tool_conversation_to_history(self, ai_response: str):
+        """保存工具对话历史到API服务器"""
+        try:
+            import httpx
+            import asyncio
+
+            # 获取当前会话ID
+            session_id = self._get_current_session_id()
+            if not session_id:
+                logger.warning("[UI] 无法获取会话ID，跳过历史记录保存")
+                return
+
+            # 构建保存请求
+            save_data = {
+                "session_id": session_id,
+                "user_message": "[工具执行结果]",  # 占位用户消息
+                "assistant_response": ai_response
+            }
+
+            api_url = f"http://{config.api_server.host}:{config.api_server.port}/save_tool_conversation"
+
+            # 异步发送保存请求
+            async def _save_async():
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.post(api_url, json=save_data)
+                    if response.status_code == 200:
+                        logger.info(f"[UI] 工具对话历史已保存到API服务器")
+                    else:
+                        logger.error(f"[UI] 保存工具对话历史失败: {response.status_code}")
+
+            # 在事件循环中运行异步任务
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(_save_async())
+            else:
+                loop.run_until_complete(_save_async())
+
+        except Exception as e:
+            logger.error(f"[UI] 保存工具对话历史失败: {e}")
+
+    def _get_current_session_id(self) -> str:
+        """获取当前会话ID"""
+        try:
+            # 从窗口对象获取会话ID
+            if hasattr(self.window, 'session_id') and self.window.session_id:
+                return self.window.session_id
+
+            # 如果窗口没有会话ID，尝试从HTTP客户端响应中获取
+            if hasattr(self, 'http_client') and self.http_client:
+                # 检查HTTP客户端是否有会话ID
+                if hasattr(self.http_client, 'last_session_id') and self.http_client.last_session_id:
+                    # 保存到窗口对象以便后续使用
+                    self.window.session_id = self.http_client.last_session_id
+                    return self.http_client.last_session_id
+
+            # 如果都没有，生成一个新的会话ID
+            import uuid
+            new_session_id = str(uuid.uuid4())
+            # 保存到窗口对象
+            self.window.session_id = new_session_id
+            return new_session_id
+
+        except Exception as e:
+            logger.warning(f"[UI] 获取会话ID失败: {e}")
+            # 生成一个默认会话ID
+            import uuid
+            return str(uuid.uuid4())
 
 # 工具执行结果已通过LLM总结并保存到对话历史中
 # UI可以通过查询历史获取工具执行结果

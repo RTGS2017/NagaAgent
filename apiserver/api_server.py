@@ -631,9 +631,13 @@ async def tool_result_callback(payload: Dict[str, Any]):
             logger.error(f"[工具回调] 调用LLM服务失败: {e}")
             response_text = f"处理工具结果时出错: {str(e)}"
 
-        # 保存AI回复到历史
+        # 只保存AI回复到历史记录（用户消息已在正常对话流程中保存）
         message_manager.add_message(session_id, "assistant", response_text)
         logger.info(f"[工具回调] AI回复已保存到历史")
+
+        # 保存对话日志到文件
+        message_manager.save_conversation_log(original_user_message, response_text, dev_mode=False)
+        logger.info(f"[工具回调] 对话日志已保存")
 
         # 通过UI通知接口将AI回复发送给UI
         logger.info(f"[工具回调] 开始发送AI回复到UI...")
@@ -689,6 +693,40 @@ async def tool_result(payload: Dict[str, Any]):
     except Exception as e:
         logger.error(f"处理工具结果失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
+
+
+@app.post("/save_tool_conversation")
+async def save_tool_conversation(payload: Dict[str, Any]):
+    """保存工具对话历史"""
+    try:
+        session_id = payload.get("session_id")
+        user_message = payload.get("user_message", "")
+        assistant_response = payload.get("assistant_response", "")
+
+        if not session_id:
+            raise HTTPException(400, "缺少session_id")
+
+        logger.info(f"[保存工具对话] 开始保存工具对话历史，会话: {session_id}")
+
+        # 保存用户消息（工具执行结果）
+        if user_message:
+            message_manager.add_message(session_id, "user", user_message)
+
+        # 保存AI回复
+        if assistant_response:
+            message_manager.add_message(session_id, "assistant", assistant_response)
+
+        logger.info(f"[保存工具对话] 工具对话历史已保存，会话: {session_id}")
+
+        return {
+            "success": True,
+            "message": "工具对话历史已保存",
+            "session_id": session_id
+        }
+
+    except Exception as e:
+        logger.error(f"[保存工具对话] 保存工具对话历史失败: {e}")
+        raise HTTPException(500, f"保存失败: {str(e)}")
 
 
 @app.post("/ui_notification")
