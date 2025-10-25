@@ -23,13 +23,16 @@ dependencies = [
 ]
 
 # 可选依赖组
-[project.optional-dependencies]
+[dependency-groups]
 #其余依赖组已经整合进入主依赖项
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.20.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
+]
+build = [
+    "pyinstaller"
 ]
 
 [build-system]
