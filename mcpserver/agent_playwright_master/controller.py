@@ -1,4 +1,4 @@
-from nagaagent_core.vendors.playwright.async_api import async_playwright, Page
+from playwright.async_api import async_playwright, Page
 import asyncio, re, json
 from typing import Any, Dict, List
 from system.config import config  # 使用新的配置系统
