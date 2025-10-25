@@ -551,86 +551,116 @@ async def tool_notification(payload: Dict[str, Any]):
     """接收工具调用状态通知，只显示工具调用状态，不显示结果"""
     try:
         session_id = payload.get("session_id")
-        tool_name = payload.get("tool_name", "未知工具")
-        service_name = payload.get("service_name", "未知服务")
-        status = payload.get("status", "starting")
-        message = payload.get("message", f"🔧 正在执行工具: {tool_name}")
-        
+        tool_calls = payload.get("tool_calls", [])
+        message = payload.get("message", "")
+
         if not session_id:
             raise HTTPException(400, "缺少session_id")
-        
+
         # 记录工具调用状态（不处理结果，结果由tool_result_callback处理）
-        logger.info(f"工具调用状态: {tool_name} ({service_name}) - {status}")
-        
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("tool_name", "未知工具")
+            service_name = tool_call.get("service_name", "未知服务")
+            status = tool_call.get("status", "starting")
+            logger.info(f"工具调用状态: {tool_name} ({service_name}) - {status}")
+
         # 这里可以添加WebSocket通知UI的逻辑，让UI显示工具调用状态
         # 目前先记录日志，UI可以通过其他方式获取工具调用状态
-        
+
         return {
             "success": True,
             "message": "工具调用状态通知已接收",
-            "tool_name": tool_name,
-            "service_name": service_name,
-            "status": status,
+            "tool_calls": tool_calls,
             "display_message": message
         }
-        
+
     except Exception as e:
         logger.error(f"工具调用通知处理失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
 
 @app.post("/tool_result_callback")
 async def tool_result_callback(payload: Dict[str, Any]):
-    """接收MCP工具执行结果回调，通过普通对话流程返回给UI"""
+    """接收MCP工具执行结果回调，让主AI基于原始对话和工具结果重新生成回复"""
     try:
         session_id = payload.get("session_id")
         task_id = payload.get("task_id")
         result = payload.get("result", {})
         success = payload.get("success", False)
-        
+
         if not session_id:
             raise HTTPException(400, "缺少session_id")
-        
-        # 构建工具结果消息
-        if success and result:
-            tool_result_message = f"工具执行完成：{result.get('result', '执行成功')}"
-        else:
-            error_msg = result.get('error', '未知错误')
-            tool_result_message = f"工具执行失败：{error_msg}"
-        
+
+        # 获取工具执行结果
+        tool_result = result.get('result', '执行成功') if success else result.get('error', '未知错误')
+
+        # 获取原始对话的最后一条用户消息（触发工具调用的消息）
+        session_messages = message_manager.get_messages(session_id)
+        original_user_message = ""
+        for msg in reversed(session_messages):
+            if msg.get('role') == 'user':
+                original_user_message = msg.get('content', '')
+                break
+
+        # 构建包含工具结果的用户消息
+        enhanced_message = f"{original_user_message}\n\n[工具执行结果]: {tool_result}"
+
         # 构建对话风格提示词和消息
         system_prompt = get_prompt("conversation_style_prompt")
         messages = message_manager.build_conversation_messages(
             session_id=session_id,
             system_prompt=system_prompt,
-            current_message=tool_result_message
+            current_message=enhanced_message
         )
-        
-        # 使用LLM服务进行总结
+
+        # 使用LLM服务基于原始对话和工具结果重新生成回复
         try:
             llm_service = get_llm_service()
             response_text = await llm_service.chat_with_context(messages, temperature=0.7)
         except Exception as e:
             logger.error(f"调用LLM服务失败: {e}")
             response_text = f"处理工具结果时出错: {str(e)}"
-        
-        # 保存到历史
-        message_manager.add_message(session_id, "user", tool_result_message)
+
+        # 保存AI回复到历史
         message_manager.add_message(session_id, "assistant", response_text)
-        
-        # 通过普通对话流程返回给UI（包括TTS）
-        # 直接调用现有的流式对话接口，复用完整的TTS和UI响应逻辑
+
+        # 通过流式对话接口将AI回复发送给UI
         await _trigger_chat_stream(session_id, response_text)
-        
+
         return {
             "success": True,
-            "message": "工具结果已通过LLM总结并返回给UI",
+            "message": "工具结果已通过主AI处理并返回给UI",
             "response": response_text,
             "task_id": task_id,
             "session_id": session_id
         }
-        
+
     except Exception as e:
         logger.error(f"工具结果回调处理失败: {e}")
+        raise HTTPException(500, f"处理失败: {str(e)}")
+
+@app.post("/tool_result")
+async def tool_result(payload: Dict[str, Any]):
+    """接收工具执行结果并显示在UI上"""
+    try:
+        session_id = payload.get("session_id")
+        result = payload.get("result", "")
+
+        if not session_id:
+            raise HTTPException(400, "缺少session_id")
+
+        # 这里可以添加UI显示工具结果的逻辑
+        # 目前先记录日志
+        logger.info(f"工具执行结果: {result}")
+
+        return {
+            "success": True,
+            "message": "工具结果已接收",
+            "result": result,
+            "session_id": session_id
+        }
+
+    except Exception as e:
+        logger.error(f"处理工具结果失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
 
 async def _trigger_chat_stream(session_id: str, response_text: str):
@@ -638,20 +668,20 @@ async def _trigger_chat_stream(session_id: str, response_text: str):
     try:
         # 直接调用现有的流式对话接口，复用完整的TTS和UI响应逻辑
         import httpx
-        
-        # 构建请求数据
+
+        # 构建请求数据 - 使用AI回复作为消息内容
         chat_request = {
-            "message": f"工具执行结果：{response_text}",
+            "message": f"工具执行结果处理完成：{response_text}",
             "stream": True,
             "session_id": session_id,
             "use_self_game": False,
             "disable_tts": False,
             "return_audio": False
         }
-        
+
         # 调用现有的流式对话接口
         api_url = f"http://localhost:8000/chat/stream"
-        
+
         async with httpx.AsyncClient() as client:
             async with client.stream("POST", api_url, json=chat_request) as response:
                 if response.status_code == 200:
@@ -661,11 +691,11 @@ async def _trigger_chat_stream(session_id: str, response_text: str):
                             # 这里可以进一步处理流式响应
                             # 或者直接让UI处理流式响应
                             pass
-                    
-                    logger.info(f"工具结果已通过流式对话接口发送给UI: {session_id}")
+
+                    logger.info(f"AI回复已通过流式对话接口发送给UI: {session_id}")
                 else:
                     logger.error(f"调用流式对话接口失败: {response.status_code}")
-        
+
     except Exception as e:
         logger.error(f"触发聊天流式响应失败: {e}")
 

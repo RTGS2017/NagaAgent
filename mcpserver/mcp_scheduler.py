@@ -155,7 +155,7 @@ class MCPScheduler:
                 callback_url = task.callback_url
                 if not callback_url.startswith('http'):
                     # 如果是相对路径，构建完整URL
-                    callback_url = f"http://localhost:8001/tool_result_callback"
+                    callback_url = f"http://localhost:8000/tool_result_callback"
                 
                 async with session.post(callback_url, json=payload) as response:
                     if response.status == 200:

@@ -74,6 +74,33 @@
 }
 ```
 
+输入对话："帮我查一下北京的天气和今天的新闻"
+
+期望JSON输出：
+```json
+{
+  "tools": [
+    {
+      "agentType": "mcp",
+      "service_name": "WeatherTimeAgent",
+      "tool_name": "today_weather",
+      "args": {
+        "city": "北京 北京",
+        "query": "今天天气"
+      }
+    },
+    {
+      "agentType": "mcp",
+      "service_name": "searxng搜索",
+      "tool_name": "网页搜索",
+      "args": {
+        "query": "今天的新闻"
+      }
+    }
+  ]
+}
+```
+
 【输入对话】
 {conversation}
 
@@ -84,4 +111,6 @@
 - 必须输出合法的JSON格式
 - 仅提取可以交给工具执行的任务，忽略闲聊
 - 工具参数必须完整、具体
+- 支持多个工具调用，如果用户请求涉及多个任务，可以在tools数组中添加多个工具对象
+- 如果用户请求涉及工具调用（如查询天气、搜索信息、处理文件等），必须识别并返回相应的工具调用
 - 如果没有发现可执行任务，输出空数组：{"tools": []}

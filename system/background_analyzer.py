@@ -57,9 +57,9 @@ class ConversationAnalyzer:
             if tools_summary:
                 available_tools = "\n".join(tools_summary)
                 # 将工具信息注入到对话分析提示词中
-                return get_prompt("conversation_analyzer_prompt", 
+                return get_prompt("conversation_analyzer_prompt",
                                 conversation=conversation,
-                                available_tools=f"\n\n【可用MCP工具】\n{available_tools}\n")
+                                available_tools=available_tools)
         except Exception as e:
             logger.debug(f"获取MCP工具信息失败: {e}")
         
@@ -125,9 +125,36 @@ class ConversationAnalyzer:
                     logger.info(f"[ConversationAnalyzer] LLM响应完成，响应长度: {len(text)}")
                     logger.info(f"[ConversationAnalyzer] LLM原始响应内容: {text}")
 
-                    # 尝试解析JSON
+                    # 尝试解析JSON - 处理可能包含代码块的情况
                     import json
-                    data = json.loads(text)
+                    import re
+
+                    # 尝试直接解析
+                    try:
+                        data = json.loads(text)
+                    except json.JSONDecodeError:
+                        # 如果直接解析失败，尝试提取JSON代码块
+                        json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
+                        if json_match:
+                            json_str = json_match.group(1)
+                            try:
+                                data = json.loads(json_str)
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"[ConversationAnalyzer] JSON代码块解析失败: {e}")
+                                return None
+                        else:
+                            # 如果没有代码块标记，尝试直接查找JSON对象
+                            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+                            if json_match:
+                                json_str = json_match.group(0)
+                                try:
+                                    data = json.loads(json_str)
+                                except json.JSONDecodeError as e:
+                                    logger.warning(f"[ConversationAnalyzer] JSON对象解析失败: {e}")
+                                    return None
+                            else:
+                                logger.warning(f"[ConversationAnalyzer] 未找到有效的JSON内容")
+                                return None
                     tools = data.get("tools", [])
 
                     # 转换格式
@@ -183,10 +210,38 @@ class ConversationAnalyzer:
 
             text = response.choices[0].message.content
             logger.info(f"[ConversationAnalyzer] JSON模式响应完成，响应长度: {len(text)}")
+            logger.info(f"[ConversationAnalyzer] JSON模式原始响应内容: {text}")
 
-            # 解析JSON
+            # 解析JSON - 处理可能包含代码块的情况
             import json
-            data = json.loads(text)
+            import re
+
+            # 尝试直接解析
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                # 如果直接解析失败，尝试提取JSON代码块
+                json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1)
+                    try:
+                        data = json.loads(json_str)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"[ConversationAnalyzer] JSON代码块解析失败: {e}")
+                        return None
+                else:
+                    # 如果没有代码块标记，尝试直接查找JSON对象
+                    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        try:
+                            data = json.loads(json_str)
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"[ConversationAnalyzer] JSON对象解析失败: {e}")
+                            return None
+                    else:
+                        logger.warning(f"[ConversationAnalyzer] 未找到有效的JSON内容")
+                        return None
             tools = data.get("tools", [])
 
             # 转换格式
@@ -238,32 +293,65 @@ class ConversationAnalyzer:
                     resp = future.result(timeout=30)  # 30秒超时
                     text = resp.content.strip()
                     logger.info(f"[ConversationAnalyzer] LLM响应完成，响应长度: {len(text)}")
+                    logger.info(f"[ConversationAnalyzer] 正则模式原始响应内容: {text}")
 
                     import re
+                    import json
                     tool_calls: List[Dict[str, Any]] = []
 
-                    # 查找JSON块
-                    json_blocks = re.findall(r'\{[\s\S]*?\}', text)
-                    logger.info(f"[ConversationAnalyzer] 找到 {len(json_blocks)} 个JSON块")
+                    # 第一步：检测并去除代码块，尝试使用json库直接解析
+                    processed_text = text
 
-                    for json_block in json_blocks:
-                        try:
-                            import json
-                            data = json.loads(json_block)
-                            tools = data.get("tools", [])
+                    # 检测是否有代码块格式
+                    code_block_match = re.search(r'```(?:json)?\s*(\{[\s\S]*\})\s*```', processed_text)
+                    if code_block_match:
+                        # 去除代码块，只保留JSON内容
+                        processed_text = code_block_match.group(1)
+                        logger.info(f"[ConversationAnalyzer] 检测到代码块，提取JSON内容")
 
-                            for tool in tools:
-                                tool_call = {
-                                    "agentType": tool.get("agentType"),
-                                    "service_name": tool.get("service_name"),
-                                    "tool_name": tool.get("tool_name")
-                                }
-                                # 合并args参数
-                                args = tool.get("args", {})
-                                tool_call.update(args)
-                                tool_calls.append(tool_call)
-                        except json.JSONDecodeError:
-                            continue
+                    # 尝试使用json库直接解析处理后的文本
+                    try:
+                        data = json.loads(processed_text)
+                        tools = data.get("tools", [])
+
+                        for tool in tools:
+                            tool_call = {
+                                "agentType": tool.get("agentType"),
+                                "service_name": tool.get("service_name"),
+                                "tool_name": tool.get("tool_name")
+                            }
+                            # 合并args参数
+                            args = tool.get("args", {})
+                            tool_call.update(args)
+                            tool_calls.append(tool_call)
+
+                        logger.info(f"[ConversationAnalyzer] JSON库解析成功，发现 {len(tool_calls)} 个工具调用")
+
+                    except json.JSONDecodeError:
+                        # 第二步：如果json库解析失败，使用正则表达式再次尝试
+                        logger.info("[ConversationAnalyzer] JSON库解析失败，使用正则表达式解析")
+
+                        # 查找所有JSON块
+                        json_blocks = re.findall(r'\{[\s\S]*?\}', text)
+                        logger.info(f"[ConversationAnalyzer] 找到 {len(json_blocks)} 个JSON块")
+
+                        for json_block in json_blocks:
+                            try:
+                                data = json.loads(json_block)
+                                tools = data.get("tools", [])
+
+                                for tool in tools:
+                                    tool_call = {
+                                        "agentType": tool.get("agentType"),
+                                        "service_name": tool.get("service_name"),
+                                        "tool_name": tool.get("tool_name")
+                                    }
+                                    # 合并args参数
+                                    args = tool.get("args", {})
+                                    tool_call.update(args)
+                                    tool_calls.append(tool_call)
+                            except json.JSONDecodeError:
+                                continue
 
                     logger.info(f"[ConversationAnalyzer] 正则解析成功，发现 {len(tool_calls)} 个工具调用")
                     return {
