@@ -118,10 +118,21 @@ async def analyze_and_execute(payload: Dict[str, Any]):
     session_id = (payload or {}).get("session_id")
     
     try:
-        # 意图分析
-        analysis = await Modules.analyzer.analyze_intent_async(messages, session_id or "default")
-        tasks = analysis.get("tasks", []) if isinstance(analysis, dict) else []
-        
+        # 直接执行电脑控制任务，不进行意图分析
+        # 意图分析已在API服务器中完成，这里只负责执行具体的Agent任务
+
+        # 从消息中提取任务指令
+        tasks = []
+        for msg in messages:
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if "执行Agent任务:" in content:
+                    # 提取任务指令
+                    instruction = content.replace("执行Agent任务:", "").strip()
+                    tasks.append({
+                        "instruction": instruction
+                    })
+
         if not tasks:
             return {
                 "success": True,
@@ -130,15 +141,15 @@ async def analyze_and_execute(payload: Dict[str, Any]):
                 "accepted_at": _now_iso(),
                 "session_id": session_id
             }
-        
+
         logger.info(f"会话 {session_id} 发现 {len(tasks)} 个电脑控制任务")
-        
+
         # 处理每个任务
         results = []
         for task_instruction in tasks:
             result = await _process_computer_control_task(task_instruction, session_id)
             results.append(result)
-        
+
         return {
             "success": True,
             "status": "completed",

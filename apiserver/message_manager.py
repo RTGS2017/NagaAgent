@@ -49,6 +49,8 @@ class MessageManager:
     
     def __init__(self):
         self.sessions: Dict[str, Dict] = {}
+        # 分析状态跟踪，防止重复执行
+        self.analysis_in_progress: Dict[str, bool] = {}
         # 从配置文件读取最大历史轮数，默认为10轮
         try:
             from system.config import config
@@ -566,19 +568,39 @@ class MessageManager:
     def trigger_background_analysis(self, session_id: str):
         """统一触发后台意图分析 - 整合重复逻辑"""
         try:
+            # 检查是否已经有分析在进行中
+            if self.analysis_in_progress.get(session_id):
+                logger.info(f"[博弈论] 会话 {session_id} 已有意图分析在进行中，跳过重复触发")
+                return
+
+            # 标记分析开始
+            self.analysis_in_progress[session_id] = True
+
             import asyncio
             from system.background_analyzer import get_background_analyzer
             from system.config import config
             background_analyzer = get_background_analyzer()
-            
+
             # 根据配置获取意图分析轮数，默认3轮
             intent_rounds = getattr(config.api, 'intent_analysis_rounds', 3)
             max_messages = intent_rounds * 2  # 每轮包含用户和助手各一条消息
-            
+
             recent_messages = self.get_recent_messages(session_id, count=max_messages)
             logger.info(f"[博弈论] 分析最近 {intent_rounds} 轮对话，共 {len(recent_messages)} 条消息")
-            asyncio.create_task(background_analyzer.analyze_intent_async(recent_messages, session_id))
+
+            # 异步执行分析任务
+            async def _execute_analysis():
+                try:
+                    await background_analyzer.analyze_intent_async(recent_messages, session_id)
+                finally:
+                    # 无论成功与否，都清除分析状态
+                    self.analysis_in_progress[session_id] = False
+                    logger.info(f"[博弈论] 会话 {session_id} 意图分析完成，状态已清除")
+
+            asyncio.create_task(_execute_analysis())
         except Exception as e:
+            # 发生异常时也要清除分析状态
+            self.analysis_in_progress[session_id] = False
             logger.error(f"后台意图分析触发失败: {e}")
     
     def get_all_sessions_api(self):

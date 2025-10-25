@@ -1,5 +1,5 @@
 ﻿# message_renderer.py # 独立的消息渲染器
-import sys, os;
+import sys, os, re;
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + '/..'))
 from typing import List
@@ -7,6 +7,41 @@ from nagaagent_core.vendors.PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, 
 from nagaagent_core.vendors.PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer  # 统一入口 #
 from nagaagent_core.vendors.PyQt5.QtGui import QFont  # 统一入口 #
 from system.config import config,logger
+
+# 简化的Markdown渲染函数
+def simple_markdown_to_html(text: str) -> str:
+    """将Markdown转换为简单的HTML格式"""
+    if not text:
+        return ""
+
+    # 处理标题
+    text = re.sub(r'^# (.*?)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
+    text = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', text, flags=re.MULTILINE)
+    text = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
+
+    # 处理粗体
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
+
+    # 处理斜体
+    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
+    text = re.sub(r'_(.*?)_', r'<i>\1</i>', text)
+
+    # 处理代码块 - 先处理多行代码块
+    text = re.sub(r'```(.*?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
+    # 处理行内代码
+    text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
+
+    # 处理列表 - 简化版本
+    text = re.sub(r'^\* (.*?)$', r'<li>\1</li>', text, flags=re.MULTILINE)
+
+    # 处理换行
+    text = text.replace('\n', '<br>')
+
+    return text
+
+# 标记Markdown组件不可用
+MarkdownLatexWidget = None
 
 # 使用统一配置系统
 BG_ALPHA = config.ui.bg_alpha
@@ -75,8 +110,15 @@ class MessageDialog(QFrame):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # 内容文本
-        self.content_label = QLabel(self.content)
+        # 使用简化的Markdown渲染
+        logger.info(f"[MessageDialog] 使用简化Markdown渲染，内容长度: {len(self.content)}")
+
+        # 将Markdown转换为HTML
+        html_content = simple_markdown_to_html(self.content)
+        logger.info(f"[MessageDialog] Markdown转换后HTML长度: {len(html_content)}")
+
+        # 使用QLabel显示HTML内容
+        self.content_label = QLabel(html_content)
         self.content_label.setWordWrap(True)  # 允许文本换行
         self.content_label.setTextFormat(Qt.RichText)  # 支持HTML格式
         self.content_label.setStyleSheet("""
@@ -101,12 +143,15 @@ class MessageDialog(QFrame):
     def update_content(self, new_content):
         """更新对话内容"""
         self.content = new_content
-        self.content_label.setText(new_content)
-        # 确保立即更新显示
+
+        # 使用简化的Markdown渲染更新内容
+        html_content = simple_markdown_to_html(new_content)
+        self.content_label.setText(html_content)
         self.content_label.setTextFormat(Qt.RichText)  # 确保HTML格式
         self.content_label.setWordWrap(True)
         # 强制重新计算大小
         self.content_label.adjustSize()
+
         self.adjustSize()
 
     def get_preferred_height(self):

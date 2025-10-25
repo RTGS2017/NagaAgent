@@ -4,9 +4,9 @@ import re
 import os
 import tempfile
 from pathlib import Path
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout, QApplication, QLabel, QSizePolicy
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import Qt, QUrl
+from nagaagent_core.vendors.PyQt5.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout, QApplication, QLabel, QSizePolicy
+from nagaagent_core.vendors.PyQt5.QtWebEngineWidgets import QWebEngineView
+from nagaagent_core.vendors.PyQt5.QtCore import Qt, QUrl
 from markdown import markdown
 
 
@@ -125,7 +125,7 @@ class MarkdownLatexWidget(QWidget):
                 pass
         event.accept()
 # 在你的主窗口代码里
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+from nagaagent_core.vendors.PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 
 
 class MainWindow(QMainWindow):
