@@ -147,7 +147,7 @@ config.json（配置文件）位置：_internal/config.json，也可以使用GUI
 
 def rename_and_zip_output():
     """重命名 dist/main 目录并快速归档（不压缩）"""
-    
+
     # 确定系统名称
     sys_map = {
         'Windows': 'Windows',
@@ -155,9 +155,12 @@ def rename_and_zip_output():
         'Darwin': 'Darwin'  # Darwin is the core of macOS
     }
     current_system = sys_map.get(platform.system(), 'Unknown')
-    
+
+    # 确定系统架构
+    arch = platform.machine()  # 直接使用原始机器架构名称
+
     source_dir = os.path.join('dist', 'main')
-    target_base_name = f'NagaAgent_{current_system}'
+    target_base_name = f'NagaAgent_{current_system}_{arch}'
     target_dir_path = os.path.join('dist', target_base_name)
     zip_file_path = f'{target_dir_path}.zip'
 
