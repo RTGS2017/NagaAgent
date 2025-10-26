@@ -16,3 +16,4 @@ markdown
 pyneo
 Pillow
 playwright
+paho_mqtt
