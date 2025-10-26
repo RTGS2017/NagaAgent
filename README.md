@@ -51,7 +51,7 @@ NagaAgent 是一个功能丰富的智能对话助手系统，具有以下特色�
 ```bash
 #Win11可直接通过以下命令安装Git
 winget install Git.Git
-#Linux
+#Linux（由于版本不同，有不同种安装方式，请移步安装页面）
 sudo apt-get install git
 #Mac
 brew install git
@@ -70,7 +70,7 @@ pip install uv
 ```bash
 git clone https://github.com/Xxiii8322766509/NagaAgent.git
 ```
-克隆完成后在NagaAgent根目录下打开cmd（推荐powershall）
+克隆完成后cd 到您NagaAgent目录下（推荐powershell运行）
 #### 1. 初始化项目
 ```bash
 # 使用 setup.py 自动初始化
@@ -79,7 +79,7 @@ python setup.py
 # 或使用 setup.sh (Linux/macOS)
 ./setup.sh
 
-# 或使用 setup.bat (Windows)
+# 或双击 setup.bat (Windows)
 setup.bat
 ```
 
@@ -202,3 +202,4 @@ python build.py
 **⭐ 如果这个项目对您有帮助，请考虑给我们一个 Star！**
 
 </div>
+
