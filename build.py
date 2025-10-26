@@ -4,6 +4,7 @@ import subprocess
 import sys
 import platform
 import glob
+import zipfile
 
 def user_confirmation():
     """提示清空配置，让用户确认是否继续"""
@@ -12,7 +13,7 @@ def user_confirmation():
     print("=========================================")
     response = input("请确认是否继续 (输入 'Y' 继续，或按 Enter/n 取消): ").strip().lower()
     
-    if response != 'y' and response != '':
+    if response != 'y':
         print("\n操作已取消。")
         sys.exit(0)
 
@@ -144,20 +145,21 @@ config.json（配置文件）位置：_internal/config.json，也可以使用GUI
         print(f"[警告] 写入 .venv 占位文件失败: {e}")
 
 def rename_and_zip_output():
-    """重命名 dist/main 目录并压缩"""
+    """重命名 dist/main 目录并快速归档（不压缩）"""
     
     # 确定系统名称
     sys_map = {
         'Windows': 'Windows',
         'Linux': 'Linux',
-        'Darwin': 'Darwin'
+        'Darwin': 'Darwin'  # Darwin is the core of macOS
     }
     current_system = sys_map.get(platform.system(), 'Unknown')
     
     source_dir = os.path.join('dist', 'main')
     target_base_name = f'NagaAgent_{current_system}'
     target_dir_path = os.path.join('dist', target_base_name)
-    
+    zip_file_path = f'{target_dir_path}.zip'
+
     if not os.path.isdir(source_dir):
         print(f"\n[错误] 找不到构建目录 {source_dir}。请检查 PyInstaller 是否成功运行。")
         sys.exit(1)
@@ -169,29 +171,25 @@ def rename_and_zip_output():
             shutil.rmtree(target_dir_path)
             print(f"    -> 已删除旧目录 {target_dir_path}。")
         
-        print(f"\n重命名 {source_dir} 为 {target_dir_path}...")
+        # 重命名
         os.rename(source_dir, target_dir_path)
-        print("    -> 重命名完成。")
+        print(f"    -> 重命名 {os.path.basename(source_dir)} 为 {os.path.basename(target_dir_path)} 完成。")
     except Exception as e:
         print(f"[错误] 重命名失败: {e}")
         sys.exit(1)
 
-    print(f"\n    -> 压缩 {target_dir_path} 为 {target_base_name}.zip...")
+    print(f"\n    -> 快速归档 {target_dir_path} 为 {os.path.basename(zip_file_path)}...")
     try:
-        # 使用 shutil.make_archive 进行压缩
-        # base_name: 压缩文件的目标路径和名称（不含扩展名）
-        # format: 压缩格式 ('zip')
-        # root_dir: 开始归档的根目录（这里是 'dist'）
-        # base_dir: 实际要归档的目录（在 root_dir 之下）
-        output_filename = shutil.make_archive(
-            base_name=target_dir_path,
-            format='zip',
-            root_dir='dist',
-            base_dir=target_base_name
-        )
-        print(f"    -> 压缩完成。文件位置: {output_filename}")
+        with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_STORED) as zipf:
+            for root, _, files in os.walk(target_dir_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # 添加文件到 zip，arcname 是在 zip 文件中的路径
+                    arcname = os.path.relpath(file_path, os.path.join(target_dir_path, '..'))
+                    zipf.write(file_path, arcname)
+        print(f"    -> 归档完成。文件位置: {zip_file_path}")
     except Exception as e:
-        print(f"[错误] 压缩失败: {e}")
+        print(f"[错误] 归档失败: {e}")
         sys.exit(1)
 
 def main():
