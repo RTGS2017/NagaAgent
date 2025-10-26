@@ -118,6 +118,7 @@ def create_instructions_and_venv_placeholder():
 config.json（配置文件）位置：_internal/config.json，也可以使用GUI进行配置填写
 错误请群里反应或前往https://github.com/69gg/NagaAgent/issues，不要前往官方仓库
 双击运行可执行文件即可启动程序
+环境检测错误直接输入y跳过即可，不影响使用
 """
     # .venv/说明.txt 内容
     placeholder_content = "占位"
