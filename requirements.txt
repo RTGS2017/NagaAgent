@@ -10,3 +10,5 @@ nagaagent-core>=1.0.9
 
 # All runtime dependencies have been migrated into nagaagent-core.
 # If you need to pin extra versions locally, append them below.
+simpleaudio
+pydub

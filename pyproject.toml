@@ -14,6 +14,8 @@ dependencies = [
     "pyqt5-sip==12.17.0",
     # 核心依赖 (已整合到nagaagent-core)
     "nagaagent-core>=1.0.9",
+    "simpleaudio",
+    "pydub"
 ]
 
 # 可选依赖组
