@@ -106,6 +106,39 @@ async def _process_computer_control_task(instruction: str, session_id: Optional[
             "instruction": instruction
         }
 
+async def _process_toolkit_call(service_name: str, tool_name: str, agent_call: Dict[str, Any]) -> Dict[str, Any]:
+    """处理工具包调用"""
+    try:
+        logger.info(f"开始处理工具包调用: {service_name}.{tool_name}")
+        
+        # 提取工具参数（排除已知的字段）
+        tool_params = {}
+        for key, value in agent_call.items():
+            if key not in ["agentType", "service_name", "tool_name", "task_type", "instruction", "parameters"]:
+                tool_params[key] = value
+        
+        # 调用工具包管理器
+        result = await toolkit_manager.call_tool(service_name, tool_name, tool_params)
+        
+        logger.info(f"工具包调用完成: {service_name}.{tool_name}")
+        return {
+            "success": True,
+            "result": result,
+            "task_type": "toolkit_call",
+            "service_name": service_name,
+            "tool_name": tool_name
+        }
+        
+    except Exception as e:
+        logger.error(f"工具包调用失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "task_type": "toolkit_call",
+            "service_name": service_name,
+            "tool_name": tool_name
+        }
+
 async def _execute_agent_tasks_async(agent_calls: List[Dict[str, Any]], session_id: str, 
                                    analysis_session_id: str, request_id: str, callback_url: Optional[str] = None):
     """异步执行Agent任务 - 应用与MCP服务器相同的会话管理逻辑"""
@@ -116,47 +149,89 @@ async def _execute_agent_tasks_async(agent_calls: List[Dict[str, Any]], session_
         results = []
         for i, agent_call in enumerate(agent_calls):
             try:
-                instruction = agent_call.get("instruction", "")
                 tool_name = agent_call.get("tool_name", "未知工具")
                 service_name = agent_call.get("service_name", "未知服务")
                 
-                logger.info(f"[异步执行] 执行任务 {i+1}/{len(agent_calls)}: {tool_name} - {instruction}")
+                logger.info(f"[异步执行] 执行任务 {i+1}/{len(agent_calls)}: {tool_name} (服务: {service_name})")
                 
                 # 添加任务步骤到调度器
                 await Modules.task_scheduler.add_task_step(request_id, TaskStep(
                     step_id=f"step_{i+1}",
                     task_id=request_id,
                     purpose=f"执行Agent任务: {tool_name}",
-                    content=instruction,
+                    content=str(agent_call),
                     output="",
                     analysis=None,
                     success=True
                 ))
                 
-                # 执行电脑控制任务
-                result = await _process_computer_control_task(instruction, session_id)
-                results.append({
-                    "agent_call": agent_call,
-                    "result": result,
-                    "step_index": i
-                })
-                
-                # 更新任务步骤结果
-                await Modules.task_scheduler.add_task_step(request_id, TaskStep(
-                    step_id=f"step_{i+1}_result",
-                    task_id=request_id,
-                    purpose=f"任务结果: {tool_name}",
-                    content=f"执行结果: {result.get('success', False)}",
-                    output=str(result.get('result', '')),
-                    analysis={"analysis": f"任务类型: {result.get('task_type', 'unknown')}, 工具: {tool_name}, 服务: {service_name}"},
-                    success=result.get('success', False),
-                    error=result.get('error')
-                ))
+                # 判断任务类型：电脑控制任务 vs 工具包调用
+                if "instruction" in agent_call and agent_call.get("task_type") == "computer_control":
+                    # 电脑控制任务
+                    instruction = agent_call.get("instruction", "")
+                    logger.info(f"[异步执行] 检测到电脑控制任务: {instruction}")
+                    
+                    result = await _process_computer_control_task(instruction, session_id)
+                    results.append({
+                        "agent_call": agent_call,
+                        "result": result,
+                        "step_index": i
+                    })
+                    
+                    # 更新任务步骤结果
+                    await Modules.task_scheduler.add_task_step(request_id, TaskStep(
+                        step_id=f"step_{i+1}_result",
+                        task_id=request_id,
+                        purpose=f"任务结果: {tool_name}",
+                        content=f"执行结果: {result.get('success', False)}",
+                        output=str(result.get('result', '')),
+                        analysis={"analysis": f"任务类型: 电脑控制, 工具: {tool_name}, 服务: {service_name}"},
+                        success=result.get('success', False),
+                        error=result.get('error')
+                    ))
+                    
+                elif "tool_name" in agent_call and "service_name" in agent_call:
+                    # 工具包调用
+                    logger.info(f"[异步执行] 检测到工具包调用: {service_name}.{tool_name}")
+                    
+                    result = await _process_toolkit_call(service_name, tool_name, agent_call)
+                    results.append({
+                        "agent_call": agent_call,
+                        "result": result,
+                        "step_index": i
+                    })
+                    
+                    # 更新任务步骤结果
+                    await Modules.task_scheduler.add_task_step(request_id, TaskStep(
+                        step_id=f"step_{i+1}_result",
+                        task_id=request_id,
+                        purpose=f"任务结果: {tool_name}",
+                        content=f"执行结果: {result.get('success', False)}",
+                        output=str(result.get('result', '')),
+                        analysis={"analysis": f"任务类型: 工具包调用, 工具: {tool_name}, 服务: {service_name}"},
+                        success=result.get('success', False),
+                        error=result.get('error')
+                    ))
+                    
+                else:
+                    # 未知任务类型
+                    logger.warning(f"[异步执行] 未知的任务类型: {agent_call}")
+                    result = {
+                        "success": False,
+                        "error": f"未知的任务类型: {agent_call}"
+                    }
+                    results.append({
+                        "agent_call": agent_call,
+                        "result": result,
+                        "step_index": i
+                    })
                 
                 logger.info(f"[异步执行] 任务 {i+1} 完成: {result.get('success', False)}")
                 
             except Exception as e:
                 logger.error(f"[异步执行] 任务 {i+1} 执行失败: {e}")
+                import traceback
+                logger.error(f"[异步执行] 详细错误信息: {traceback.format_exc()}")
                 results.append({
                     "agent_call": agent_call,
                     "result": {"success": False, "error": str(e)},
@@ -171,6 +246,8 @@ async def _execute_agent_tasks_async(agent_calls: List[Dict[str, Any]], session_
         
     except Exception as e:
         logger.error(f"[异步执行] Agent任务执行失败: {e}")
+        import traceback
+        logger.error(f"[异步执行] 详细错误信息: {traceback.format_exc()}")
         # 发送错误回调
         if callback_url:
             await _send_callback_notification(callback_url, request_id, session_id, analysis_session_id, [], str(e))
