@@ -79,20 +79,33 @@ class LLMService:
         """检查LLM服务是否可用"""
         return self.async_client is not None
     
-    async def chat_with_context(self, messages: List[Dict], temperature: float = 0.7) -> str:
-        """带上下文的聊天调用"""
+    async def chat_with_context(self, messages: List[Dict], temperature: float = 0.7, max_tokens: Optional[int] = None) -> str:
+        """带上下文的聊天调用
+
+        Args:
+            messages: 消息列表
+            temperature: 温度参数
+            max_tokens: 最大token数，如果为None则使用配置值（会自动限制在8192以内）
+        """
         if not self.async_client:
             self._initialize_client()
             if not self.async_client:
                 return f"LLM服务不可用: 客户端初始化失败"
-        
+
         try:
-            from openai._types import omit
+            # 确定max_tokens值，并限制在API允许范围内
+            if max_tokens is not None:
+                effective_max_tokens = min(max_tokens, 8192)
+            elif hasattr(config.api, 'max_tokens'):
+                effective_max_tokens = min(config.api.max_tokens, 8192)
+            else:
+                effective_max_tokens = 4096  # 默认值
+
             response = await self.async_client.chat.completions.create(
                 model=config.api.model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=config.api.max_tokens if hasattr(config.api,'max_tokens') else omit
+                max_tokens=effective_max_tokens
             )
             return response.choices[0].message.content
         except Exception as e:

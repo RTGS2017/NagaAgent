@@ -20,16 +20,19 @@ class ServerPortsConfig(BaseModel):
     """服务器端口配置 - 统一管理所有服务器端口"""
     # 主API服务器
     api_server: int = Field(default=8000, ge=1, le=65535, description="API服务器端口")
-    
+
     # 智能体服务器
     agent_server: int = Field(default=8001, ge=1, le=65535, description="智能体服务器端口")
-    
+
     # MCP工具服务器
     mcp_server: int = Field(default=8003, ge=1, le=65535, description="MCP工具服务器端口")
-    
+
+    # 记忆微服务器
+    memory_server: int = Field(default=8004, ge=1, le=65535, description="记忆微服务器端口")
+
     # TTS语音合成服务器
     tts_server: int = Field(default=5048, ge=1, le=65535, description="TTS语音合成服务器端口")
-    
+
     # ASR语音识别服务器
     asr_server: int = Field(default=5060, ge=1, le=65535, description="ASR语音识别服务器端口")
 
@@ -46,6 +49,7 @@ def get_all_server_ports() -> Dict[str, int]:
         "api_server": server_ports.api_server,
         "agent_server": server_ports.agent_server,
         "mcp_server": server_ports.mcp_server,
+        "memory_server": server_ports.memory_server,
         "tts_server": server_ports.tts_server,
         "asr_server": server_ports.asr_server,
     }
@@ -367,6 +371,27 @@ class OpenClawConfig(BaseModel):
     default_channel: str = Field(default="last", description="默认消息通道")
     enabled: bool = Field(default=False, description="是否启用 OpenClaw 集成")
 
+
+class EmbeddingConfig(BaseModel):
+    """嵌入模型配置 - 用于 RAG 向量检索"""
+    provider: str = Field(default="mock", description="嵌入服务提供者: openai, ai_infra, mock")
+    api_base: str = Field(default="https://api.openai.com/v1", description="嵌入服务 API 地址")
+    api_key: str = Field(default="", description="嵌入服务 API 密钥")
+    model: str = Field(default="text-embedding-ada-002", description="嵌入模型名称")
+    dimension: int = Field(default=1536, ge=64, le=4096, description="向量维度")
+    timeout: float = Field(default=30.0, ge=5.0, le=120.0, description="请求超时时间（秒）")
+    batch_size: int = Field(default=100, ge=1, le=2048, description="批量嵌入大小")
+
+
+class RAGConfig(BaseModel):
+    """RAG 检索增强生成配置"""
+    enabled: bool = Field(default=True, description="是否启用 RAG 服务")
+    storage_dir: str = Field(default="data/rag_vectors", description="向量存储目录")
+    chunk_size: int = Field(default=500, ge=100, le=2000, description="文本分块大小")
+    chunk_overlap: int = Field(default=50, ge=0, le=500, description="分块重叠字符数")
+    top_k: int = Field(default=5, ge=1, le=20, description="检索返回数量")
+    similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="相似度阈值")
+
 class SystemCheckConfig(BaseModel):
     """系统检测状态配置"""
     passed: bool = Field(default=False, description="系统检测是否通过")
@@ -517,6 +542,8 @@ class NagaConfig(BaseModel):
     naga_portal: NagaPortalConfig = Field(default_factory=NagaPortalConfig)
     online_search: OnlineSearchConfig = Field(default_factory=OnlineSearchConfig)
     openclaw: OpenClawConfig = Field(default_factory=OpenClawConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)  # 嵌入模型配置
+    rag: RAGConfig = Field(default_factory=RAGConfig)  # RAG 检索配置
     system_check: SystemCheckConfig = Field(default_factory=SystemCheckConfig)
     computer_control: ComputerControlConfig = Field(default_factory=ComputerControlConfig)
     window: QWidget = Field(default=None)

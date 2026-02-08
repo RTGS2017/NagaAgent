@@ -73,6 +73,58 @@ def _save_conversation_and_logs(session_id: str, user_message: str, assistant_re
 # 回调工厂类已移除 - 功能已整合到streaming_tool_extractor
 
 
+# 快速意图检测结果类型
+class QuickIntentResult:
+    """快速意图检测结果"""
+    def __init__(self, needs_tool: bool, tool_hint: str = "", acknowledgment: str = ""):
+        self.needs_tool = needs_tool
+        self.tool_hint = tool_hint
+        self.acknowledgment = acknowledgment
+
+
+async def quick_intent_detection(user_message: str) -> QuickIntentResult:
+    """
+    快速意图检测 - 判断用户消息是否需要工具调用
+    使用轻量级LLM调用快速判断，返回是否需要工具及应承语
+    """
+    try:
+        # 获取快速意图检测提示词
+        prompt = get_prompt("quick_intent_prompt", user_message=user_message)
+
+        # 使用LLM服务进行快速检测
+        llm_service = get_llm_service()
+
+        # 构建简单的消息结构
+        messages = [
+            {"role": "system", "content": "你是一个精确的意图检测器，只输出JSON格式结果。"},
+            {"role": "user", "content": prompt}
+        ]
+
+        # 使用较低温度确保稳定输出，限制max_tokens为256（快速检测只需要简短JSON）
+        response = await llm_service.chat_with_context(messages, temperature=0, max_tokens=256)
+
+        # 解析响应
+        import re
+        # 尝试提取JSON
+        json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            result_json = json.loads(json_match.group())
+            needs_tool = result_json.get("needs_tool", False)
+            if needs_tool:
+                return QuickIntentResult(
+                    needs_tool=True,
+                    tool_hint=result_json.get("tool_hint", ""),
+                    acknowledgment=result_json.get("acknowledgment", "好的，正在为您处理...")
+                )
+
+        # 默认不需要工具
+        return QuickIntentResult(needs_tool=False)
+
+    except Exception as e:
+        logger.warning(f"[快速意图检测] 检测失败，回退到普通对话: {e}")
+        return QuickIntentResult(needs_tool=False)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -216,6 +268,29 @@ async def chat(request: ChatRequest):
         # 获取或创建会话ID
         session_id = message_manager.create_session(request.session_id)
 
+        # ===== 快速意图检测：判断是否需要工具调用 =====
+        if not request.skip_intent_analysis:
+            intent_result = await quick_intent_detection(request.message)
+
+            if intent_result.needs_tool:
+                # 需要工具调用：返回应承语，异步触发后台分析
+                logger.info(f"[快速意图检测] 检测到工具调用需求: {intent_result.tool_hint}")
+
+                # 保存用户消息到历史（应承语暂不保存，等工具结果回调后再保存最终回复）
+                message_manager.add_message(session_id, "user", request.message)
+
+                # 异步触发后台意图分析（执行工具）
+                _trigger_background_analysis(session_id=session_id)
+
+                # 返回动态生成的应承语
+                return ChatResponse(
+                    response=intent_result.acknowledgment,
+                    session_id=session_id,
+                    status="success",
+                )
+
+        # ===== 不需要工具调用：走正常对话流程 =====
+
         # 构建系统提示词（只使用对话风格提示词）
         system_prompt = get_prompt("conversation_style_prompt")
 
@@ -232,9 +307,8 @@ async def chat(request: ChatRequest):
         # 统一保存对话历史与日志
         _save_conversation_and_logs(session_id, request.message, response_text)
 
-        # 在用户消息保存到历史后触发后台意图分析（除非明确跳过）
-        if not request.skip_intent_analysis:
-            _trigger_background_analysis(session_id=session_id)
+        # 注意：快速意图检测已经在前面判断过了，这里是不需要工具的纯对话
+        # 不再重复触发后台意图分析
 
         return ChatResponse(
             response=extract_message(response_text) if response_text else response_text,
