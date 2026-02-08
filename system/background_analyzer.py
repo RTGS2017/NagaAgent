@@ -516,12 +516,17 @@ class BackgroundAnalyzer:
 
             from system.config import get_server_port
 
+            total_calls = len(openclaw_calls)
+            success_count = 0
+            failure_count = 0
+
             for call in openclaw_calls:
                 task_type = call.get("task_type", "message")
                 message = call.get("message", "")
 
                 if not message:
                     logger.warning(f"[博弈论] OpenClaw任务缺少message字段，跳过: {call}")
+                    failure_count += 1
                     continue
 
                 async with httpx.AsyncClient(timeout=60.0) as client:
@@ -531,7 +536,7 @@ class BackgroundAnalyzer:
                         "message": message,
                         "session_key": call.get("session_key", f"naga_{session_id}"),
                         "name": "Naga",  # hook 名称标识
-                        "wake_mode": "now"
+                        "wake_mode": "now",
                     }
 
                     # 如果是定时任务或提醒，在消息中包含调度信息
@@ -541,17 +546,32 @@ class BackgroundAnalyzer:
                         payload["message"] = f"[提醒 在 {call.get('at')} 后] {message}"
 
                     response = await client.post(
-                        f"http://localhost:{get_server_port('agent_server')}/openclaw/send",
-                        json=payload
+                        f"http://localhost:{get_server_port('agent_server')}/openclaw/send", json=payload
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        logger.info(
-                            f"[博弈论] OpenClaw {task_type} 任务发送成功: {result.get('success', False)}"
-                        )
+                        logger.info(f"[博弈论] OpenClaw {task_type} 任务发送成功: {result.get('success', False)}")
+                        success_count += 1
                     else:
                         logger.error(f"[博弈论] OpenClaw任务发送失败: {response.status_code} - {response.text}")
+                        failure_count += 1
+
+            if total_calls > 0:
+                if failure_count == 0:
+                    await self._notify_ui_tool_status(
+                        session_id=session_id,
+                        message="OpenClaw 调度已提交",
+                        stage="executing",
+                        auto_hide_ms=8000,
+                    )
+                else:
+                    await self._notify_ui_tool_status(
+                        session_id=session_id,
+                        message=f"OpenClaw 调度失败 {failure_count}/{total_calls}",
+                        stage="executing",
+                        auto_hide_ms=12000,
+                    )
 
         except Exception as e:
             logger.error(f"[博弈论] 发送OpenClaw任务失败: {e}")
