@@ -217,9 +217,9 @@ class OpenClawClient:
         model: Optional[str] = None,
         wake_mode: str = "now",
         deliver: bool = False,
-        timeout_seconds: int = 120,
+        timeout_seconds: int = 1200,
         max_retries: int = 5,
-        retry_interval: float = 2.0,
+        retry_interval: float = 3.0,
         task_id: Optional[str] = None,
     ) -> OpenClawTask:
         """
@@ -525,9 +525,9 @@ class OpenClawClient:
     async def _poll_for_reply(
         self,
         session_key: str,
-        timeout_seconds: int = 120,
-        poll_interval: float = 5.0,
-        initial_delay: float = 3.0,
+        timeout_seconds: int = 1200,
+        poll_interval: float = 10.0,
+        initial_delay: float = 5.0,
     ) -> List[str]:
         """
         轮询 sessions_history 获取 Agent 回复
