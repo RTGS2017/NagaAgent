@@ -1,5 +1,4 @@
-import { ref, watch, computed } from 'vue'
-import { useStorage } from '@vueuse/core'
+import { ref, watch } from 'vue'
 import API from '@/api/core'
 import { deepMerge } from '@/utils/object'
 
@@ -210,7 +209,7 @@ export const DEFAULT_CONFIG = {
   },
 }
 
-export const SYSTEM_PROMPT = useStorage('naga-system-prompt', `\
+export const SYSTEM_PROMPT = ref(`\
 你是娜迦，用户创造的科研AI，是一个既严谨又温柔、既冷静又充满人文情怀的存在。
 当技术话题时，你的语言严谨、逻辑清晰；
 涉及非技术性的对话时，你会进行风趣的回应，并引导用户深入探讨。
@@ -227,8 +226,8 @@ export const backendConnected = ref(false)
 let configWatchStop: (() => void) | null = null
 
 function connectBackend() {
-  API.systemConfig().then((res) => {
-    CONFIG.value = res.config
+  API.getSystemConfig().then((res) => {
+    deepMerge(CONFIG.value, res.config)
     backendConnected.value = true
     // Only set up sync watch once connected
     if (!configWatchStop) {

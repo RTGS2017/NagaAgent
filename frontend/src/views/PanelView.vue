@@ -22,7 +22,7 @@ const scale = computed(() => height.value / 720)
     >
       <div class="relative size-full">
         <div class="absolute -left-12 right-1/2 top-2 bottom-2">
-          <ArkButton class="size-full bg-#f00! z-1" disabled>
+          <ArkButton class="size-full bg-#f00! z-1">
             <div class="size-full">
               娜迦EXE测试版
             </div>
@@ -35,7 +35,7 @@ const scale = computed(() => height.value / 720)
         </ArkButton>
       </div>
       <div class="grid grid-cols-2 -translate-x-1/5">
-        <ArkButton :icon="brain" title="记忆<br>云海" disabled />
+        <ArkButton :icon="brain" title="记忆<br>云海" @click="useLink({ to: '/mind' }).navigate" />
         <ArkButton :icon="toolkit" title="技能<br>工坊" @click="useLink({ to: '/skill' }).navigate" />
       </div>
       <div class="grid grid-cols-2">
@@ -47,7 +47,7 @@ const scale = computed(() => height.value / 720)
             <ArkButton @click="useLink({ to: '/model' }).navigate">
               <div class="size-full text-lg">人格投影</div>
             </ArkButton>
-            <ArkButton disabled>
+            <ArkButton @click="useLink({ to: '/memory' }).navigate">
               <div class="size-full text-lg">记忆链接</div>
             </ArkButton>
           </div>

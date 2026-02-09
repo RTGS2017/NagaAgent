@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MarketItem, McpStatus } from '@/api/core'
 import { Listbox } from 'primevue'
 import { ref } from 'vue'
 import API from '@/api/core'
@@ -8,10 +9,10 @@ interface Skill extends MarketItem {
   installFailed?: boolean
 }
 
-const skills = ref<MarketItem[]>([])
-const mcpStatus = ref<McpStatus | null>(null)
+const skills = ref<Skill[]>([])
+const mcpStatus = ref<McpStatus>()
 const mcpError = ref('')
-const installing = ref<string | null>(null)
+const installing = ref<string>()
 
 API.getMarketItems().then((res) => {
   skills.value = res.items ?? []
@@ -28,10 +29,12 @@ async function installItem(item: MarketItem) {
   try {
     await API.installMarketItem(item.id)
     item.installed = true
-  } catch (e: any) {
-    alert(`安装失败: ${e.message}`)
-  } finally {
-    installing.value = null
+  }
+  catch (error: any) {
+    alert(`安装失败: ${error.message}`)
+  }
+  finally {
+    installing.value = undefined
   }
 }
 </script>
@@ -45,27 +48,24 @@ async function installItem(item: MarketItem) {
 
       <!-- MCP Status -->
       <div class="text-white">
-        <div class="text-sm font-bold text-white/70 mb-2">
-          MCP 工具服务
-        </div>
         <div v-if="mcpError" class="text-red-400 text-xs">
           {{ mcpError }}
         </div>
         <div v-else-if="mcpStatus" class="grid grid-cols-4 gap-2">
-          <div class="box p-2 text-center">
-            <div class="text-xs text-white/40">状态</div>
+          <div class="box p-3 text-center">
+            <div class="text-xs text-white/80">状态</div>
             <div class="text-sm font-bold text-green-400">{{ mcpStatus.server }}</div>
           </div>
-          <div class="box p-2 text-center">
-            <div class="text-xs text-white/40">总任务</div>
+          <div class="box p-3 text-center">
+            <div class="text-xs text-white/80">总任务</div>
             <div class="text-sm font-bold">{{ mcpStatus.tasks.total }}</div>
           </div>
-          <div class="box p-2 text-center">
-            <div class="text-xs text-white/40">活跃</div>
+          <div class="box p-3 text-center">
+            <div class="text-xs text-white/80">活跃</div>
             <div class="text-sm font-bold text-blue-400">{{ mcpStatus.tasks.active }}</div>
           </div>
-          <div class="box p-2 text-center">
-            <div class="text-xs text-white/40">已完成</div>
+          <div class="box p-3 text-center">
+            <div class="text-xs text-white/80">已完成</div>
             <div class="text-sm font-bold">{{ mcpStatus.tasks.completed }}</div>
           </div>
         </div>
@@ -74,35 +74,36 @@ async function installItem(item: MarketItem) {
 
       <!-- Skill Market -->
       <div class="text-white flex-1 overflow-hidden flex flex-col">
-        <div class="text-sm font-bold text-white/70 mb-2">
-          技能仓库
-        </div>
         <div class="overflow-hidden flex-1">
           <Listbox
             :options="skills"
             option-label="title"
             class="size-full flex! flex-col"
             scroll-height="100%"
-            filter
+            filter :filter-fields="['title', 'description']"
           >
             <template #option="{ option }">
-              <div class="flex items-center justify-between w-full">
+              <div class="flex items-center justify-between w-full gap-4">
                 <div class="flex-1 min-w-0">
                   <div class="font-bold text-sm">{{ option.title }}</div>
                   <div class="text-xs op-50 truncate">{{ option.description }}</div>
                 </div>
-                <div class="ml-3 shrink-0">
+                <div>
                   <span v-if="option.installed" class="text-green-400 text-xs font-bold">已安装</span>
                   <button
                     v-else-if="installing === option.id"
                     class="px-2 py-1 bg-white/10 rounded text-xs op-50 cursor-wait"
                     disabled
-                  >安装中...</button>
+                  >
+                    安装中...
+                  </button>
                   <button
                     v-else
                     class="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-xs transition"
                     @click.stop="installItem(option)"
-                  >安装</button>
+                  >
+                    安装
+                  </button>
                 </div>
               </div>
             </template>

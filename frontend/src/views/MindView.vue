@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force'
-import { select as d3Select } from 'd3-selection'
+import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from 'd3-force'
 import { drag } from 'd3-drag'
+import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
+import { select as d3Select } from 'd3-selection'
 import { zoom } from 'd3-zoom'
-import type { Simulation, SimulationNodeDatum, SimulationLinkDatum } from 'd3-force'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import API from '@/api/core'
 import BoxContainer from '@/components/BoxContainer.vue'
 
@@ -27,13 +27,13 @@ interface GraphEdge extends SimulationLinkDatum<GraphNode> {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  '人物': '#FF6B6B',
-  '地点': '#4ECDC4',
-  '物品': '#45B7D1',
-  '事件': '#96CEB4',
-  '概念': '#FFEAA7',
-  '组织': '#DDA0DD',
-  '时间': '#87CEEB',
+  人物: '#FF6B6B',
+  地点: '#4ECDC4',
+  物品: '#45B7D1',
+  事件: '#96CEB4',
+  概念: '#FFEAA7',
+  组织: '#DDA0DD',
+  时间: '#87CEEB',
 }
 const DEFAULT_COLOR = '#A0A0A0'
 
@@ -68,7 +68,8 @@ function buildGraphData(quints: Quintuple[]) {
 }
 
 function renderGraph(quints: Quintuple[]) {
-  if (!svgRef.value || quints.length === 0) return
+  if (!svgRef.value || quints.length === 0)
+    return
 
   // Clean up previous
   if (simulation) {
@@ -78,7 +79,8 @@ function renderGraph(quints: Quintuple[]) {
   d3Select(svgRef.value).selectAll('*').remove()
 
   const container = svgRef.value.parentElement
-  if (!container) return
+  if (!container)
+    return
   const width = container.clientWidth
   const height = container.clientHeight
 
@@ -125,7 +127,7 @@ function renderGraph(quints: Quintuple[]) {
 
   // Nodes
   const node = g.append('g')
-    .selectAll('circle')
+    .selectAll<SVGCircleElement, GraphNode>('circle')
     .data(nodes)
     .join('circle')
     .attr('r', 20)
@@ -136,7 +138,8 @@ function renderGraph(quints: Quintuple[]) {
     .call(
       drag<SVGCircleElement, GraphNode>()
         .on('start', (event, d) => {
-          if (!event.active) simulation?.alphaTarget(0.3).restart()
+          if (!event.active)
+            simulation?.alphaTarget(0.3).restart()
           d.fx = d.x
           d.fy = d.y
         })
@@ -145,10 +148,11 @@ function renderGraph(quints: Quintuple[]) {
           d.fy = event.y
         })
         .on('end', (event, d) => {
-          if (!event.active) simulation?.alphaTarget(0)
+          if (!event.active)
+            simulation?.alphaTarget(0)
           d.fx = null
           d.fy = null
-        }),
+        }) as any,
     )
 
   // Node labels
@@ -190,9 +194,11 @@ async function loadData() {
   try {
     const res = await API.getQuintuples()
     quintuples.value = res.quintuples ?? []
-  } catch (e: any) {
+  }
+  catch (e: any) {
     error.value = e.message || '加载失败'
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -207,9 +213,11 @@ async function search() {
   try {
     const res = await API.searchQuintuples(searchQuery.value)
     quintuples.value = res.quintuples ?? []
-  } catch (e: any) {
+  }
+  catch (e: any) {
     error.value = e.message || '搜索失败'
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -231,7 +239,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <BoxContainer class="w-full h-full flex flex-col">
+  <BoxContainer>
     <div class="text-white flex flex-col h-full">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-3 shrink-0">

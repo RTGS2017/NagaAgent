@@ -47,6 +47,14 @@ export interface MemoryStats {
     taskTimeout: number
   }
 }
+
+export interface McpStatus {
+  server: string
+  timestamp: string
+  tasks: { total: number, active: number, completed: number, failed: number }
+  scheduler?: Record<string, any>
+}
+
 export class CoreApiClient extends ApiClient {
   health(): Promise<{
     status: 'healthy'
@@ -56,7 +64,7 @@ export class CoreApiClient extends ApiClient {
     return this.instance.get('/health')
   }
 
-  systemInfo(): Promise<{
+  getSystemInfo(): Promise<{
     version: string
     status: 'running'
     availableServices: []
@@ -65,11 +73,11 @@ export class CoreApiClient extends ApiClient {
     return this.instance.get('/system/info')
   }
 
-  systemConfig(): Promise<{
+  getSystemConfig(): Promise<{
     status: 'success'
     config: Config
   }> {
-    return this.instance('/system/config')
+    return this.instance.get('/system/config')
   }
 
   setSystemConfig(config: Config): Promise<{
@@ -77,6 +85,20 @@ export class CoreApiClient extends ApiClient {
     message: string
   }> {
     return this.instance.post('/system/config', config)
+  }
+
+  getSystemPrompt(): Promise<{
+    status: 'success'
+    prompt: string
+  }> {
+    return this.instance.get('/system/prompt')
+  }
+
+  setSystemPrompt(content: string): Promise<{
+    status: 'success'
+    message: string
+  }> {
+    return this.instance.post('/system/prompt', { content })
   }
 
   chat(message: string, options?: {
@@ -234,17 +256,10 @@ export class CoreApiClient extends ApiClient {
     item: MarketItem
     openclaw: OpenClawStatus
   }> {
-    return this.instance.post(`/openclaw/market/items/${itemId}/install`, payload ?? {}, {
-      timeout: 5 * 60 * 1000,
-    })
+    return this.instance.post(`/openclaw/market/items/${itemId}/install`)
   }
 
-  getMcpStatus(): Promise<{
-    server: string
-    timestamp: string
-    tasks: { total: number, active: number, completed: number, failed: number }
-    scheduler?: Record<string, any>
-  }> {
+  getMcpStatus(): Promise<McpStatus> {
     return this.instance.get('/mcp/status')
   }
 

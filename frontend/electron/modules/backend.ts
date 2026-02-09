@@ -66,11 +66,14 @@ export function stopBackend(): void {
 
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(pid), '/f', '/t'])
-  } else {
+  }
+  else {
     // Send SIGTERM first, then SIGKILL immediately after
     try {
-      if (pid) process.kill(pid, 'SIGTERM')
-    } catch {
+      if (pid)
+        process.kill(pid, 'SIGTERM')
+    }
+    catch {
       // already dead
     }
     // Force kill after 1s — must be short since Electron is exiting
@@ -79,13 +82,15 @@ export function stopBackend(): void {
         const timer = setTimeout(() => {
           try {
             process.kill(pid, 'SIGKILL')
-          } catch {
+          }
+          catch {
             // already dead
           }
         }, 1000)
         timer.unref() // Don't block Electron exit
       }
-    } catch {
+    }
+    catch {
       // already dead
     }
   }
