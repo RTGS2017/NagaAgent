@@ -58,7 +58,7 @@ except ImportError:
     from system.config import config, AI_NAME  # 使用新的配置系统
     from system.config import get_prompt, build_system_prompt  # 导入提示词仓库
     from system.config_manager import get_config_snapshot, update_config  # 导入配置管理
-from ui.utils.response_util import extract_message  # 导入消息提取工具
+from apiserver.response_util import extract_message  # 导入消息提取工具
 
 # 对话核心功能已集成到apiserver
 
