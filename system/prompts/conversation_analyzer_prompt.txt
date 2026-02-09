@@ -6,6 +6,7 @@
 2. **只分析最新一条用户消息**，忽略历史中已执行过的相同操作
 3. **是复合操作吗？** 包含"并"、"然后"或连续动词（"打开B站搜索AI"）→ 输出JSON数组
 4. **有匹配的工具吗？** 有 → 调用对应工具；无 → 输出 `{{}}`
+5. **OpenClaw消息包含工具操作吗？** 如"打开www.baidu.com"、"搜索天气" → 同时输出MCP工具调用 + OpenClaw消息
 
 ## 输出格式
 
@@ -51,6 +52,7 @@ JSON花括号必须使用半角ASCII字符 `{{` 和 `}}`，不要使用全角。
 | "让openclaw每天早上9点提醒我看邮件" | `{{"agentType":"openclaw","task_type":"cron","message":"提醒：该查看邮件了","schedule":"0 9 * * *"}}` |
 | "告诉openclaw 10分钟后提醒我开会" | `{{"agentType":"openclaw","task_type":"reminder","message":"提醒：10分钟后有会议","at":"10m"}}` |
 | "测试好了" / "修复完成" / "谢谢" | `{{}}` |
+| "让openclaw打开百度然后告诉我内容" | `[{{"agentType":"mcp","service_name":"浏览器Agent","tool_name":"open","url":"https://www.baidu.com"}}, {{"agentType":"openclaw","task_type":"message","message":"请查看并告诉我百度首页的内容"}}]` |
 
 【输入对话】
 {conversation}
@@ -62,5 +64,6 @@ JSON花括号必须使用半角ASCII字符 `{{` 和 `}}`，不要使用全角。
 - 仅提取可执行任务，闲聊和状态反馈输出 `{{}}`
 - 工具参数必须完整具体
 - 包含openclaw/clawdbot/moltbot关键词时必须用 openclaw 格式
+- **OpenClaw复合操作规则**：当openclaw指令包含"打开+URL"、"搜索+关键词"等可工具化操作时，同时输出MCP工具调用和OpenClaw消息（JSON数组格式）
 - 没有可执行任务时输出 `{{}}`
 - 有重要内容需要记忆时调用LifeBook记忆工具

@@ -1460,6 +1460,11 @@ def _emit_tool_status_to_ui(status_text: str, auto_hide_ms: int = 0) -> None:
     _tool_status_store["current"] = {"message": status_text, "visible": True}
     try:
         from ui.controller.tool_chat import chat
+        from system.config import config
+
+        if config.window is None:
+            logger.debug("[UI通知] UI窗口尚未初始化，跳过工具状态提示")
+            return
 
         chat.tool_status_received.emit(status_text, max(0, auto_hide_ms))
     except Exception as e:
@@ -1471,6 +1476,11 @@ def _hide_tool_status_in_ui() -> None:
     _tool_status_store["current"] = {"message": "", "visible": False}
     try:
         from ui.controller.tool_chat import chat
+        from system.config import config
+
+        if config.window is None:
+            logger.debug("[UI通知] UI窗口尚未初始化，跳过隐藏工具状态提示")
+            return
 
         chat.tool_status_hide_requested.emit()
     except Exception as e:
