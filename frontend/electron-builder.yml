@@ -32,11 +32,9 @@ mac:
   target:
     - target: dmg
       arch:
-        - x64
         - arm64
-  icon: build/icon.icns
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  icon: build/icon.png
+  identity: null
 
 dmg:
   contents:

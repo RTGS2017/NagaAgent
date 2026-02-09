@@ -1,4 +1,3 @@
-import { useStorage } from '@vueuse/core'
 import { ref, watch, computed } from 'vue'
 import API from '@/api/core'
 
@@ -221,17 +220,26 @@ export const SYSTEM_PROMPT = computed(() => `\
 export type Config = typeof DEFAULT_CONFIG
 
 export const CONFIG = ref<Config>(JSON.parse(JSON.stringify(DEFAULT_CONFIG)))
+export const backendConnected = ref(false)
 
-API.systemConfig().then((res) => {
-  CONFIG.value = res.config
-  watch(CONFIG, (config) => {
-    API.setSystemConfig(config)
+let configWatchStop: (() => void) | null = null
+
+function connectBackend() {
+  API.systemConfig().then((res) => {
+    CONFIG.value = res.config
+    backendConnected.value = true
+    // Only set up sync watch once connected
+    if (!configWatchStop) {
+      configWatchStop = watch(CONFIG, (config) => {
+        API.setSystemConfig(config)
+      })
+    }
+  }).catch(() => {
+    if (!backendConnected.value) {
+      // Retry in 3s until backend is available
+      setTimeout(connectBackend, 3000)
+    }
   })
-}).catch((error) => {
-  console.warn('Failed to load system config:', error, 'Using localStorage instead.')
-  const config = useStorage('naga-config', DEFAULT_CONFIG)
-  CONFIG.value = config.value
-  watch(CONFIG, (newConfig) => {
-    config.value = newConfig
-  })
-})
+}
+
+connectBackend()

@@ -1456,35 +1456,13 @@ async def _notify_ui_refresh(session_id: str, response_text: str):
 
 
 def _emit_tool_status_to_ui(status_text: str, auto_hide_ms: int = 0) -> None:
-    """通过Qt信号向UI发送工具状态提示，同时更新Web可轮询的状态存储"""
+    """更新工具状态存储，前端通过轮询获取"""
     _tool_status_store["current"] = {"message": status_text, "visible": True}
-    try:
-        from ui.controller.tool_chat import chat
-        from system.config import config
-
-        if config.window is None:
-            logger.debug("[UI通知] UI窗口尚未初始化，跳过工具状态提示")
-            return
-
-        chat.tool_status_received.emit(status_text, max(0, auto_hide_ms))
-    except Exception as e:
-        logger.error(f"[UI通知] 发送工具状态提示失败: {e}")
 
 
 def _hide_tool_status_in_ui() -> None:
-    """通过Qt信号隐藏工具状态提示，同时更新Web可轮询的状态存储"""
+    """隐藏工具状态，前端通过轮询获取"""
     _tool_status_store["current"] = {"message": "", "visible": False}
-    try:
-        from ui.controller.tool_chat import chat
-        from system.config import config
-
-        if config.window is None:
-            logger.debug("[UI通知] UI窗口尚未初始化，跳过隐藏工具状态提示")
-            return
-
-        chat.tool_status_hide_requested.emit()
-    except Exception as e:
-        logger.error(f"[UI通知] 隐藏工具状态提示失败: {e}")
 
 
 async def _send_ai_response_directly(session_id: str, response_text: str):

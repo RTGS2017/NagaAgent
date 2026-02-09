@@ -59,7 +59,6 @@ class SystemChecker:
             "fastapi",
             "openai",
             "requests",
-            "PyQt5",
             "torch",
             "numpy",
             "pandas",

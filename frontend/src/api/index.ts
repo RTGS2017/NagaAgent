@@ -22,7 +22,7 @@ export class ApiClient {
   constructor(readonly port: MaybeRef<number>) {
     this.instance = axios.create({
       baseURL: this.endpoint,
-      timeout: 10 * 1000,
+      timeout: 30 * 1000,
       headers: { 'Content-Type': 'application/json' },
       transformRequest(data) {
         if (

@@ -4,7 +4,7 @@ __all__ = [
     # 数值/科学计算 #
     "numpy",
     # GUI/多媒体/浏览器 #
-    "PyQt5", "playwright", "html2text", "pil",
+    "playwright", "html2text", "pil",
     # 常用第三方统一入口 #
     "cv2", "pyautogui", "pytesseract", "paho_mqtt",
     # 系统控制 #

@@ -8,10 +8,6 @@ import naga from '@/assets/icons/naga.png'
 import toolkit from '@/assets/icons/toolkit.png'
 import ArkButton from '@/components/ArkButton.vue'
 
-function navigateTo(url: string) {
-  window.location.href = url
-}
-
 const { height } = useWindowSize()
 const scale = computed(() => height.value / 720)
 </script>
@@ -26,12 +22,9 @@ const scale = computed(() => height.value / 720)
     >
       <div class="relative size-full">
         <div class="absolute -left-12 right-1/2 top-2 bottom-2">
-          <ArkButton class="size-full bg-#f00! z-1" @click="navigateTo('https://www.pylindex.top/naga/')">
+          <ArkButton class="size-full bg-#f00! z-1" disabled>
             <div class="size-full">
-              广告位招租
-              <div class="text-sm lh-none">
-                仅需<b>一千<span class="text-1">亿</span></b>龙门币！
-              </div>
+              娜迦EXE测试版
             </div>
           </ArkButton>
         </div>
@@ -42,7 +35,7 @@ const scale = computed(() => height.value / 720)
         </ArkButton>
       </div>
       <div class="grid grid-cols-2 -translate-x-1/5">
-        <ArkButton :icon="brain" title="记忆<br>云海" @click="useLink({ to: '/mind' }).navigate" />
+        <ArkButton :icon="brain" title="记忆<br>云海" disabled />
         <ArkButton :icon="toolkit" title="技能<br>工坊" @click="useLink({ to: '/skill' }).navigate" />
       </div>
       <div class="grid grid-cols-2">
@@ -54,7 +47,7 @@ const scale = computed(() => height.value / 720)
             <ArkButton @click="useLink({ to: '/model' }).navigate">
               <div class="size-full text-lg">人格投影</div>
             </ArkButton>
-            <ArkButton @click="useLink({ to: '/memory' }).navigate">
+            <ArkButton disabled>
               <div class="size-full text-lg">记忆链接</div>
             </ArkButton>
           </div>

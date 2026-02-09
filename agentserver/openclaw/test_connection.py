@@ -9,6 +9,10 @@ OpenClaw 通信测试脚本 (Python 版)
 
 import asyncio
 import httpx
+import os
+
+# 确保 localhost 请求绕过代理
+os.environ["NO_PROXY"] = "127.0.0.1,localhost"
 
 GATEWAY_URL = "http://127.0.0.1:18789"
 GATEWAY_TOKEN = "9d3d8c24a1739f3a8a21653bbc218bc54f53ff1a5c5381de"
@@ -84,9 +88,106 @@ async def test_hooks_wake():
             print(f"    错误: {e}")
 
 
+async def test_hooks_agent_sync_reply():
+    """测试发送消息并等待 LLM 回复 POST /hooks/agent + 轮询 sessions_history"""
+    print("\n[4] 测试 POST /hooks/agent (发送消息并获取回复)")
+    session_key = f"naga:reply-test-{int(asyncio.get_event_loop().time())}"
+    payload = {
+        "message": "用一句话介绍你自己",
+        "sessionKey": session_key,
+        "name": "NagaReplyTest",
+        "deliver": False,
+        "timeoutSeconds": 60,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {HOOKS_TOKEN}",
+    }
+
+    print(f"    发送消息: {payload['message']}")
+    print(f"    sessionKey: {session_key}")
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        try:
+            # Step 1: 发送消息
+            r = await client.post(
+                f"{GATEWAY_URL}/hooks/agent",
+                headers=headers,
+                json=payload,
+            )
+            print(f"    状态码: {r.status_code}")
+
+            if r.status_code not in (200, 202):
+                print(f"    ❌ 发送失败: {r.text[:300]}")
+                return
+
+            import json
+            result = r.json()
+            run_id = result.get("runId", "N/A")
+            print(f"    runId: {run_id}")
+
+            # 检查是否直接返回了回复 (status=ok + reply)
+            if result.get("status") == "ok" and result.get("reply"):
+                print(f"    ✅ 同步回复: {result['reply'][:300]}")
+                return
+
+            # Step 2: 轮询 sessions_history 等待回复
+            print(f"    202 已接受，轮询等待 LLM 回复...")
+            full_session_key = f"agent:main:{session_key}"
+
+            for attempt in range(1, 16):  # 最多 15 次，约 45 秒
+                await asyncio.sleep(3)
+                try:
+                    hr = await client.post(
+                        f"{GATEWAY_URL}/tools/invoke",
+                        headers=GATEWAY_HEADERS,
+                        json={
+                            "tool": "sessions_history",
+                            "args": {"sessionKey": full_session_key, "limit": 3},
+                        },
+                        timeout=10,
+                    )
+                    if hr.status_code == 200:
+                        data = hr.json()
+                        details = data.get("result", {}).get("details", {})
+                        messages = details.get("messages", [])
+
+                        # 找最后一条 assistant 消息
+                        for msg in reversed(messages):
+                            if msg.get("role") != "assistant":
+                                continue
+                            content = msg.get("content", [])
+                            if isinstance(content, list):
+                                texts = [
+                                    item.get("text", "")
+                                    for item in content
+                                    if isinstance(item, dict) and item.get("type") == "text"
+                                ]
+                                if texts:
+                                    reply = "\n".join(texts).strip()
+                                    print(f"    ✅ 轮询第{attempt}次获取到回复:")
+                                    print(f"    {reply[:500]}")
+                                    return
+                            elif isinstance(content, str) and content.strip():
+                                print(f"    ✅ 轮询第{attempt}次获取到回复:")
+                                print(f"    {content[:500]}")
+                                return
+
+                    print(f"    ... 轮询第{attempt}次，暂无回复")
+                except Exception as e:
+                    print(f"    ... 轮询第{attempt}次异常: {e}")
+
+            print(f"    ⚠️  轮询超时，未获取到回复")
+
+        except httpx.TimeoutException:
+            print(f"    ❌ HTTP 超时")
+        except Exception as e:
+            print(f"    ❌ 错误: {e}")
+
+
 async def test_tools_invoke():
     """测试工具调用 POST /tools/invoke"""
-    print("\n[4] 测试 POST /tools/invoke")
+    print("\n[5] 测试 POST /tools/invoke")
 
     # 测试会话相关工具的详细返回
     tools_to_try = [
@@ -124,6 +225,7 @@ async def main():
     print("=" * 50)
 
     await test_root()
+    await test_hooks_agent_sync_reply()
     await test_hooks_agent()
     await test_hooks_wake()
     await test_tools_invoke()

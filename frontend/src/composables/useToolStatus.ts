@@ -43,15 +43,13 @@ async function poll() {
 export function startToolPolling() {
   if (timer) return
   poll()
-  timer = setInterval(poll, 1000)
+  timer = setInterval(poll, 2000)
 }
 
-export async function stopToolPolling() {
+export function stopToolPolling() {
   if (timer) {
     clearInterval(timer)
     timer = null
   }
-  // Final poll to catch any last replies
-  await poll()
   toolMessage.value = ''
 }

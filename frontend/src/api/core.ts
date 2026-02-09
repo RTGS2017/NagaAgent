@@ -192,7 +192,9 @@ export class CoreApiClient extends ApiClient {
     message: string
     item: Record<string, any>
   }> {
-    return this.instance.post(`/openclaw/market/items/${itemId}/install`, payload ?? {})
+    return this.instance.post(`/openclaw/market/items/${itemId}/install`, payload ?? {}, {
+      timeout: 5 * 60 * 1000,
+    })
   }
 
   getMcpStatus(): Promise<{

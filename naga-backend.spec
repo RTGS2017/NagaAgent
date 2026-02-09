@@ -29,8 +29,11 @@ datas = [
     ('nagaagent_core', 'nagaagent_core'),
 ]
 
-# 第三方包的数据文件（py2neo 需要 VERSION 文件等）
+# 第三方包的数据文件
 datas += collect_data_files('py2neo')
+datas += collect_data_files('tiktoken')
+datas += collect_data_files('tiktoken_ext')
+datas += collect_data_files('litellm')
 
 # 动态导入的模块（PyInstaller 静态分析可能遗漏）
 hiddenimports = [
@@ -67,6 +70,10 @@ hiddenimports = [
     'key_value.aio',
     'redis',
     'requests',
+    # tiktoken 编码
+    'tiktoken',
+    'tiktoken_ext',
+    'tiktoken_ext.openai_public',
 ]
 
 # 排除 PyQt5、UI 及不需要的大型科学计算库
@@ -75,7 +82,7 @@ excludes = [
     'PyQt5', 'PyQt5.QtWidgets', 'PyQt5.QtGui', 'PyQt5.QtCore', 'PyQt5.QtOpenGL',
     'ui', 'tkinter',
     # 图像 / 可视化
-    'matplotlib', 'PIL', 'Pillow',
+    'matplotlib',
     # 科学计算（后端不需要）
     'torch', 'torchaudio', 'torchvision', 'torchgen', 'torchdata',
     'scipy', 'sympy',
