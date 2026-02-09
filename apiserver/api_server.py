@@ -1275,17 +1275,10 @@ async def tool_result(payload: Dict[str, Any]):
 
         logger.info(f"工具执行结果: {result}")
 
-        # 如果是工具完成后的AI回复，通过信号机制通知UI线程显示
+        # 如果是工具完成后的AI回复，存储到ClawdBot回复队列供前端轮询
         if notification_type == "tool_completed_with_ai_response" and ai_response:
-            try:
-                # 使用Qt信号机制在主线程中安全地更新UI
-                from ui.controller.tool_chat import chat
-
-                # 直接发射信号，确保在主线程中执行
-                chat.tool_ai_response_received.emit(ai_response)
-                logger.info(f"[UI] 已通过信号机制通知UI显示AI回复，长度: {len(ai_response)}")
-            except Exception as e:
-                logger.error(f"[UI] 调用UI控制器显示AI回复失败: {e}")
+            _clawdbot_replies.append(ai_response)
+            logger.info(f"[UI] AI回复已存储到队列，长度: {len(ai_response)}")
 
         return {"success": True, "message": "工具结果已接收", "result": result, "session_id": session_id}
 
@@ -1346,27 +1339,14 @@ async def ui_notification(payload: Dict[str, Any]):
 
         # 处理显示工具AI回复的动作
         if action == "show_tool_ai_response" and ai_response:
-            try:
-                from ui.controller.tool_chat import chat
-
-                # 直接发射信号，确保在主线程中执行
-                chat.tool_ai_response_received.emit(ai_response)
-                logger.info(f"[UI通知] 已通过信号机制显示工具AI回复，长度: {len(ai_response)}")
-                return {"success": True, "message": "AI回复已显示"}
-            except Exception as e:
-                logger.error(f"[UI通知] 显示工具AI回复失败: {e}")
-                raise HTTPException(500, f"显示AI回复失败: {str(e)}")
+            _clawdbot_replies.append(ai_response)
+            logger.info(f"[UI通知] 工具AI回复已存储到队列，长度: {len(ai_response)}")
+            return {"success": True, "message": "AI回复已存储"}
 
         # 处理显示 ClawdBot 回复的动作
         if action == "show_clawdbot_response" and ai_response:
             _clawdbot_replies.append(ai_response)
-            try:
-                from ui.controller.tool_chat import chat
-
-                chat.clawdbot_response_received.emit(ai_response)
-                logger.info(f"[UI通知] 已通过信号机制显示 ClawdBot 回复，长度: {len(ai_response)}")
-            except Exception as e:
-                logger.warning(f"[UI通知] Qt信号发送失败（Web模式下正常）: {e}")
+            logger.info(f"[UI通知] ClawdBot 回复已存储到队列，长度: {len(ai_response)}")
             return {"success": True, "message": "ClawdBot 回复已存储"}
 
         if action == "show_tool_status" and status_text:
