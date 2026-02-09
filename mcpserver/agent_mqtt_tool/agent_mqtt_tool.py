@@ -19,7 +19,7 @@ class AgentMqttTool(Agent):
             tools=[],
             model="device-switch-mcp"
         )
-        print(f"✅ agent_mqtt_tool初始化完成")
+        print("✅ agent_mqtt_tool初始化完成")
 
     def _create_standardized_response(self, success: bool, message: str, data: dict) -> str:
         """创建标准化的响应JSON"""

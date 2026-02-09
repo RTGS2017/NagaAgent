@@ -268,7 +268,7 @@ class BackgroundAnalyzer:
             logger.info(f"[博弈论] 开始异步意图分析，消息数量: {len(messages)}")
             loop = asyncio.get_running_loop()
             # Offload sync LLM call to threadpool to avoid blocking event loop
-            logger.info(f"[博弈论] 在线程池中执行LLM分析...")
+            logger.info("[博弈论] 在线程池中执行LLM分析...")
 
             # 添加异步超时机制
             try:
@@ -289,7 +289,6 @@ class BackgroundAnalyzer:
             return {"has_tasks": False, "reason": f"分析失败: {e}", "tasks": [], "priority": "low"}
 
         try:
-            import uuid as _uuid
 
             tasks = analysis.get("tasks", []) if isinstance(analysis, dict) else []
             tool_calls = analysis.get("tool_calls", []) if isinstance(analysis, dict) else []
@@ -399,8 +398,6 @@ class BackgroundAnalyzer:
     ):
         """根据agentType将工具调用分发到相应的服务器"""
         try:
-            import httpx
-            import uuid
 
             # 按agentType分组
             mcp_calls = []

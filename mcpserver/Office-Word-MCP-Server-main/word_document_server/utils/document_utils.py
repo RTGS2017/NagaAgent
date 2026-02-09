@@ -1,8 +1,7 @@
 """
 Document utility functions for Word Document Server.
 """
-import json
-from typing import Dict, List, Any
+from typing import Dict, Any
 from docx import Document
 
 

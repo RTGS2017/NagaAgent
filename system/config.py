@@ -4,7 +4,6 @@ NagaAgent 配置系统 - 基于Pydantic实现类型安全和验证
 支持配置热更新和变更通知
 """
 import os
-import socket
 import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable

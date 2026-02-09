@@ -6,7 +6,7 @@
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from nagaagent_core.vendors.agents import Agent, ComputerTool
 from .vision_tools import VisionTools

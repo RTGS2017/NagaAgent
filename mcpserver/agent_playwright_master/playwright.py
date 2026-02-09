@@ -1,7 +1,5 @@
 import asyncio # 导入异步IO库，用于实现异步编程
-import json # 导入JSON处理库，用于解析和序列化JSON数据
 import os # 导入操作系统模块，在本项目中用于读取环境变量文件
-import re # 导入正则表达式库，在本项目中用于解析GITHub文档的markdown格式内容
 import webbrowser # 导入web浏览器模块，在本项目中用户打开一个web页面展示翻译后的文档内容
 import tempfile # 导入临时文件模块，在本项目中用于生成临时HTML文件以在浏览器中显示
 from nagaagent_core.vendors import markdown # 导入markdown库，在本项目中用于格式化文档内容并显示
@@ -525,13 +523,13 @@ async def handle_agent_manager_request(query: str) -> str:
         str: 处理结果，成功时返回翻译后的文档内容，失败时返回错误信息
     """
     try:
-        print(f"========== Playwright控制器收到AgentManager请求 ==========")
+        print("========== Playwright控制器收到AgentManager请求 ==========")
         print(f"任务内容: {query}")
         
         # 直接调用process_user_query处理查询
         result = await process_user_query(query)
         
-        print(f"========== Playwright控制器处理完成 ==========")
+        print("========== Playwright控制器处理完成 ==========")
         return result
         
     except Exception as e:
@@ -588,7 +586,7 @@ async def process_user_query(query: str) -> str:
             print(f"控制器 agent 交接代理: {tool_name} > {handoff.name}")
 
         print(f"\n正在处理查询: '{query}'")
-        print(f"这个操作可能需要几分钟时间...\n")
+        print("这个操作可能需要几分钟时间...\n")
 
         result = await Runner.run(
             controller_agent,

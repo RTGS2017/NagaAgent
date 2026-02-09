@@ -120,7 +120,7 @@ def create_style(doc, style_name, style_type, base_style=None, font_properties=N
                     # Use directly if it's already an RGB value
                     else:
                         font.color.rgb = color_value
-                except Exception as e:
+                except Exception:
                     # Fallback to black if all else fails
                     font.color.rgb = RGBColor(0, 0, 0)
         

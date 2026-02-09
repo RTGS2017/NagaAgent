@@ -1,12 +1,10 @@
-import traceback
 import json
 import logging
-import re
 import sys
 import os
 import time
 import asyncio
-from typing import List, Tuple
+from typing import List
 from pydantic import BaseModel
 
 # 添加项目根目录到路径，以便导入config

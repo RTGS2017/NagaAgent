@@ -121,7 +121,6 @@ async def test_hooks_agent_sync_reply():
                 print(f"    ❌ 发送失败: {r.text[:300]}")
                 return
 
-            import json
             result = r.json()
             run_id = result.get("runId", "N/A")
             print(f"    runId: {run_id}")
@@ -132,7 +131,7 @@ async def test_hooks_agent_sync_reply():
                 return
 
             # Step 2: 轮询 sessions_history 等待回复
-            print(f"    202 已接受，轮询等待 LLM 回复...")
+            print("    202 已接受，轮询等待 LLM 回复...")
             full_session_key = f"agent:main:{session_key}"
 
             for attempt in range(1, 16):  # 最多 15 次，约 45 秒
@@ -177,10 +176,10 @@ async def test_hooks_agent_sync_reply():
                 except Exception as e:
                     print(f"    ... 轮询第{attempt}次异常: {e}")
 
-            print(f"    ⚠️  轮询超时，未获取到回复")
+            print("    ⚠️  轮询超时，未获取到回复")
 
         except httpx.TimeoutException:
-            print(f"    ❌ HTTP 超时")
+            print("    ❌ HTTP 超时")
         except Exception as e:
             print(f"    ❌ 错误: {e}")
 

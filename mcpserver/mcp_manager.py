@@ -1,22 +1,19 @@
 import asyncio
 import logging
 import inspect
-from typing import Dict, Optional, List, Any, Callable, Awaitable, Generic, TypeVar, Union, cast
+from typing import Dict, Optional, List, Any, Callable, Awaitable, Generic, TypeVar, Union
 from contextlib import AsyncExitStack
 import sys
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from dataclasses import dataclass
 import json
-from datetime import datetime
-import importlib,os,inspect # 自动注册相关
-from pathlib import Path
 
 from nagaagent_core.core import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 # 延迟导入MCP_REGISTRY，避免循环导入死锁
 # from mcpserver.mcp_registry import MCP_REGISTRY # MCP服务注册表
 
-from system.config import config, AI_NAME, logger
+from system.config import config, logger
 
 # 配置日志
 logging.basicConfig(
@@ -425,7 +422,7 @@ class MCPManager:
         Returns:
             dict: 包含mcp_services和agent_services的服务列表
         """
-        from mcpserver.mcp_registry import get_all_services_info, get_service_statistics # 动态服务池查询
+        from mcpserver.mcp_registry import get_all_services_info # 动态服务池查询
         
         mcp_services = []
         agent_services = []

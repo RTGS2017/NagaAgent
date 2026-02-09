@@ -18,7 +18,6 @@ from nagaagent_core.api import uvicorn
 
 async def start_api_server():
     """启动API服务器"""
-    from apiserver.api_server import app
     
     # 从环境变量获取配置，回退到config
     host = os.getenv("API_SERVER_HOST", "127.0.0.1")
@@ -30,7 +29,7 @@ async def start_api_server():
     port = int(os.getenv("API_SERVER_PORT", str(default_port)))
     reload = os.getenv("API_SERVER_RELOAD", "False").lower() == "true"
     
-    print(f"启动NagaAgent API服务器...")
+    print("启动NagaAgent API服务器...")
     print(f"地址: http://{host}:{port}")
     print(f"文档: http://{host}:{port}/docs")
     print(f"自动重载: {'开启' if reload else '关闭'}")
@@ -48,7 +47,6 @@ async def start_api_server():
 
 async def start_llm_service():
     """启动LLM服务"""
-    from apiserver.llm_service import llm_app
     
     # 从环境变量获取配置，回退到config
     host = os.getenv("LLM_SERVICE_HOST", "127.0.0.1")
@@ -60,7 +58,7 @@ async def start_llm_service():
     port = int(os.getenv("LLM_SERVICE_PORT", str(default_port)))
     reload = os.getenv("LLM_SERVICE_RELOAD", "False").lower() == "true"
     
-    print(f"启动LLM服务...")
+    print("启动LLM服务...")
     print(f"地址: http://{host}:{port}")
     print(f"文档: http://{host}:{port}/docs")
     print(f"自动重载: {'开启' if reload else '关闭'}")

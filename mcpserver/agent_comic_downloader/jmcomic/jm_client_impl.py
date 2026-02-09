@@ -95,7 +95,7 @@ class AbstractJmClient(
             self.update_request_with_specify_domain(kwargs, None, True)
 
         if domain_index != 0 or retry_count != 0:
-            jm_log(f'req.retry',
+            jm_log('req.retry',
                    ', '.join([
                        f'次数: [{retry_count}/{self.retry_times}]',
                        f'域名: [{domain_index} of {self.domain_list}]',

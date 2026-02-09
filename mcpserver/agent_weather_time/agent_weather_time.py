@@ -2,10 +2,9 @@
 import json # 导入json模块
 from nagaagent_core.core import aiohttp # 异步HTTP请求
 from nagaagent_core.vendors.agents import Agent, ComputerTool # 统一代理 #
-from system.config import config, AI_NAME # 导入配置
 from nagaagent_core.core import requests # 用于同步获取IP和城市
 import re # 用于正则解析
-from datetime import datetime, timedelta # 用于日期处理
+from datetime import datetime # 用于日期处理
 
 from mcpserver.agent_weather_time.city_codes import codes_map
 
@@ -44,7 +43,7 @@ class WeatherTimeTool:
             else:
                 self._local_ip = None
                 self._local_city = None
-        except Exception as e:
+        except Exception:
             self._local_ip = None
             self._local_city = None
 

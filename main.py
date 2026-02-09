@@ -6,12 +6,6 @@ if os.path.exists("_internal"):
     os.chdir("_internal")
 
 # 打包库识别适配
-import webbrowser
-import sqlite3
-import redis
-import timeit
-import key_value
-import key_value.aio
 
 # 检测是否在打包环境中
 # PyInstaller打包后的程序会设置sys.frozen属性
@@ -64,7 +58,7 @@ from system.config import config, AI_NAME
 
 # conversation_core已删除，相关功能已迁移到apiserver
 from summer_memory.memory_manager import memory_manager
-from summer_memory.task_manager import start_task_manager, task_manager
+from summer_memory.task_manager import task_manager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -377,7 +371,7 @@ class ServiceManager:
             status = login_manager.get_status()
             cookies = login_manager.get_cookies()
             
-            print(f"🌐 NagaPortal状态:")
+            print("🌐 NagaPortal状态:")
             print(f"   地址: {config.naga_portal.portal_url}")
             print(f"   用户: {config.naga_portal.username[:3]}***{config.naga_portal.username[-3:] if len(config.naga_portal.username) > 6 else '***'}")
             
@@ -386,19 +380,19 @@ class ServiceManager:
                 for name, value in cookies.items():
                     print(f"   {name}: {value}")
             else:
-                print(f"🍪 Cookie: 未获取到")
+                print("🍪 Cookie: 未获取到")
             
             user_id = status.get('user_id')
             if user_id:
                 print(f"👤 用户ID: {user_id}")
             else:
-                print(f"👤 用户ID: 未获取到")
+                print("👤 用户ID: 未获取到")
                 
             # 显示登录状态
             if status.get('is_logged_in'):
-                print(f"✅ 登录状态: 已登录")
+                print("✅ 登录状态: 已登录")
             else:
-                print(f"❌ 登录状态: 未登录")
+                print("❌ 登录状态: 未登录")
                 if status.get('login_error'):
                     print(f"   错误: {status.get('login_error')}")
                     
@@ -417,7 +411,6 @@ class ServiceManager:
                 try:
                     import sys
                     import os
-                    import time
                     # 添加项目根目录到Python路径
                     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                     sys.path.insert(0, project_root)
@@ -483,7 +476,7 @@ class ServiceManager:
         """显示NagaPortal配置状态（手动调用）"""
         try:
             if config.naga_portal.username and config.naga_portal.password:
-                print(f"🌐 NagaPortal: 已配置账户信息")
+                print("🌐 NagaPortal: 已配置账户信息")
                 print(f"   地址: {config.naga_portal.portal_url}")
                 print(f"   用户: {config.naga_portal.username[:3]}***{config.naga_portal.username[-3:] if len(config.naga_portal.username) > 6 else '***'}")
                 
@@ -500,27 +493,27 @@ class ServiceManager:
                             # 显示完整的cookie名称和值
                             print(f"   {name}: {value}")
                     else:
-                        print(f"🍪 Cookie: 未获取到")
+                        print("🍪 Cookie: 未获取到")
                     
                     user_id = status.get('user_id')
                     if user_id:
                         print(f"👤 用户ID: {user_id}")
                     else:
-                        print(f"👤 用户ID: 未获取到")
+                        print("👤 用户ID: 未获取到")
                         
                     # 显示登录状态
                     if status.get('is_logged_in'):
-                        print(f"✅ 登录状态: 已登录")
+                        print("✅ 登录状态: 已登录")
                     else:
-                        print(f"❌ 登录状态: 未登录")
+                        print("❌ 登录状态: 未登录")
                         if status.get('login_error'):
                             print(f"   错误: {status.get('login_error')}")
                         
                 except Exception as e:
                     print(f"🍪 状态获取失败: {e}")
             else:
-                print(f"🌐 NagaPortal: 未配置账户信息")
-                print(f"   如需使用NagaPortal功能，请在config.json中配置naga_portal.username和password")
+                print("🌐 NagaPortal: 未配置账户信息")
+                print("   如需使用NagaPortal功能，请在config.json中配置naga_portal.username和password")
         except Exception as e:
             print(f"🌐 NagaPortal: 配置检查失败 - {e}")
 
@@ -537,7 +530,7 @@ def clear():
 
 def check_and_update_if_needed() -> bool:
     """检查上次系统检测时间，如果检测通过且超过5天则执行更新"""
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from charset_normalizer import from_path
     import json5
 

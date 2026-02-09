@@ -5,14 +5,12 @@ These tools handle formatting operations for Word documents,
 including text formatting, table formatting, and custom styles.
 """
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from docx import Document
 from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_COLOR_INDEX
 from docx.enum.style import WD_STYLE_TYPE
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
-from word_document_server.utils.document_utils import find_and_replace_text
 from word_document_server.core.styles import create_style
 from word_document_server.core.tables import apply_table_style
 
@@ -109,7 +107,7 @@ def format_text(filename: str, paragraph_index: int, start_pos: int, end_pos: in
                 else:
                     # Try to set color by name
                     run_target.font.color.rgb = RGBColor.from_string(color)
-            except Exception as e:
+            except Exception:
                 # If all else fails, default to black
                 run_target.font.color.rgb = RGBColor(0, 0, 0)
         if font_size:

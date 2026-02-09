@@ -1,8 +1,5 @@
 from playwright.async_api import Page
-import asyncio
 import sys
-import re
-import json
 import urllib.parse
 from typing import List, Dict, Any
 from system.config import config
@@ -159,7 +156,8 @@ class SearchEngine:
 # ----------- Edge路径动态扫描函数 -----------
 def get_edge_path():
     """动态获取Edge浏览器可执行文件路径，优先解析.lnk，找不到则遍历常见目录"""  # 右侧注释
-    import os, platform
+    import os
+    import platform
     if platform.system() != "Windows":
         return None  # 仅Windows下处理
     # 1. 解析.lnk

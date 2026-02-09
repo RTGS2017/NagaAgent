@@ -8,12 +8,11 @@ import webbrowser
 
 from .quintuple_extractor import extract_quintuples
 from .quintuple_graph import store_quintuples
-from .quintuple_visualize_v2 import visualize_quintuples
 from .quintuple_rag_query import query_knowledge, set_context
 
 # 添加上级目录以导入 config.py
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from system.config import GRAG_NEO4J_URI, GRAG_NEO4J_USER, GRAG_NEO4J_PASSWORD, GRAG_NEO4J_DATABASE
+from system.config import GRAG_NEO4J_USER, GRAG_NEO4J_PASSWORD, GRAG_NEO4J_DATABASE
 
 # 日志配置
 logging.basicConfig(

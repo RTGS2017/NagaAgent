@@ -5,13 +5,13 @@ These tools add various types of content to Word documents,
 including headings, paragraphs, tables, images, and page breaks.
 """
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from docx import Document
 from docx.shared import Inches, Pt
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.document_utils import find_and_replace_text
-from word_document_server.core.styles import ensure_heading_style, ensure_table_style
+from word_document_server.core.styles import ensure_heading_style
 
 
 def add_heading(filename: str, text: str, level: int = 1) -> str:
@@ -54,7 +54,7 @@ def add_heading(filename: str, text: str, level: int = 1) -> str:
             heading = doc.add_heading(text, level=level)
             doc.save(filename)
             return f"Heading '{text}' (level {level}) added to {filename}"
-        except Exception as style_error:
+        except Exception:
             # If style-based approach fails, use direct formatting
             paragraph = doc.add_paragraph(text)
             paragraph.style = doc.styles['Normal']

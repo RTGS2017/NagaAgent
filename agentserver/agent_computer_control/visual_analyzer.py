@@ -13,7 +13,6 @@ from PIL import Image
 import io
 import base64
 import re
-import json
 
 # 配置日志
 logger = logging.getLogger(__name__)

@@ -163,7 +163,7 @@ def setup_venv():
         print(f"Error: Could not execute {pip_path}")
         print("Try activating the virtual environment manually and installing requirements:")
         if is_windows:
-            print(f".venv\\Scripts\\activate")
+            print(".venv\\Scripts\\activate")
         else:
             print("source .venv/bin/activate")
         print("pip install mcp[cli] python-docx")
@@ -359,20 +359,20 @@ def print_config_instructions(config_path, transport_config):
     
     # Print transport-specific instructions
     if transport_config["transport"] == "streamable-http":
-        print(f"\n📡 Streamable HTTP Transport Configuration:")
+        print("\n📡 Streamable HTTP Transport Configuration:")
         print(f"   Server will be accessible at: http://{transport_config['host']}:{transport_config['port']}{transport_config['path']}")
-        print(f"   \n   To test the server manually:")
+        print("   \n   To test the server manually:")
         print(f"   curl -X POST http://{transport_config['host']}:{transport_config['port']}{transport_config['path']}")
         
     elif transport_config["transport"] == "sse":
-        print(f"\n📡 SSE Transport Configuration:")
+        print("\n📡 SSE Transport Configuration:")
         print(f"   Server will be accessible at: http://{transport_config['host']}:{transport_config['port']}{transport_config['sse_path']}")
-        print(f"   \n   To test the server manually:")
+        print("   \n   To test the server manually:")
         print(f"   curl http://{transport_config['host']}:{transport_config['port']}{transport_config['sse_path']}")
         
     else:  # stdio
-        print(f"\n💻 STDIO Transport Configuration:")
-        print(f"   Server runs locally with standard input/output")
+        print("\n💻 STDIO Transport Configuration:")
+        print("   Server runs locally with standard input/output")
     
     # Provide instructions for adding configuration to Claude Desktop configuration file
     if platform.system() == "Windows":

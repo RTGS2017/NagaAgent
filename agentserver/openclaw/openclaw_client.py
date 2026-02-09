@@ -410,7 +410,7 @@ class OpenClawClient:
                             else:
                                 task.status = TaskStatus.COMPLETED
                                 task.completed_at = datetime.now().isoformat()
-                                logger.warning(f"[OpenClaw] 轮询超时，未获取到回复")
+                                logger.warning("[OpenClaw] 轮询超时，未获取到回复")
                     except Exception:
                         task.result = {"raw": response.text}
                         task.status = TaskStatus.RUNNING

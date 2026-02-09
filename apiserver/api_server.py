@@ -10,7 +10,6 @@ import sys
 import traceback
 import os
 import logging
-import uuid
 import time
 import threading
 import subprocess
@@ -27,13 +26,11 @@ logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 # 创建logger实例
 logger = logging.getLogger(__name__)
 
-from nagaagent_core.api import uvicorn
-from nagaagent_core.api import FastAPI, HTTPException, Request, UploadFile, File, Form
+from nagaagent_core.api import FastAPI, HTTPException, UploadFile, File, Form
 from nagaagent_core.api import CORSMiddleware
 from nagaagent_core.api import StreamingResponse
 from nagaagent_core.api import StaticFiles
 from pydantic import BaseModel
-from nagaagent_core.core import aiohttp
 import shutil
 from pathlib import Path
 
@@ -55,8 +52,8 @@ except ImportError:
     import os
 
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from system.config import config, AI_NAME  # 使用新的配置系统
-    from system.config import get_prompt, build_system_prompt  # 导入提示词仓库
+    from system.config import config  # 使用新的配置系统
+    from system.config import build_system_prompt  # 导入提示词仓库
     from system.config_manager import get_config_snapshot, update_config  # 导入配置管理
 from apiserver.response_util import extract_message  # 导入消息提取工具
 
@@ -821,8 +818,6 @@ async def chat_stream(request: ChatRequest):
 
                     # 使用服务器端的TTS生成音频
                     from voice.tts_wrapper import generate_speech_safe
-                    import tempfile
-                    import uuid
 
                     # 生成音频文件
                     tts_voice = config.voice_realtime.tts_voice or "zh-CN-XiaoyiNeural"
@@ -845,7 +840,7 @@ async def chat_stream(request: ChatRequest):
                 except Exception as e:
                     logger.error(f"[API Server V19] 音频生成失败: {e}")
                     # traceback已经在文件顶部导入，直接使用
-                    print(f"[API Server V19] 详细错误信息:")
+                    print("[API Server V19] 详细错误信息:")
                     traceback.print_exc()
 
             # 完成流式文本切割器处理（非return_audio模式，不阻塞）
@@ -1221,7 +1216,7 @@ async def tool_result_callback(payload: Dict[str, Any]):
             session_id=session_id, system_prompt=system_prompt, current_message=enhanced_message
         )
 
-        logger.info(f"[工具回调] 开始生成工具后回复...")
+        logger.info("[工具回调] 开始生成工具后回复...")
 
         # 使用LLM服务基于原始对话和工具结果重新生成回复
         try:
@@ -1234,18 +1229,18 @@ async def tool_result_callback(payload: Dict[str, Any]):
 
         # 只保存AI回复到历史记录（用户消息已在正常对话流程中保存）
         message_manager.add_message(session_id, "assistant", response_text)
-        logger.info(f"[工具回调] AI回复已保存到历史")
+        logger.info("[工具回调] AI回复已保存到历史")
 
         # 保存对话日志到文件
         message_manager.save_conversation_log(original_user_message, response_text, dev_mode=False)
-        logger.info(f"[工具回调] 对话日志已保存")
+        logger.info("[工具回调] 对话日志已保存")
 
         # 通过UI通知接口将AI回复发送给UI
-        logger.info(f"[工具回调] 开始发送AI回复到UI...")
+        logger.info("[工具回调] 开始发送AI回复到UI...")
         await _notify_ui_refresh(session_id, response_text)
         _hide_tool_status_in_ui()
 
-        logger.info(f"[工具回调] 工具结果处理完成，回复已发送到UI")
+        logger.info("[工具回调] 工具结果处理完成，回复已发送到UI")
 
         return {
             "success": True,
@@ -1400,7 +1395,7 @@ async def _trigger_chat_stream_no_intent(session_id: str, response_text: str):
                             pass
 
                     logger.info(f"[UI发送] AI回复已成功发送到UI: {session_id}")
-                    logger.info(f"[UI发送] 成功显示到UI")
+                    logger.info("[UI发送] 成功显示到UI")
                 else:
                     logger.error(f"[UI发送] 调用流式对话接口失败: {response.status_code}")
 

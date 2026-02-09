@@ -8,7 +8,7 @@ import os
 import hashlib
 import datetime
 import io 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from docx import Document
 import msoffcrypto 
 

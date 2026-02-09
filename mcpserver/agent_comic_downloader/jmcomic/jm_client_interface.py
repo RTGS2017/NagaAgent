@@ -52,7 +52,7 @@ class JmImageResp(JmResp):
         if self.http_code != 200:
             msg += f'，http状态码={self.http_code}'
         if len(self.content) == 0:
-            msg += f'，响应数据为空'
+            msg += '，响应数据为空'
         return msg
 
     def transfer_to(self,

@@ -1,8 +1,6 @@
-from playwright.async_api import async_playwright, Page
-import asyncio, re, json
-from typing import Any, Dict, List
+import asyncio
+from typing import Any, Dict
 from system.config import config  # 使用新的配置系统
-import os
 from nagaagent_core.core import load_dotenv
 from nagaagent_core.vendors.agents import Agent, AgentHooks, RunContextWrapper  # 统一代理 #
 # 移除循环导入，延迟导入

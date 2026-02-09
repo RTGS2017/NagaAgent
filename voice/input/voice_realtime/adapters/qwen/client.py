@@ -235,7 +235,7 @@ class QwenVoiceClientRefactored:
         # 确保在AI_SPEAKING状态
         if self.state_manager.current_state != ConversationState.AI_SPEAKING:
             self.state_manager.transition_to(ConversationState.AI_SPEAKING)
-            logger.info(f"[状态] 转换到AI_SPEAKING状态")
+            logger.info("[状态] 转换到AI_SPEAKING状态")
         if self.on_status_callback:
             self.on_status_callback("ai_speaking")
             logger.info("[状态] 发送ai_speaking到UI（播放开始）")

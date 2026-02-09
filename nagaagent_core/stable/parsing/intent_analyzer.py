@@ -3,7 +3,7 @@
 提供稳定的意图识别和分析功能
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from .json_parser import parse_non_standard_json, validate_tool_call
 
 

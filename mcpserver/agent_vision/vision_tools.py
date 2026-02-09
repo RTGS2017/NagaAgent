@@ -12,7 +12,7 @@ import logging
 import subprocess
 from PIL import ImageGrab
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 

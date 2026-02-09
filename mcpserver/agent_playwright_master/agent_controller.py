@@ -1,4 +1,3 @@
-import os
 from nagaagent_core.core import load_dotenv
 from nagaagent_core.vendors.agents import Agent, AgentHooks, RunContextWrapper  # 统一代理 #
 # 移除循环导入，使用延迟导入

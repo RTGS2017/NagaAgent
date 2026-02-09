@@ -4,7 +4,6 @@
 """
 
 import io
-import time
 import platform
 import logging
 from typing import Dict, Any, Optional, Tuple

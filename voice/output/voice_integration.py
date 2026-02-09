@@ -4,25 +4,17 @@
 语音集成模块 - 重构版本：依赖apiserver的流式TTS实现
 支持接收处理好的普通文本、并发音频合成和音频播放（使用simpleaudio替换pygame）
 """
-import asyncio
 import logging
-import tempfile
-import os
 import threading
 import time
-import hashlib
-import re
-import io
-import base64
-from typing import Optional, List, Dict, Any
-from nagaagent_core.core import aiohttp
+from typing import Optional, Dict, Any
 import sys
 from pathlib import Path
 from queue import Queue, Empty
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from system.config import config, AI_NAME
+from system.config import config
 
 logger = logging.getLogger("VoiceIntegration")
 
@@ -403,7 +395,7 @@ class VoiceIntegration:
                     logger.info(f"🎯 [EdgeTTS首次播放] 口型引擎已准备，延迟 {self.first_playback_delay_ms}ms 后再播放音频")
                 time.sleep(delay_seconds)
                 if self.enable_timing_debug:
-                    logger.info(f"🎯 [EdgeTTS首次播放] 延迟结束，开始播放音频")
+                    logger.info("🎯 [EdgeTTS首次播放] 延迟结束，开始播放音频")
                 self.first_playback = False
 
             # 加载并播放音频

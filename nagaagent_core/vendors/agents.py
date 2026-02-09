@@ -2,7 +2,6 @@
 try:
     import agents as _agents  # 引入外部agents包 #
     from agents import *  # noqa #
-    import sys as _sys  # 用于注册子模块 #
     # 不再尝试导入 agents.mcp，避免在无该模块环境的多余错误 #
     __all__ = getattr(_agents, '__all__', [])  # 导出符号 #
 except Exception:

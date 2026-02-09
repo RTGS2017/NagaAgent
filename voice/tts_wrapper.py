@@ -6,7 +6,6 @@ TTS包装器 - 解决asyncio事件循环冲突问题
 import asyncio
 import threading
 import logging
-from pathlib import Path
 import tempfile
 import edge_tts
 

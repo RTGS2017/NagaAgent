@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from system.config import config
@@ -20,7 +19,7 @@ from system.background_analyzer import get_background_analyzer
 from agentserver.agent_computer_control import ComputerControlAgent
 from agentserver.task_scheduler import get_task_scheduler, TaskStep
 from agentserver.toolkit_manager import toolkit_manager
-from agentserver.openclaw import OpenClawClient, OpenClawConfig, get_openclaw_client, set_openclaw_config
+from agentserver.openclaw import get_openclaw_client, set_openclaw_config
 
 # 配置日志
 logger = logging.getLogger(__name__)

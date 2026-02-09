@@ -17,11 +17,9 @@ except ImportError:
     QTimer = None
 import threading
 import requests
-import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from enum import Enum
-from pathlib import Path
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)

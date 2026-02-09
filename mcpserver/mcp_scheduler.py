@@ -6,11 +6,10 @@ MCP调度器 - 负责MCP任务的调度和执行
 """
 
 import asyncio
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
-from system.config import config, logger
+from system.config import logger
 
 # 能力信息从注册中心获取，由上层管理
 
@@ -159,7 +158,7 @@ class MCPScheduler:
             # 确保callback_url包含路径，如果没有则添加默认路径
             # 检查URL格式: http://host:port (只有2个斜杠) 或 http://host:port/ (以斜杠结尾)
             if callback_url.count("/") == 2 or callback_url.endswith("/"):
-                logger.info(f"[回调调度] URL缺少路径，添加/tool_result_callback")
+                logger.info("[回调调度] URL缺少路径，添加/tool_result_callback")
                 callback_url = callback_url.rstrip("/") + "/tool_result_callback"
 
             logger.info(f"[回调调度] 最终使用回调URL: {callback_url}, payload大小: {len(str(payload))}字节")

@@ -1,7 +1,6 @@
 """
 Footnote and endnote functionality for Word Document Server.
 """
-from docx import Document
 from typing import List, Tuple
 
 

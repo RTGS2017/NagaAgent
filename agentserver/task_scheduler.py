@@ -7,9 +7,8 @@ import uuid  # 任务ID #
 import json  # JSON处理 #
 import logging  # 日志 #
 import time  # 时间处理 #
-from typing import Any, Dict, List, Optional, Union  # 类型标注 #
+from typing import Any, Dict, List, Optional  # 类型标注 #
 from dataclasses import dataclass, field  # 数据类 #
-from datetime import datetime, timedelta  # 时间处理 #
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -426,15 +425,15 @@ class _TaskScheduler:
     async def get_global_memory_summary(self) -> str:
         """获取全局记忆摘要"""
         async with self._lock:
-            summary = f"全局任务记忆摘要\n"
-            summary += f"=" * 50 + "\n"
+            summary = "全局任务记忆摘要\n"
+            summary += "=" * 50 + "\n"
             
             # 任务统计
             total_tasks = len(self.task_registry)
             running_tasks = len([t for t in self.task_registry.values() if t.get("status") == "running"])
             completed_tasks = len([t for t in self.task_registry.values() if t.get("status") == "completed"])
             
-            summary += f"任务统计:\n"
+            summary += "任务统计:\n"
             summary += f"- 总任务数: {total_tasks}\n"
             summary += f"- 运行中: {running_tasks}\n"
             summary += f"- 已完成: {completed_tasks}\n\n"
@@ -445,7 +444,7 @@ class _TaskScheduler:
             total_facts = len(self.key_facts)
             total_failures = len(self.failed_attempts)
             
-            summary += f"记忆统计:\n"
+            summary += "记忆统计:\n"
             summary += f"- 总步骤数: {total_steps}\n"
             summary += f"- 压缩记忆块: {total_compressed}\n"
             summary += f"- 关键事实: {total_facts}\n"

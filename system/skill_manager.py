@@ -18,7 +18,6 @@ skills/
 │       └── helper.py
 """
 
-import os
 import re
 import yaml
 import logging

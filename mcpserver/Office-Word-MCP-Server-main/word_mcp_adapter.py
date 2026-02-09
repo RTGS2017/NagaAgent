@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Dict, Any, Optional
 
 # 简化的Word文档处理功能
 try:

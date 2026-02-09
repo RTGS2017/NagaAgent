@@ -3,8 +3,6 @@ Comic Downloader MCP Server
 提供HTTP API接口的MCP服务器
 """
 
-import asyncio
-import json
 import logging
 from typing import Any, Dict, List, Optional
 from nagaagent_core.api import FastAPI, HTTPException

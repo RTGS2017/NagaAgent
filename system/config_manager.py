@@ -16,7 +16,7 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .config import config, hot_reload_config, add_config_listener, remove_config_listener
+from .config import hot_reload_config, add_config_listener
 from nagaagent_core.vendors.charset_normalizer import from_path
 from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
 

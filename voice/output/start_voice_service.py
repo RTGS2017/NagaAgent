@@ -7,9 +7,6 @@
 import sys
 import os
 import argparse
-import threading
-import time
-from pathlib import Path
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from system.config import config
@@ -20,7 +17,7 @@ def start_http_server():
         from voice.output.server import app
         from gevent.pywsgi import WSGIServer
         
-        print(f"🚀 启动HTTP语音输出服务器...")
+        print("🚀 启动HTTP语音输出服务器...")
         print(f"📍 地址: http://127.0.0.1:{config.tts.port}")
         print(f"🔑 API密钥: {'已启用' if config.tts.require_api_key else '已禁用'}")
         
@@ -85,7 +82,7 @@ def main():
     print("=" * 50)
     print("🎤 NagaAgent 语音输出服务")
     print("=" * 50)
-    print(f"📋 配置信息:")
+    print("📋 配置信息:")
     print(f"   端口: {config.tts.port}")
     print(f"   默认语音: {config.tts.default_voice}")
     print(f"   默认格式: {config.tts.default_format}")

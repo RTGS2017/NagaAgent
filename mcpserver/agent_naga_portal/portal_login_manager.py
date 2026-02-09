@@ -1,5 +1,4 @@
 """NagaPortal自动登录管理器 #"""
-import asyncio  # 异步 #
 import logging  # 日志 #
 from typing import Optional, Dict, Any  # 类型 #
 from .client import NagaPortalClient  # 客户端 #
@@ -65,14 +64,14 @@ class NagaPortalLoginManager:
                                             user_id = response_data['data'].get('id')
                                             if user_id:
                                                 self._user_id = user_id  # 保存用户ID #
-                                except Exception as e:
+                                except Exception:
                                     # 静默处理异常 #
                                     pass
                             else:
                                 # 如果没有cookie，尝试从响应头中解析
                                 # 这里可以添加从响应头解析cookie的逻辑
                                 pass
-                        except Exception as e:
+                        except Exception:
                             # 静默处理异常 #
                             pass
                 

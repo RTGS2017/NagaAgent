@@ -3,7 +3,7 @@ PyInstaller hook for OpenGL
 确保OpenGL相关模块和平台文件被正确打包
 """
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, is_module_satisfies
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 import os
 import sys
 

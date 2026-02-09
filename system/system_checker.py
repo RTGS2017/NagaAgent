@@ -6,20 +6,14 @@
 更新时间: 2025-10-04
 """
 
-import os
 import sys
 import subprocess
 import importlib
 import platform
-import json
 import socket
 import psutil
-import shutil
-import urllib.request
-import zipfile
-import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Optional
 from datetime import datetime
 from nagaagent_core.vendors.charset_normalizer import from_path
 from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
@@ -151,10 +145,10 @@ class SystemChecker:
         # 要求Python 3.11+（根据requirements.txt推荐）
         if version.major < 3 or (version.major == 3 and version.minor < 11):
             print(f"   [WARN] Python版本建议3.11+，当前{version.major}.{version.minor}")
-            print(f"   [TIP] 推荐升级到Python 3.11以获得最佳兼容性")
+            print("   [TIP] 推荐升级到Python 3.11以获得最佳兼容性")
             return False
 
-        print(f"   [OK] Python版本符合要求")
+        print("   [OK] Python版本符合要求")
         return True
     
     def check_virtual_environment(self) -> bool:
@@ -163,15 +157,15 @@ class SystemChecker:
         in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
         
         if not in_venv:
-            print(f"   [WARN] 未检测到虚拟环境")
+            print("   [WARN] 未检测到虚拟环境")
             
             # 检查是否存在venv目录
             if self.venv_path.exists():
                 print(f"   [INFO] 发现venv目录: {self.venv_path}")
-                print(f"   [TIP] 请运行: venv\\Scripts\\activate (Windows) 或 source venv/bin/activate (Linux/Mac)")
+                print("   [TIP] 请运行: venv\\Scripts\\activate (Windows) 或 source venv/bin/activate (Linux/Mac)")
                 return False
             else:
-                print(f"   [TIP] 建议创建虚拟环境: python -m venv venv")
+                print("   [TIP] 建议创建虚拟环境: python -m venv venv")
                 return False
         
         print(f"   [OK] 虚拟环境: {sys.prefix}")
@@ -189,7 +183,7 @@ class SystemChecker:
         if self.pyproject_file.exists():
             print(f"   [OK] pyproject.toml存在: {self.pyproject_file}")
         else:
-            print(f"   [WARN] pyproject.toml不存在（可选）")
+            print("   [WARN] pyproject.toml不存在（可选）")
 
         return True
     
@@ -218,7 +212,7 @@ class SystemChecker:
 
         if missing_deps:
             print(f"   [TIP] 请安装缺失的依赖: pip install {' '.join(missing_deps)}")
-            print(f"   [TIP] 或使用完整安装命令: pip install -r requirements.txt")
+            print("   [TIP] 或使用完整安装命令: pip install -r requirements.txt")
             return False
 
         return True
@@ -249,7 +243,7 @@ class SystemChecker:
                 missing_optional.append((dep, desc))
 
         if missing_optional:
-            print(f"   [TIP] 可选依赖缺失，某些功能可能不可用:")
+            print("   [TIP] 可选依赖缺失，某些功能可能不可用:")
             for dep, desc in missing_optional:
                 print(f"      - {dep}: {desc}")
 
@@ -272,7 +266,7 @@ class SystemChecker:
                 all_exist = False
         
         if not all_exist:
-            print(f"   [TIP] 请确保配置文件存在")
+            print("   [TIP] 请确保配置文件存在")
         
         return all_exist
     
@@ -314,7 +308,7 @@ class SystemChecker:
                 test_log.write_text("test")
                 test_log.unlink()
             
-            print(f"   ✅ 文件权限正常")
+            print("   ✅ 文件权限正常")
             return True
             
         except Exception as e:
@@ -366,14 +360,14 @@ class SystemChecker:
 
             # 资源检查
             if total_gb < 4:
-                print(f"   ⚠️ 内存不足4GB，可能影响性能")
+                print("   ⚠️ 内存不足4GB，可能影响性能")
                 return False
 
             if free_disk < 1:
-                print(f"   ⚠️ 磁盘空间不足1GB")
+                print("   ⚠️ 磁盘空间不足1GB")
                 return False
 
-            print(f"   ✅ 系统资源充足")
+            print("   ✅ 系统资源充足")
             return True
 
         except Exception as e:
@@ -411,20 +405,20 @@ class SystemChecker:
                         from neo4j import GraphDatabase
                         # 只测试连接，不进行实际查询
                         print(f"   Neo4j配置: {uri} (用户: {user})")
-                        print(f"   ✅ Neo4j包已安装，配置已启用")
+                        print("   ✅ Neo4j包已安装，配置已启用")
                         return True
                     except ImportError:
-                        print(f"   ❌ Neo4j包未安装")
+                        print("   ❌ Neo4j包未安装")
                         return False
                     except Exception as e:
                         print(f"   ⚠️ Neo4j连接测试失败: {e}")
-                        print(f"   💡 请确保Neo4j服务正在运行")
+                        print("   💡 请确保Neo4j服务正在运行")
                         return False
                 else:
-                    print(f"   ⚠️ Neo4j未启用（配置中grag.enabled=false）")
+                    print("   ⚠️ Neo4j未启用（配置中grag.enabled=false）")
                     return True
             else:
-                print(f"   ⚠️ 配置文件不存在，跳过Neo4j检测")
+                print("   ⚠️ 配置文件不存在，跳过Neo4j检测")
                 return True
 
         except Exception as e:

@@ -7,7 +7,6 @@
 """
 
 import logging
-import base64
 import threading
 import time
 from typing import Optional, Dict, Any
@@ -18,7 +17,7 @@ from collections import deque
 
 from ..core.base_client import BaseVoiceClient
 from ..core.audio_manager import AudioManager
-from ..core.state_manager import StateManager, ConversationState
+from ..core.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
 

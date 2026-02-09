@@ -1,4 +1,5 @@
-import sys, os
+import sys
+import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # 加入项目根目录到模块查找路径
 import re
 import emoji

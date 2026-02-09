@@ -6,7 +6,6 @@ OpenClaw 安装器
 """
 
 import os
-import json
 import asyncio
 import logging
 import subprocess

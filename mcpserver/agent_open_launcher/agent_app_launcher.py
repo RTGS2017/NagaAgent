@@ -1,8 +1,6 @@
 # agent_app_launcher.py # 应用启动与管理Agent（综合版）
 import os  # 操作系统 #
-import platform  # 平台 #
 import subprocess  # 子进程 #
-import asyncio  # 异步 #
 import json  # JSON #
 import sys  # 系统 #
 
@@ -18,7 +16,7 @@ class AppLauncherAgent(object):
     def __init__(self):
         # 初始化综合扫描器（异步初始化，不阻塞） #
         self.scanner = get_comprehensive_scanner()  # 获取扫描器 #
-        print(f'✅ AppLauncherAgent初始化完成，应用扫描将在首次使用时异步执行')  # 初始化信息 #
+        print('✅ AppLauncherAgent初始化完成，应用扫描将在首次使用时异步执行')  # 初始化信息 #
 
     async def handle_handoff(self, data: dict) -> str:
         """

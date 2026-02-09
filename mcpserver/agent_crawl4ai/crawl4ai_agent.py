@@ -1,6 +1,4 @@
 import json
-import os
-import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
 from system.config import config
@@ -171,7 +169,7 @@ class Crawl4aiAgent:
     
     def _format_markdown(self, result) -> str:
         """格式化Markdown内容，添加AI友好的结构"""
-        markdown_content = f"# 网页解析结果\n\n"
+        markdown_content = "# 网页解析结果\n\n"
         markdown_content += f"**URL**: {result.url}\n\n"
         
         # 添加标题

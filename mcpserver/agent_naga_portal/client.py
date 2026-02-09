@@ -1,5 +1,4 @@
 """NagaPortal HTTP客户端封装 #"""
-import asyncio  # 异步 #
 from typing import Any, Dict, Optional  # 类型 #
 import httpx  # HTTP客户端 #
 from system.config import config  # 全局配置 #
@@ -44,7 +43,7 @@ class NagaPortalClient:
                 latest_cookies = get_cookies()
                 if latest_cookies:
                     self._client.cookies.update(latest_cookies)  # 设置最新cookie #
-            except Exception as e:
+            except Exception:
                 # 如果获取cookie失败，尝试使用保存的cookie #
                 if hasattr(self, '_saved_cookies') and self._saved_cookies:
                     self._client.cookies.update(self._saved_cookies)  # 重新设置cookie #
@@ -117,7 +116,7 @@ class NagaPortalClient:
         try:
             from .portal_login_manager import get_cookies
             cookies = get_cookies()  # 获取最新cookie #
-        except Exception as e:
+        except Exception:
             # 如果获取cookie失败，使用保存的cookie #
             if hasattr(self, '_saved_cookies'):
                 cookies = self._saved_cookies or {}
@@ -139,7 +138,7 @@ class NagaPortalClient:
         try:
             from .portal_login_manager import get_cookies
             cookies = get_cookies()  # 获取最新cookie #
-        except Exception as e:
+        except Exception:
             # 如果获取cookie失败，使用保存的cookie #
             if hasattr(self, '_saved_cookies'):
                 cookies = self._saved_cookies or {}
@@ -165,7 +164,7 @@ class NagaPortalClient:
                 from .portal_login_manager import get_user_id
                 self._cached_user_id = get_user_id()
                 self._user_id_initialized = True
-            except Exception as e:
+            except Exception:
                 # 如果获取失败，不影响正常使用
                 pass
         return self._cached_user_id
@@ -213,7 +212,7 @@ class NagaPortalClient:
                         return {
                             "success": True,
                             "status": "payment_ready",
-                            "message": f"充值请求成功，请访问支付页面完成支付",
+                            "message": "充值请求成功，请访问支付页面完成支付",
                             "data": {
                                 "payment_url": payment_url,
                                 "amount": amount,

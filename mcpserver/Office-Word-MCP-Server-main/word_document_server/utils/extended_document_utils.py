@@ -1,7 +1,7 @@
 """
 Extended document utilities for Word Document Server.
 """
-from typing import Dict, List, Any, Tuple
+from typing import Dict, Any
 from docx import Document
 
 

@@ -8,8 +8,7 @@ import json
 import subprocess
 import platform
 import shutil
-from typing import Dict, List, Optional, Any, Union, Tuple
-from docx import Document
+from typing import Optional
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text

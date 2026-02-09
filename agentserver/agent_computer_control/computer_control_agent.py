@@ -2,14 +2,13 @@
 电脑控制主Agent - 协调各个组件，提供统一的电脑控制接口
 """
 
-import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import json
 
 from .computer_use_adapter import ComputerUseAdapter
 from .visual_analyzer import VisualAnalyzer
-from .action_executor import ActionExecutor, ActionResult
+from .action_executor import ActionExecutor
 
 # 配置日志
 logger = logging.getLogger(__name__)

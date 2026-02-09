@@ -6,12 +6,11 @@
 """
 
 import re
-import json
 import logging
 import asyncio
 import sys
 import os
-from typing import Callable, Optional, Dict, Any, Union, List
+from typing import Callable, Optional, Dict, List
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +20,6 @@ try:
 except ImportError:
     # 如果直接导入失败，尝试从父目录导入
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from system.config import config, AI_NAME
 
 # 工具调用解析/执行已不再需要
 

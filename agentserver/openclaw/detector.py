@@ -5,7 +5,6 @@ OpenClaw 状态检测器
 自动检测 OpenClaw 安装状态、配置和 Gateway 连接
 """
 
-import os
 import json
 import logging
 from pathlib import Path

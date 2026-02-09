@@ -5,18 +5,15 @@ MCP服务器 - 独立的MCP工具调度服务
 基于博弈论的MCPServer设计，提供MCP工具调用的统一调度和管理
 """
 
-import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from .mcp_scheduler import MCPScheduler
-from system.config import config, logger
+from system.config import logger
 # 能力发现逻辑已由注册中心承担，移除独立能力管理器
 # 精简：移除流式工具调用与独立工具解析执行，统一走调度器与管理器
 

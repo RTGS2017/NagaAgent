@@ -1,16 +1,9 @@
 # mcp_registry.py # 动态扫描JSON元数据文件注册MCP服务
-import json
-import os
-import importlib
-import inspect
-from pathlib import Path
 import sys
 from typing import Dict, Any, Optional, List
 
 # 从稳定模块导入MCP管理功能
 from nagaagent_core.stable.mcp import (
-    load_manifest_file,
-    create_agent_instance,
     scan_and_register_mcp_agents,
     MCP_REGISTRY,
     MANIFEST_CACHE

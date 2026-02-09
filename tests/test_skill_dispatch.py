@@ -36,7 +36,7 @@ def test_skill_loading():
 def test_skill_matching(user_input: str):
     """测试技能匹配"""
     print("=" * 60)
-    print(f"测试 2: 技能匹配")
+    print("测试 2: 技能匹配")
     print(f"用户输入: {user_input}")
     print("=" * 60)
 

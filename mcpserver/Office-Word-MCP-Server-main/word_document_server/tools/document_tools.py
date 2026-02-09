@@ -3,7 +3,7 @@ Document creation and manipulation tools for Word Document Server.
 """
 import os
 import json
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 from docx import Document
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, create_document_copy, resolve_document_path, validate_save_path

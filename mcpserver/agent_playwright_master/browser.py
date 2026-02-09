@@ -1,8 +1,7 @@
-from typing import Any, Dict, Callable
+from typing import Callable
 from system.config import *  # 配置参数统一管理 #
 import asyncio
 import nagaagent_core.vendors.html2text as html2text  # 用于HTML转Markdown #
-import os
 from nagaagent_core.core import load_dotenv
 from nagaagent_core.vendors.agents import Agent, AgentHooks, RunContextWrapper  # 统一代理 #
 # 移除循环导入
@@ -58,7 +57,7 @@ class PlaywrightBrowser:
         try:
             screenshot = await self.page.screenshot(full_page=False)  #
             return screenshot  #
-        except Exception as e:
+        except Exception:
             return b''  #
 
     async def subscribe_page_change(self, callback: Callable[[str], None], interval: float = 2.0, format: str = "markdown"):

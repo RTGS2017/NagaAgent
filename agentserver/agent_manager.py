@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 
 # 配置日志
@@ -222,8 +222,6 @@ class AgentManager:
             processed_text = processed_text.replace("{{ModelProvider}}", agent_config.model_provider)
         
         # 环境变量占位符替换
-        import os
-        import re
         
         # 匹配 {{ENV_VAR_NAME}} 格式的环境变量
         env_pattern = r'\{\{([A-Z_][A-Z0-9_]*)\}\}'
@@ -233,7 +231,6 @@ class AgentManager:
             processed_text = processed_text.replace(f"{{{{{env_var_name}}}}}", env_value)
         
         # 时间相关占位符
-        from datetime import datetime
         now = datetime.now()
         processed_text = processed_text.replace("{{CurrentTime}}", now.strftime("%H:%M:%S"))
         processed_text = processed_text.replace("{{CurrentDate}}", now.strftime("%Y-%m-%d"))
@@ -345,7 +342,7 @@ class AgentManager:
             
             # 记录调试信息
             if self.debug_mode:
-                logger.debug(f"Agent调用消息序列:")
+                logger.debug("Agent调用消息序列:")
                 for i, msg in enumerate(messages):
                     logger.debug(f"  [{i}] {msg['role']}: {msg['content'][:100]}...")
             
@@ -420,7 +417,7 @@ class AgentManager:
             # 记录响应信息（调试模式）
             if self.debug_mode:
                 usage = response.usage
-                logger.debug(f"API响应成功:")
+                logger.debug("API响应成功:")
                 logger.debug(f"  使用Token: {usage.prompt_tokens} (输入) + {usage.completion_tokens} (输出) = {usage.total_tokens} (总计)")
                 logger.debug(f"  响应长度: {len(assistant_content)} 字符")
             
@@ -433,7 +430,7 @@ class AgentManager:
             # 记录详细的错误信息（调试模式）
             if self.debug_mode:
                 import traceback
-                logger.debug(f"详细错误信息:")
+                logger.debug("详细错误信息:")
                 logger.debug(traceback.format_exc())
             
             return {"status": "error", "error": error_msg}

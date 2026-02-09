@@ -1,11 +1,10 @@
 import json
 from nagaagent_core.vendors.agents import Agent  # 统一代理 #
-import asyncio
 
 # 直接导入summer_memory的memory_manager
 try:
     from summer_memory.memory_manager import memory_manager
-except Exception as e:
+except Exception:
     memory_manager = None
 
 class MemoryAgent(Agent):

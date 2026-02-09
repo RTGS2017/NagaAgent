@@ -1,8 +1,8 @@
 from requests import get as iget
 from zipfile import ZipFile
 from os import remove, name, system, chdir as cd
-from shutil import rmtree as rm, make_archive
-from zipfile import ZipFile, ZIP_DEFLATED
+from shutil import rmtree as rm
+from zipfile import ZIP_DEFLATED
 import os
 IS_WINDOWS = True if name == 'nt' else False
 

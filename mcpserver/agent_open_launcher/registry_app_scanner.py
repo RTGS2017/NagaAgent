@@ -2,7 +2,6 @@
 import platform  # 平台检测 #
 import os  # 操作系统 #
 from typing import List, Dict, Optional  # 类型 #
-import json  # JSON #
 
 # 平台特定导入
 if platform.system() == 'Windows':

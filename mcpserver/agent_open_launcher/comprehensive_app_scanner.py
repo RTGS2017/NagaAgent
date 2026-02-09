@@ -4,7 +4,6 @@ import os  # 操作系统 #
 import glob  # 文件匹配 #
 import asyncio  # 异步 #
 from typing import List, Dict, Optional  # 类型 #
-import json  # JSON #
 
 # 平台特定导入
 if platform.system() == 'Windows':

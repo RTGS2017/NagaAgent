@@ -12,7 +12,6 @@ except ImportError:
     HAS_QT = False
     pyqtSignal = lambda *a, **kw: None
 import threading
-from typing import Optional
 
 
 class ThreadSafeVoiceIntegration(QObject):
@@ -201,7 +200,7 @@ class ThreadSafeVoiceIntegration(QObject):
                 self.parent.on_voice_status(data)
             elif action == "error":
                 self.parent.on_voice_error(data)
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
 

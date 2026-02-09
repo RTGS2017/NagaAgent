@@ -5,7 +5,6 @@ import sys
 import os
 import time
 import threading
-from typing import Optional, Dict, Any
 from fastmcp import FastMCP
 from charset_normalizer import from_path
 

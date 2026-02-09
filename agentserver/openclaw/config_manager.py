@@ -6,7 +6,6 @@ OpenClaw 配置管理器
 只允许修改白名单中的字段
 """
 
-import os
 import json
 import secrets
 import logging

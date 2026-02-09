@@ -1,10 +1,8 @@
 """NagaPortal MCP Agent #"""
 import json  # JSON #
-import asyncio  # 异步 #
 import httpx  # HTTP客户端 #
 import webbrowser  # 浏览器 #
 from typing import Any, Dict, Optional  # 类型 #
-from system.config import config  # 全局配置 #
 from .portal_login_manager import get_cookies, get_user_id  # 登录管理器 #
 
 class NagaPortalAgent:
@@ -293,7 +291,7 @@ class NagaPortalAgent:
                 
                 # 方法3: 如果都失败了，提供手动链接和支付数据 #
                 if not opened:
-                    print(f"⚠️ 无法自动打开支付页面")  # 调试信息 #
+                    print("⚠️ 无法自动打开支付页面")  # 调试信息 #
                     print(f"📋 请手动访问: {payment_url}")  # 调试信息 #
                     print(f"📦 支付数据: {payment_data}")  # 调试信息 #
                 
@@ -366,7 +364,7 @@ class NagaPortalAgent:
                 return {
                     "success": True,
                     "status": "redeem_success",
-                    "message": f"兑换码使用成功！",
+                    "message": "兑换码使用成功！",
                     "data": {
                         "key": key,
                         "response": response_data
