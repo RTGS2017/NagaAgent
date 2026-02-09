@@ -1,53 +1,84 @@
-<script setup lang="ts">
-import { onMounted, onUnmounted, useTemplateRef, watch } from 'vue'
+<script lang="ts">
+import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import * as PIXI from 'pixi.js'
-import { Live2DModel } from 'pixi-live2d-display'
+import { computed, nextTick, onMounted, onUnmounted, useTemplateRef, watch } from 'vue'
 
-Live2DModel.registerTicker(PIXI.Ticker)
+declare global {
+  interface Window {
+    PIXI: typeof PIXI
+  }
+}
+window.PIXI = PIXI
+</script>
 
-const props = withDefaults(defineProps<{
-  model: string
+<script setup lang="ts">
+const { source, width, height, x, y, scale, ssaa } = defineProps<{
+  source: string
   width: number
   height: number
-  factor?: number
-  alpha?: number
-}>(), {
-  factor: 2,
-  alpha: 0,
-})
+  x: number
+  y: number
+  scale: number
+  ssaa: number
+}>()
 
 let app: PIXI.Application
-let model: Live2DModel
 
-const container = useTemplateRef('container')
+const computedScale = computed(() => scale * ssaa)
+const computedWidth = computed(() => width * ssaa)
+const computedHeight = computed(() => height * ssaa)
 
-function initializeModel(model: Live2DModel) {
-  model.scale.set(0.2 * props.factor)
-  watch(() => props.width, (width) => model.x = (width * props.factor * 1.5 - model.width) / 2, { immediate: true })
-  watch(() => props.height, (height) => model.y = (height * props.factor * 1.6 - model.height) / 2, { immediate: true })
-}
+const canvas = useTemplateRef('canvas')
 
 onMounted(async () => {
+  if (!canvas.value)
+    return
+
   app = new PIXI.Application({
-    view: container.value!,
-    width: props.width * props.factor,
-    height: props.height * props.factor,
+    view: canvas.value,
+    width: computedWidth.value,
+    height: computedHeight.value,
     antialias: true,
-    backgroundAlpha: props.alpha
+    backgroundAlpha: 0,
+    resizeTo: canvas.value,
   })
 
-  try {
-    model = await Live2DModel.from(props.model)
-    initializeModel(model)
-    app.stage.addChild(model)
-  } catch (error) {
-    console.error('Failed to initialize Live2D:', error)
-  }
+  watch(() => [width, height, ssaa], () => nextTick().then(() => app.resize()))
+
+  watch(() => source, async (source, _, onCleanUp) => {
+    try {
+      const rawModel = await Live2DModel.from(source)
+      const model = Object.assign(rawModel, {
+        rawWidth: rawModel.width,
+        rawHeight: rawModel.height,
+      })
+
+      const computedX = computed(() => width * ssaa * (1 + x) - model.rawWidth * computedScale.value)
+      const computedY = computed(() => height * ssaa * (1 + y) - model.rawHeight * computedScale.value)
+
+      const handles = [
+        watch(computedScale, scale => model.scale.set(scale), { immediate: true }),
+        watch(computedX, x => model.x = x / 2, { immediate: true }),
+        watch(computedY, y => model.y = y / 2, { immediate: true }),
+      ]
+
+      app.stage.addChild(model)
+
+      onCleanUp(() => {
+        app.stage.removeChild(model)
+        model.destroy()
+        handles.forEach(handle => handle.stop())
+      })
+    }
+    catch (error) {
+      console.error('Failed to initialize Live2D:', error)
+    }
+  }, { immediate: true })
 })
 
 onUnmounted(() => app && app.destroy())
 </script>
 
 <template>
-  <canvas ref="container" :style="{ zoom: 1 / factor }" />
+  <canvas ref="canvas" :width="computedWidth" :height="computedHeight" :style="{ zoom: 1 / ssaa }" />
 </template>

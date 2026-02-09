@@ -7,7 +7,14 @@
 3. 混合模式（通义千问ASR + API Server）
 """
 
-from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal, QTimer
+try:
+    from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal, QTimer
+    HAS_QT = True
+except ImportError:
+    QObject = object
+    HAS_QT = False
+    pyqtSignal = lambda *a, **kw: None
+    QTimer = None
 import threading
 import requests
 import json

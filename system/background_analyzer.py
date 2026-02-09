@@ -555,11 +555,41 @@ class BackgroundAnalyzer:
                         logger.info(
                             f"[博弈论] OpenClaw {task_type} 任务完成: status={task_status}, reply={reply[:100] if reply else 'empty'}..."
                         )
+
+                        # 将 ClawdBot 回复发送到 UI 显示
+                        if reply:
+                            await self._notify_ui_clawdbot_reply(session_id, reply)
                     else:
                         logger.error(f"[博弈论] OpenClaw任务发送失败: {response.status_code} - {response.text}")
 
         except Exception as e:
             logger.error(f"[博弈论] 发送OpenClaw任务失败: {e}")
+
+    async def _notify_ui_clawdbot_reply(self, session_id: str, reply: str):
+        """将 ClawdBot 回复发送到 UI 显示"""
+        try:
+            import httpx
+
+            from system.config import get_server_port
+
+            payload = {
+                "session_id": session_id,
+                "action": "show_clawdbot_response",
+                "ai_response": reply,
+            }
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"http://localhost:{get_server_port('api_server')}/ui_notification",
+                    json=payload,
+                )
+                if response.status_code == 200:
+                    logger.info(f"[博弈论] ClawdBot 回复已发送到 UI: {reply[:80]}...")
+                else:
+                    logger.error(f"[博弈论] ClawdBot 回复发送失败: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"[博弈论] 发送 ClawdBot 回复到 UI 失败: {e}")
 
 
 # 全局分析器实例

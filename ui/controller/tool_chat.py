@@ -13,6 +13,7 @@ class ChatTool(QObject):
     tool_ai_response_received = pyqtSignal(str)
     tool_status_received = pyqtSignal(str, int)
     tool_status_hide_requested = pyqtSignal()
+    clawdbot_response_received = pyqtSignal(str)  # ClawdBot 回复信号
 
     def __init__(self, window):
         super().__init__()
@@ -58,6 +59,7 @@ class ChatTool(QObject):
         self.tool_ai_response_received.connect(self._handle_tool_ai_response_safe)
         self.tool_status_received.connect(self._handle_tool_status_safe)
         self.tool_status_hide_requested.connect(self._hide_tool_status_safe)
+        self.clawdbot_response_received.connect(self._handle_clawdbot_response_safe)
 
     def adjust_input_height(self):
         window = self.window
@@ -569,6 +571,50 @@ class ChatTool(QObject):
         except Exception as e:
             logger.error(f"[UI] 处理工具完成后的AI回复失败: {e}")
             self.add_system_message(f"❌ 显示工具结果失败: {str(e)}")
+
+    def _handle_clawdbot_response_safe(self, reply: str):
+        """线程安全地处理 ClawdBot 回复"""
+        try:
+            logger.info(f"[UI] 收到 ClawdBot 回复，内容长度: {len(reply)}")
+
+            # 停止加载状态
+            self.progress_widget.stop_loading()
+            self.tool_status_hide_requested.emit()
+
+            if reply and reply.strip():
+                self.add_clawdbot_message(reply)
+                logger.info(f"[UI] ClawdBot 回复已添加到聊天界面")
+            else:
+                logger.warning(f"[UI] 收到空的 ClawdBot 回复")
+
+        except Exception as e:
+            logger.error(f"[UI] 处理 ClawdBot 回复失败: {e}")
+            self.add_system_message(f"❌ 显示 ClawdBot 回复失败: {str(e)}")
+
+    def add_clawdbot_message(self, content: str) -> str:
+        """添加 ClawdBot 回复到聊天界面，标注来源为 ClawdBot"""
+        self.message_counter += 1
+        message_id = f"msg_{self.message_counter}"
+
+        parent_widget = self.chat_layout.parentWidget()
+        message_dialog = MessageRenderer.create_assistant_message(
+            "ClawdBot", content, parent_widget
+        )
+
+        self._messages[message_id] = {
+            "name": "ClawdBot",
+            "content": content,
+            "full_content": content,
+            "dialog_widget": message_dialog,
+            "is_ai": True,
+            "source": "clawdbot",
+        }
+
+        self._remove_layout_stretch()
+        self.chat_layout.addWidget(message_dialog)
+        self.chat_layout.addStretch()
+        self.smart_scroll_to_bottom()
+        return message_id
 
     def _save_tool_conversation_to_history(self, ai_response: str):
         """保存工具对话历史到API服务器"""

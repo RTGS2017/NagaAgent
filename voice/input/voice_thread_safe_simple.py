@@ -4,7 +4,13 @@
 直接使用原始实现，仅添加必要的线程保护
 """
 
-from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal
+try:
+    from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal
+    HAS_QT = True
+except ImportError:
+    QObject = object
+    HAS_QT = False
+    pyqtSignal = lambda *a, **kw: None
 import threading
 from typing import Optional
 

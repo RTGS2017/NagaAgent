@@ -179,9 +179,14 @@ class OpenClawClient:
         self._default_session_key: Optional[str] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """获取 HTTP 客户端（懒加载）"""
+        """获取 HTTP 客户端（懒加载，禁用代理确保 localhost 直连）"""
         if self._http_client is None or self._http_client.is_closed:
-            self._http_client = httpx.AsyncClient(timeout=self.config.timeout)
+            # OpenClaw Gateway 运行在 localhost，必须绕过代理
+            import os
+            os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
+            self._http_client = httpx.AsyncClient(
+                timeout=self.config.timeout,
+            )
         return self._http_client
 
     async def close(self):
@@ -334,7 +339,7 @@ class OpenClawClient:
                 )
 
                 # /hooks/agent 返回 200/202
-                # 如果设置了 timeoutSeconds，返回 { runId, status: 'ok', reply } 或 { runId, status: 'timeout' }
+                # 200 表示同步完成（含 reply），202 表示异步接受（需轮询获取回复）
                 if response.status_code in (200, 202):
                     try:
                         result = response.json()
@@ -353,14 +358,12 @@ class OpenClawClient:
 
                         # 检查返回状态
                         status = result.get("status", "accepted")
-                        if status == "ok":
+                        if status == "ok" and result.get("reply"):
                             # 同步完成，包含 reply
                             task.status = TaskStatus.COMPLETED
                             task.completed_at = datetime.now().isoformat()
                             reply = result.get("reply", "")
-                            logger.info(
-                                f"[OpenClaw] 任务完成: {task.task_id}, reply: {reply[:100] if reply else 'empty'}..."
-                            )
+                            logger.info(f"[OpenClaw] 任务同步完成: {task.task_id}, reply: {reply[:100] if reply else 'empty'}...")
 
                             self._emit_task_event(
                                 task,
@@ -371,23 +374,35 @@ class OpenClawClient:
                                     "reply_preview": (reply[:200] if reply else ""),
                                 },
                             )
-                        elif status == "timeout":
-                            # 超时但任务仍在运行
-                            task.status = TaskStatus.RUNNING
-                            logger.warning(f"[OpenClaw] 任务超时但仍在运行: {task.task_id}")
-
-                            self._emit_task_event(
-                                task,
-                                kind="state",
-                                message="task_timeout_running",
-                                data={
-                                    "run_id": task.run_id,
-                                },
-                            )
                         else:
-                            # accepted 表示异步接受，任务还在运行
+                            # 202 异步接受，需要轮询 sessions_history 获取回复
                             task.status = TaskStatus.RUNNING
-                            logger.info(f"[OpenClaw] 任务已接受: {task.task_id}, runId: {task.run_id}")
+                            logger.info(f"[OpenClaw] 任务已接受(202): {task.task_id}, runId: {task.run_id}, 开始轮询回复...")
+
+                            # 轮询获取回复
+                            reply = await self._poll_for_reply(
+                                actual_session_key,
+                                timeout_seconds=timeout_seconds,
+                            )
+                            if reply:
+                                task.status = TaskStatus.COMPLETED
+                                task.completed_at = datetime.now().isoformat()
+                                task.result["reply"] = reply
+                                logger.info(f"[OpenClaw] 轮询获取回复成功: {reply[:100]}...")
+
+                                self._emit_task_event(
+                                    task,
+                                    kind="state",
+                                    message="task_completed",
+                                    data={
+                                        "run_id": task.run_id,
+                                        "reply_preview": (reply[:200] if reply else ""),
+                                    },
+                                )
+                            else:
+                                task.status = TaskStatus.COMPLETED
+                                task.completed_at = datetime.now().isoformat()
+                                logger.warning(f"[OpenClaw] 轮询超时，未获取到回复")
                     except Exception:
                         task.result = {"raw": response.text}
                         task.status = TaskStatus.RUNNING
@@ -498,6 +513,101 @@ class OpenClawClient:
             if run_id:
                 self._session_info.last_run_id = run_id
             self._session_info.status = status
+
+    async def _poll_for_reply(
+        self,
+        session_key: str,
+        timeout_seconds: int = 120,
+        poll_interval: float = 3.0,
+        initial_delay: float = 3.0,
+    ) -> Optional[str]:
+        """
+        轮询 sessions_history 获取 Agent 回复
+
+        /hooks/agent 返回 202 后，通过 /tools/invoke 调用 sessions_history
+        查找最新的 assistant 消息作为回复。
+
+        Args:
+            session_key: 会话标识
+            timeout_seconds: 最大等待时间（秒）
+            poll_interval: 轮询间隔（秒）
+            initial_delay: 首次轮询前等待时间（秒）
+
+        Returns:
+            回复文本，超时返回 None
+        """
+        import asyncio
+        import time
+
+        # 先等待一段时间让 Agent 处理
+        await asyncio.sleep(initial_delay)
+
+        start_time = time.time()
+        attempt = 0
+
+        while time.time() - start_time < timeout_seconds:
+            attempt += 1
+            try:
+                client = await self._get_client()
+
+                response = await client.post(
+                    f"{self.config.gateway_url}/tools/invoke",
+                    json={
+                        "tool": "sessions_history",
+                        "args": {
+                            "sessionKey": session_key,
+                            "limit": 3,
+                        },
+                    },
+                    headers=self.config.get_gateway_headers(),
+                    timeout=15,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    reply = self._extract_last_assistant_reply(data)
+                    if reply:
+                        logger.info(f"[OpenClaw] 轮询第{attempt}次成功获取回复")
+                        return reply
+
+            except Exception as e:
+                logger.warning(f"[OpenClaw] 轮询第{attempt}次异常: {e}")
+
+            # 等待后重试
+            await asyncio.sleep(poll_interval)
+
+        logger.warning(f"[OpenClaw] 轮询超时({timeout_seconds}s)，共尝试{attempt}次")
+        return None
+
+    @staticmethod
+    def _extract_last_assistant_reply(data: Dict[str, Any]) -> Optional[str]:
+        """
+        从 sessions_history 返回值中提取最后一条 assistant 的文本回复
+        """
+        try:
+            result = data.get("result", {})
+            details = result.get("details", {})
+            messages = details.get("messages", [])
+
+            # 从后往前查找最后一条 assistant 消息
+            for msg in reversed(messages):
+                if msg.get("role") != "assistant":
+                    continue
+                content = msg.get("content", [])
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    # 提取 type=="text" 的部分，忽略 thinking
+                    text_parts = [
+                        item.get("text", "")
+                        for item in content
+                        if isinstance(item, dict) and item.get("type") == "text"
+                    ]
+                    if text_parts:
+                        return "\n".join(text_parts)
+        except Exception:
+            pass
+        return None
 
     async def wake(self, text: str, mode: str = "now") -> Dict[str, Any]:
         """

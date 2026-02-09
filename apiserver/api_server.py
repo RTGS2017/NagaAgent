@@ -14,10 +14,10 @@ import uuid
 import time
 import threading
 import subprocess
-from urllib.request import Request as UrlRequest, urlopen
-from urllib.error import URLError
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, AsyncGenerator, Any, Tuple
+from urllib.request import Request as UrlRequest, urlopen
+from urllib.error import URLError
 
 # 在导入其他模块前先设置HTTP库日志级别
 logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
@@ -112,6 +112,8 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+# ============ 内部服务代理 ============
+
 async def _call_agentserver(
     method: str,
     path: str,
@@ -121,16 +123,15 @@ async def _call_agentserver(
 ) -> Any:
     """调用 agentserver 内部接口（用于透传 OpenClaw 状态查询等能力）"""
     import httpx
+    from system.config import get_server_port
 
     port = get_server_port("agent_server")
     url = f"http://127.0.0.1:{port}{path}"
-
     try:
-        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=timeout_seconds, trust_env=False) as client:
             resp = await client.request(method, url, params=params, json=json_body)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"agentserver 不可达: {e}")
-
     if resp.status_code >= 400:
         detail = resp.text
         try:
@@ -138,53 +139,43 @@ async def _call_agentserver(
         except Exception:
             pass
         raise HTTPException(status_code=resp.status_code, detail=detail)
-
     try:
         return resp.json()
     except Exception:
         return resp.text
 
 
-# 请求模型
-class ChatRequest(BaseModel):
-    message: str
-    stream: bool = False
-    session_id: Optional[str] = None
-    use_self_game: bool = False
-    disable_tts: bool = False  # V17: 支持禁用服务器端TTS
-    return_audio: bool = False  # V19: 支持返回音频URL供客户端播放
-    skip_intent_analysis: bool = False  # 新增：跳过意图分析
+async def _call_mcpserver(
+    method: str,
+    path: str,
+    params: Optional[Dict[str, Any]] = None,
+    timeout_seconds: float = 10.0,
+) -> Any:
+    """调用 MCP Server 内部接口"""
+    import httpx
+    from system.config import get_server_port
+
+    port = get_server_port("mcp_server")
+    url = f"http://127.0.0.1:{port}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout_seconds, trust_env=False) as client:
+            resp = await client.request(method, url, params=params)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"MCP Server 不可达: {e}")
+    if resp.status_code >= 400:
+        detail = resp.text
+        try:
+            detail = resp.json()
+        except Exception:
+            pass
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+    try:
+        return resp.json()
+    except Exception:
+        return resp.text
 
 
-class ChatResponse(BaseModel):
-    response: str
-    reasoning_content: Optional[str] = None  # COT 思考过程内容
-    session_id: Optional[str] = None
-    status: str = "success"
-
-
-class SystemInfoResponse(BaseModel):
-    version: str
-    status: str
-    available_services: List[str]
-    api_key_configured: bool
-
-
-class FileUploadResponse(BaseModel):
-    filename: str
-    file_path: str
-    file_size: int
-    file_type: str
-    upload_time: str
-    status: str = "success"
-    message: str = "文件上传成功"
-
-
-class DocumentProcessRequest(BaseModel):
-    file_path: str
-    action: str = "read"  # read, analyze, summarize
-    session_id: Optional[str] = None
-
+# ============ OpenClaw Skill Market ============
 
 OPENCLAW_STATE_DIR = Path.home() / ".openclaw"
 OPENCLAW_SKILLS_DIR = OPENCLAW_STATE_DIR / "skills"
@@ -317,41 +308,29 @@ def _copy_template_dir(template_name: str, skill_name: str) -> None:
 
 def _update_mcporter_firecrawl_config(api_key: Optional[str]) -> Path:
     MCPORTER_DIR.mkdir(parents=True, exist_ok=True)
-    config: Dict[str, Any] = {}
+    mcporter_config: Dict[str, Any] = {}
     if MCPORTER_CONFIG_PATH.exists():
         try:
-            config = json.loads(MCPORTER_CONFIG_PATH.read_text(encoding="utf-8"))
+            mcporter_config = json.loads(MCPORTER_CONFIG_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            config = {}
-
-    servers = config.get("mcpServers")
+            mcporter_config = {}
+    servers = mcporter_config.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
-
     server_entry = servers.get("firecrawl-mcp")
     if not isinstance(server_entry, dict):
         server_entry = {}
-
     env = server_entry.get("env")
     if not isinstance(env, dict):
         env = {}
-
     if api_key:
         env["FIRECRAWL_API_KEY"] = api_key
     elif "FIRECRAWL_API_KEY" not in env:
         env["FIRECRAWL_API_KEY"] = "YOUR_FIRECRAWL_API_KEY"
-
-    server_entry.update(
-        {
-            "command": "npx",
-            "args": ["-y", "firecrawl-mcp"],
-            "env": env,
-        }
-    )
+    server_entry.update({"command": "npx", "args": ["-y", "firecrawl-mcp"], "env": env})
     servers["firecrawl-mcp"] = server_entry
-    config["mcpServers"] = servers
-
-    MCPORTER_CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=True, indent=2), encoding="utf-8")
+    mcporter_config["mcpServers"] = servers
+    MCPORTER_CONFIG_PATH.write_text(json.dumps(mcporter_config, ensure_ascii=True, indent=2), encoding="utf-8")
     return MCPORTER_CONFIG_PATH
 
 
@@ -381,11 +360,9 @@ def _build_market_item(
             if entry.get("name") == skill_name:
                 skill_entry = entry
                 break
-
     skill_path = OPENCLAW_SKILLS_DIR / skill_name / "SKILL.md"
     installed_by_file = skill_path.exists()
     installed = installed_by_file or bool(skill_entry)
-
     return {
         "id": item.get("id"),
         "title": item.get("title"),
@@ -406,9 +383,7 @@ def _get_market_items_status() -> Dict[str, Any]:
     openclaw_found = shutil.which("openclaw") is not None
     openclaw_version = _get_openclaw_version()
     skills_data, skills_error = _get_openclaw_skills_data()
-
     items = [_build_market_item(item, skills_data, openclaw_found) for item in MARKET_ITEMS]
-
     return {
         "openclaw": {
             "found": openclaw_found,
@@ -419,6 +394,47 @@ def _get_market_items_status() -> Dict[str, Any]:
         },
         "items": items,
     }
+
+
+# 请求模型
+class ChatRequest(BaseModel):
+    message: str
+    stream: bool = False
+    session_id: Optional[str] = None
+    use_self_game: bool = False
+    disable_tts: bool = False  # V17: 支持禁用服务器端TTS
+    return_audio: bool = False  # V19: 支持返回音频URL供客户端播放
+    skip_intent_analysis: bool = False  # 新增：跳过意图分析
+
+
+class ChatResponse(BaseModel):
+    response: str
+    reasoning_content: Optional[str] = None  # COT 思考过程内容
+    session_id: Optional[str] = None
+    status: str = "success"
+
+
+class SystemInfoResponse(BaseModel):
+    version: str
+    status: str
+    available_services: List[str]
+    api_key_configured: bool
+
+
+class FileUploadResponse(BaseModel):
+    filename: str
+    file_path: str
+    file_size: int
+    file_type: str
+    upload_time: str
+    status: str = "success"
+    message: str = "文件上传成功"
+
+
+class DocumentProcessRequest(BaseModel):
+    file_path: str
+    action: str = "read"  # read, analyze, summarize
+    session_id: Optional[str] = None
 
 
 # API路由
@@ -754,8 +770,9 @@ async def chat_stream(request: ChatRequest):
                                 # 累积推理内容（可选：用于日志或 UI 显示）
                                 complete_reasoning += chunk_text
 
-                            # 将纯文本重新 base64 编码后 yield
-                            text_b64 = base64.b64encode(chunk_text.encode("utf-8")).decode("ascii")
+                            # 保留 type 字段，将完整 JSON 结构重新 base64 编码后 yield
+                            chunk_json = json_module.dumps({"type": chunk_type, "text": chunk_text})
+                            text_b64 = base64.b64encode(chunk_json.encode('utf-8')).decode('ascii')
                             yield f"data: {text_b64}\n\n"
                             continue
                     except Exception as e:
@@ -882,6 +899,72 @@ async def get_memory_stats():
         raise HTTPException(status_code=500, detail=f"获取记忆统计失败: {str(e)}")
 
 
+# ============ MCP Server 代理 ============
+
+@app.get("/mcp/status")
+async def get_mcp_status_proxy():
+    """代理 MCP Server 状态查询"""
+    return await _call_mcpserver("GET", "/status")
+
+
+@app.get("/mcp/tasks")
+async def get_mcp_tasks_proxy(status: Optional[str] = None):
+    """代理 MCP 任务列表"""
+    params = {"status": status} if status else None
+    return await _call_mcpserver("GET", "/tasks", params=params)
+
+
+@app.get("/memory/quintuples")
+async def get_quintuples():
+    """获取所有五元组 (用于知识图谱可视化)"""
+    try:
+        from summer_memory.quintuple_graph import get_all_quintuples
+        quintuples = get_all_quintuples()  # returns set[tuple]
+        return {
+            "status": "success",
+            "quintuples": [
+                {"subject": q[0], "subject_type": q[1], "predicate": q[2],
+                 "object": q[3], "object_type": q[4]}
+                for q in quintuples
+            ],
+            "count": len(quintuples)
+        }
+    except ImportError:
+        return {"status": "success", "quintuples": [], "count": 0, "message": "记忆系统模块未找到"}
+    except Exception as e:
+        logger.error(f"获取五元组错误: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取五元组失败: {str(e)}")
+
+
+@app.get("/memory/quintuples/search")
+async def search_quintuples(keywords: str = ""):
+    """按关键词搜索五元组"""
+    try:
+        keyword_list = [k.strip() for k in keywords.split(",") if k.strip()]
+        if not keyword_list:
+            raise HTTPException(status_code=400, detail="请提供搜索关键词")
+        from summer_memory.quintuple_graph import query_graph_by_keywords
+        results = query_graph_by_keywords(keyword_list)
+        return {
+            "status": "success",
+            "quintuples": [
+                {"subject": q[0], "subject_type": q[1], "predicate": q[2],
+                 "object": q[3], "object_type": q[4]}
+                for q in results
+            ],
+            "count": len(results)
+        }
+    except ImportError:
+        return {"status": "success", "quintuples": [], "count": 0, "message": "记忆系统模块未找到"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"搜索五元组错误: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"搜索五元组失败: {str(e)}")
+
+
 @app.get("/sessions")
 async def get_sessions():
     """获取所有会话信息 - 委托给message_manager"""
@@ -990,6 +1073,27 @@ async def load_log_context(days: int = 3, max_messages: int = None):
         print(f"加载日志上下文错误: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"加载上下文失败: {str(e)}")
+
+
+# Web前端工具状态轮询存储
+_tool_status_store: Dict[str, Dict] = {"current": {"message": "", "visible": False}}
+
+# Web前端 ClawdBot 回复存储（轮询获取）
+_clawdbot_replies: list = []
+
+
+@app.get("/tool_status")
+async def get_tool_status():
+    """获取当前工具调用状态（供Web前端轮询）"""
+    return _tool_status_store.get("current", {"message": "", "visible": False})
+
+
+@app.get("/clawdbot/replies")
+async def get_clawdbot_replies():
+    """获取并清空 ClawdBot 待显示回复（供Web前端轮询）"""
+    replies = list(_clawdbot_replies)
+    _clawdbot_replies.clear()
+    return {"replies": replies}
 
 
 @app.post("/tool_notification")
@@ -1220,6 +1324,18 @@ async def ui_notification(payload: Dict[str, Any]):
                 logger.error(f"[UI通知] 显示工具AI回复失败: {e}")
                 raise HTTPException(500, f"显示AI回复失败: {str(e)}")
 
+        # 处理显示 ClawdBot 回复的动作
+        if action == "show_clawdbot_response" and ai_response:
+            _clawdbot_replies.append(ai_response)
+            try:
+                from ui.controller.tool_chat import chat
+
+                chat.clawdbot_response_received.emit(ai_response)
+                logger.info(f"[UI通知] 已通过信号机制显示 ClawdBot 回复，长度: {len(ai_response)}")
+            except Exception as e:
+                logger.warning(f"[UI通知] Qt信号发送失败（Web模式下正常）: {e}")
+            return {"success": True, "message": "ClawdBot 回复已存储"}
+
         if action == "show_tool_status" and status_text:
             _emit_tool_status_to_ui(status_text, auto_hide_ms)
             return {"success": True, "message": "工具状态已显示"}
@@ -1307,7 +1423,8 @@ async def _notify_ui_refresh(session_id: str, response_text: str):
 
 
 def _emit_tool_status_to_ui(status_text: str, auto_hide_ms: int = 0) -> None:
-    """通过Qt信号向UI发送工具状态提示"""
+    """通过Qt信号向UI发送工具状态提示，同时更新Web可轮询的状态存储"""
+    _tool_status_store["current"] = {"message": status_text, "visible": True}
     try:
         from ui.controller.tool_chat import chat
 
@@ -1317,7 +1434,8 @@ def _emit_tool_status_to_ui(status_text: str, auto_hide_ms: int = 0) -> None:
 
 
 def _hide_tool_status_in_ui() -> None:
-    """通过Qt信号隐藏工具状态提示"""
+    """通过Qt信号隐藏工具状态提示，同时更新Web可轮询的状态存储"""
+    _tool_status_store["current"] = {"message": "", "visible": False}
     try:
         from ui.controller.tool_chat import chat
 

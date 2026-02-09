@@ -1,6 +1,6 @@
-:root {
-  font-family: system-ui, sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap');
 
+:root {
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
   background-color: #110901;
@@ -9,6 +9,9 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --nav-back-width: 24px;
+  --p-panel-content-padding: 0em !important;
 }
 
 body,
@@ -19,15 +22,32 @@ body,
   overflow: hidden;
 }
 
-*,
-::after,
-::before {
-  box-sizing: border-box;
+* {
+  border-width: 0;
+  border-style: solid;
+}
+
+img {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .box {
   border-image-source: url(/assets/box.9.png);
   border-image-slice: 49% fill;
   border-image-width: 2em;
+  padding: 0.5em;
+}
+
+blockquote {
+  margin: 1em 0;
+  padding: 0.25em 1em;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-left: 0.25em solid rgba(255, 255, 255, 0.5);
+}
+
+pre:has(code) {
   padding: 1em;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 0.5em;
 }

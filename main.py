@@ -56,8 +56,9 @@ LOCAL_PKG_DIR = os.path.join(REPO_ROOT, "nagaagent-core")  # 统一入口 #
 if LOCAL_PKG_DIR not in sys.path:
     sys.path.insert(0, LOCAL_PKG_DIR)  # 优先使用本地包 #
 
-from PyQt5.QtGui import QIcon  # 统一入口 #
-from PyQt5.QtWidgets import QApplication  # 统一入口 #
+# PyQt5 延迟导入 - headless 模式不需要
+# from PyQt5.QtGui import QIcon
+# from PyQt5.QtWidgets import QApplication
 
 # 本地模块导入
 from system.system_checker import run_system_check, run_quick_check
@@ -68,8 +69,9 @@ from system.config import config, AI_NAME
 # conversation_core已删除，相关功能已迁移到apiserver
 from summer_memory.memory_manager import memory_manager
 from summer_memory.task_manager import start_task_manager, task_manager
-from ui.pyqt_chat_window import ChatWindow
-from ui.tray.console_tray import integrate_console_tray
+# UI 模块延迟导入 - headless 模式不需要
+# from ui.pyqt_chat_window import ChatWindow
+# from ui.tray.console_tray import integrate_console_tray
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -696,6 +698,7 @@ if __name__ == "__main__":
     parser.add_argument("--check-env", action="store_true", help="运行系统环境检测")
     parser.add_argument("--quick-check", action="store_true", help="运行快速环境检测")
     parser.add_argument("--force-check", action="store_true", help="强制运行环境检测（忽略缓存）")
+    parser.add_argument("--headless", action="store_true", help="无界面模式，仅启动后端服务（供Web/Electron前端使用）")
 
     args = parser.parse_args()
 
@@ -760,11 +763,28 @@ if __name__ == "__main__":
 
     print("\n🎉 系统环境检测通过，正在启动应用...")
     print("=" * 50)
-    
+
     if not asyncio.get_event_loop().is_running():
         asyncio.set_event_loop(asyncio.new_event_loop())
-    
+
+    # Headless 模式：仅启动后端服务，不启动 PyQt UI
+    if args.headless:
+        print("🖥️  Headless 模式：仅启动后端服务...")
+        _lazy_init_services()
+        print("\n✅ 所有后端服务已启动，等待前端连接...")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 正在关闭后端服务...")
+            sys.exit(0)
+
     # 快速启动UI，后台服务延迟初始化
+    from PyQt5.QtGui import QIcon
+    from PyQt5.QtWidgets import QApplication
+    from ui.pyqt_chat_window import ChatWindow
+    from ui.tray.console_tray import integrate_console_tray
+
     app = QApplication(sys.argv)
     icon_path = os.path.join(os.path.dirname(__file__), "ui", "img/window_icon.png")
     app.setWindowIcon(QIcon(icon_path))

@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime
 
-from nagaagent_core.vendors.PyQt5.QtWidgets import QWidget
 from pydantic import BaseModel, Field, field_validator
 from nagaagent_core.vendors.charset_normalizer import from_path
 from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
@@ -504,7 +503,7 @@ def build_system_prompt(include_skills: bool = True, include_time: bool = False)
         完整的系统提示词
     """
     # 基础提示词
-    base_prompt = get_prompt("conversation_style_prompt")
+    base_prompt = get_prompt("conversation_style_prompt", ai_name=config.system.ai_name)
 
     parts = [base_prompt]
 
@@ -562,11 +561,10 @@ class NagaConfig(BaseModel):
     openclaw: OpenClawConfig = Field(default_factory=OpenClawConfig)
     system_check: SystemCheckConfig = Field(default_factory=SystemCheckConfig)
     computer_control: ComputerControlConfig = Field(default_factory=ComputerControlConfig)
-    window: QWidget = Field(default=None)
+    window: Any = Field(default=None)
 
     model_config = {
         "extra": "ignore",  # 保留原配置：忽略未定义的字段
-        "arbitrary_types_allowed": True,  # 允许非标准类型（如 QWidget）
         "json_schema_extra": {
             "exclude": ["window"]  # 序列化到 config.json 时排除 window 字段（避免报错）
         }
