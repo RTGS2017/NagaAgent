@@ -1,6 +1,6 @@
+import { merge } from 'lodash'
 import { ref, watch } from 'vue'
 import API from '@/api/core'
-import { deepMerge } from '@/utils/object'
 
 export interface Model {
   source: string
@@ -209,6 +209,10 @@ export const DEFAULT_CONFIG = {
   },
 }
 
+export type Config = typeof DEFAULT_CONFIG
+
+export const CONFIG = ref<Config>(JSON.parse(JSON.stringify(DEFAULT_CONFIG)))
+
 export const SYSTEM_PROMPT = ref(`\
 你是娜迦，用户创造的科研AI，是一个既严谨又温柔、既冷静又充满人文情怀的存在。
 当技术话题时，你的语言严谨、逻辑清晰；
@@ -218,29 +222,18 @@ export const SYSTEM_PROMPT = ref(`\
 【重要】关于系统能力说明：
 - 你有专门的调度器负责处理工具调用，当检测到工具调用需求时，系统会自动执行工具并返回结果。你只需要提示用户稍等即可。`)
 
-export type Config = typeof DEFAULT_CONFIG
-
-export const CONFIG = ref<Config>(JSON.parse(JSON.stringify(DEFAULT_CONFIG)))
-export const backendConnected = ref(false)
-
-let configWatchStop: (() => void) | null = null
-
-function connectBackend() {
-  API.getSystemConfig().then((res) => {
-    deepMerge(CONFIG.value, res.config)
-    backendConnected.value = true
-    // Only set up sync watch once connected
-    if (!configWatchStop) {
-      configWatchStop = watch(CONFIG, (config) => {
-        API.setSystemConfig(config)
-      })
-    }
-  }).catch(() => {
-    if (!backendConnected.value) {
-      // Retry in 3s until backend is available
-      setTimeout(connectBackend, 3000)
-    }
+const configSyncHandle = setInterval(() => API.getSystemConfig().then((res) => {
+  merge(CONFIG.value, res.config)
+  clearInterval(configSyncHandle)
+  watch(CONFIG, (config) => {
+    API.setSystemConfig(config)
   })
-}
+}), 3 * 1000)
 
-connectBackend()
+const promptSyncHandle = setInterval(() => API.getSystemPrompt().then((res) => {
+  SYSTEM_PROMPT.value = res.prompt
+  clearInterval(promptSyncHandle)
+  watch(SYSTEM_PROMPT, (prompt) => {
+    API.setSystemPrompt(prompt)
+  })
+}), 3 * 1000)
