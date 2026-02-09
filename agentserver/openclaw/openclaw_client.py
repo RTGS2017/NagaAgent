@@ -183,6 +183,7 @@ class OpenClawClient:
         if self._http_client is None or self._http_client.is_closed:
             # OpenClaw Gateway 运行在 localhost，必须绕过代理
             import os
+
             os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
             self._http_client = httpx.AsyncClient(
                 timeout=self.config.timeout,
@@ -343,7 +344,7 @@ class OpenClawClient:
                 if response.status_code in (200, 202):
                     try:
                         result = response.json()
-                        task.result = result
+                        task.result = result if isinstance(result, dict) else {}
                         task.run_id = result.get("runId")
 
                         self._emit_task_event(
@@ -363,7 +364,9 @@ class OpenClawClient:
                             task.status = TaskStatus.COMPLETED
                             task.completed_at = datetime.now().isoformat()
                             reply = result.get("reply", "")
-                            logger.info(f"[OpenClaw] 任务同步完成: {task.task_id}, reply: {reply[:100] if reply else 'empty'}...")
+                            logger.info(
+                                f"[OpenClaw] 任务同步完成: {task.task_id}, reply: {reply[:100] if reply else 'empty'}..."
+                            )
 
                             self._emit_task_event(
                                 task,
@@ -377,18 +380,22 @@ class OpenClawClient:
                         else:
                             # 202 异步接受，需要轮询 sessions_history 获取回复
                             task.status = TaskStatus.RUNNING
-                            logger.info(f"[OpenClaw] 任务已接受(202): {task.task_id}, runId: {task.run_id}, 开始轮询回复...")
+                            logger.info(
+                                f"[OpenClaw] 任务已接受(202): {task.task_id}, runId: {task.run_id}, 开始轮询回复..."
+                            )
 
-                            # 轮询获取回复
-                            reply = await self._poll_for_reply(
+                            replies = await self._poll_for_reply(
                                 actual_session_key,
                                 timeout_seconds=timeout_seconds,
                             )
-                            if reply:
+                            if replies:
                                 task.status = TaskStatus.COMPLETED
                                 task.completed_at = datetime.now().isoformat()
-                                task.result["reply"] = reply
-                                logger.info(f"[OpenClaw] 轮询获取回复成功: {reply[:100]}...")
+                                if task.result is None:
+                                    task.result = {}
+                                task.result["replies"] = replies
+                                task.result["reply"] = replies[0] if len(replies) == 1 else "\n\n---\n\n".join(replies)
+                                logger.info(f"[OpenClaw] 轮询获取{len(replies)}条回复成功")
 
                                 self._emit_task_event(
                                     task,
@@ -396,7 +403,8 @@ class OpenClawClient:
                                     message="task_completed",
                                     data={
                                         "run_id": task.run_id,
-                                        "reply_preview": (reply[:200] if reply else ""),
+                                        "replies_count": len(replies),
+                                        "reply_preview": (str(task.result.get("reply", ""))[:200]),
                                     },
                                 )
                             else:
@@ -518,14 +526,14 @@ class OpenClawClient:
         self,
         session_key: str,
         timeout_seconds: int = 120,
-        poll_interval: float = 3.0,
+        poll_interval: float = 5.0,
         initial_delay: float = 3.0,
-    ) -> Optional[str]:
+    ) -> List[str]:
         """
         轮询 sessions_history 获取 Agent 回复
 
         /hooks/agent 返回 202 后，通过 /tools/invoke 调用 sessions_history
-        查找最新的 assistant 消息作为回复。
+        持续轮询收集所有 assistant 消息，直到消息不再增加或超时。
 
         Args:
             session_key: 会话标识
@@ -534,19 +542,20 @@ class OpenClawClient:
             initial_delay: 首次轮询前等待时间（秒）
 
         Returns:
-            回复文本，超时返回 None
+            回复文本列表，超时返回收集到的所有消息
         """
         import asyncio
         import time
 
-        # 先等待一段时间让 Agent 处理
         await asyncio.sleep(initial_delay)
 
         start_time = time.time()
-        attempt = 0
+        all_replies: List[str] = []
+        last_count = 0
+        stable_count = 0
 
         while time.time() - start_time < timeout_seconds:
-            attempt += 1
+            attempt = int(time.time() - start_time)
             try:
                 client = await self._get_client()
 
@@ -556,7 +565,7 @@ class OpenClawClient:
                         "tool": "sessions_history",
                         "args": {
                             "sessionKey": session_key,
-                            "limit": 3,
+                            "limit": 50,
                         },
                     },
                     headers=self.config.get_gateway_headers(),
@@ -565,49 +574,71 @@ class OpenClawClient:
 
                 if response.status_code == 200:
                     data = response.json()
-                    reply = self._extract_last_assistant_reply(data)
-                    if reply:
-                        logger.info(f"[OpenClaw] 轮询第{attempt}次成功获取回复")
-                        return reply
+                    replies = self._extract_all_assistant_replies(data)
+                    current_count = len(replies)
+
+                    if current_count > last_count:
+                        all_replies = replies
+                        last_count = current_count
+                        stable_count = 0
+                        logger.info(
+                            f"[OpenClaw] 轮询第{attempt}次: 发现{current_count}条assistant消息 (新增{current_count - last_count})"
+                        )
+                    else:
+                        stable_count += 1
+                        if stable_count >= 3 and current_count > 0:
+                            logger.info(f"[OpenClaw] 消息已稳定{stable_count}次，共{current_count}条，结束轮询")
+                            return replies
 
             except Exception as e:
                 logger.warning(f"[OpenClaw] 轮询第{attempt}次异常: {e}")
 
-            # 等待后重试
             await asyncio.sleep(poll_interval)
 
-        logger.warning(f"[OpenClaw] 轮询超时({timeout_seconds}s)，共尝试{attempt}次")
-        return None
+        logger.warning(f"[OpenClaw] 轮询超时({timeout_seconds}s)，共收集{len(all_replies)}条消息")
+        return all_replies
 
     @staticmethod
-    def _extract_last_assistant_reply(data: Dict[str, Any]) -> Optional[str]:
+    def _extract_all_assistant_replies(data: Dict[str, Any]) -> List[str]:
         """
-        从 sessions_history 返回值中提取最后一条 assistant 的文本回复
+        从 sessions_history 返回值中提取所有 assistant 的文本回复
         """
+        replies: List[str] = []
         try:
             result = data.get("result", {})
             details = result.get("details", {})
             messages = details.get("messages", [])
 
-            # 从后往前查找最后一条 assistant 消息
-            for msg in reversed(messages):
+            if not messages:
+                content = result.get("content", [])
+                if content and isinstance(content, list) and len(content) > 0:
+                    text = content[0].get("text", "")
+                    if isinstance(text, str) and text.strip():
+                        try:
+                            inner = json.loads(text)
+                            messages = inner.get("messages", [])
+                        except json.JSONDecodeError:
+                            pass
+
+            for msg in messages:
                 if msg.get("role") != "assistant":
                     continue
                 content = msg.get("content", [])
                 if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    # 提取 type=="text" 的部分，忽略 thinking
+                    if content.strip():
+                        replies.append(content)
+                elif isinstance(content, list):
                     text_parts = [
                         item.get("text", "")
                         for item in content
                         if isinstance(item, dict) and item.get("type") == "text"
                     ]
-                    if text_parts:
-                        return "\n".join(text_parts)
+                    text = "\n".join(text_parts)
+                    if text.strip():
+                        replies.append(text)
         except Exception:
             pass
-        return None
+        return replies
 
     async def wake(self, text: str, mode: str = "now") -> Dict[str, Any]:
         """

@@ -534,7 +534,7 @@ class BackgroundAnalyzer:
                         "session_key": call.get("session_key", f"naga_{session_id}"),
                         "name": "Naga",  # hook 名称标识
                         "wake_mode": "now",
-                        "timeout_seconds": openclaw_timeout  # 同步等待结果
+                        "timeout_seconds": openclaw_timeout,  # 同步等待结果
                     }
 
                     # 如果是定时任务或提醒，在消息中包含调度信息
@@ -544,21 +544,23 @@ class BackgroundAnalyzer:
                         payload["message"] = f"[提醒 在 {call.get('at')} 后] {message}"
 
                     response = await client.post(
-                        f"http://localhost:{get_server_port('agent_server')}/openclaw/send",
-                        json=payload
+                        f"http://localhost:{get_server_port('agent_server')}/openclaw/send", json=payload
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        reply = result.get("reply", "")
+                        replies = result.get("replies", [])
                         task_status = result.get("task", {}).get("status", "unknown")
                         logger.info(
-                            f"[博弈论] OpenClaw {task_type} 任务完成: status={task_status}, reply={reply[:100] if reply else 'empty'}..."
+                            f"[博弈论] OpenClaw {task_type} 任务完成: status={task_status}, replies={len(replies)}条"
                         )
 
-                        # 将 ClawdBot 回复发送到 UI 显示
-                        if reply:
-                            await self._notify_ui_clawdbot_reply(session_id, reply)
+                        if replies:
+                            for i, r in enumerate(replies):
+                                logger.info(
+                                    f"[博弈论] 发送第{i + 1}/{len(replies)}条回复到UI: {r[:50] if r else 'empty'}..."
+                                )
+                                await self._notify_ui_clawdbot_reply(session_id, r)
                     else:
                         logger.error(f"[博弈论] OpenClaw任务发送失败: {response.status_code} - {response.text}")
 
