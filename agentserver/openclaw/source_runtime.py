@@ -62,14 +62,21 @@ class SourceRuntime:
 
     @property
     def is_available(self) -> bool:
-        """检查源码模式是否可用：submodule 存在 + Node.js >= 22 + pnpm 可用"""
-        if not self._source_root or not (self._source_root / "openclaw.mjs").exists():
+        """
+        检查源码模式是否可用：submodule 存在 + Node.js >= 22。
+        pnpm 不作为硬性要求——构建时会通过 corepack 自动启用。
+        """
+        if not self._source_root:
+            logger.debug("源码模式不可用：submodule 目录未找到")
             return False
-        node_ok, _ = self._check_node_version()
+        if not (self._source_root / "openclaw.mjs").exists():
+            logger.debug(f"源码模式不可用：{self._source_root / 'openclaw.mjs'} 不存在")
+            return False
+        node_ok, node_ver = self._check_node_version()
         if not node_ok:
+            logger.info(f"源码模式不可用：需要 Node.js >= 22，当前: {node_ver or '未安装'}")
             return False
-        if not self._check_pnpm_available():
-            return False
+        logger.debug(f"源码模式可用：Node.js {node_ver}, submodule={self._source_root}")
         return True
 
     def _check_node_version(self) -> tuple[bool, Optional[str]]:
@@ -95,6 +102,59 @@ class SourceRuntime:
     def _check_pnpm_available(self) -> bool:
         """检查 pnpm 是否可用"""
         return shutil.which("pnpm") is not None
+
+    def _ensure_pnpm(self) -> Optional[str]:
+        """
+        确保 pnpm 可用，返回 pnpm 可执行路径。
+
+        尝试顺序：
+        1. 系统已安装的 pnpm
+        2. 通过 corepack enable 启用（Node >= 22 自带 corepack）
+        3. 通过 npm install -g pnpm 安装
+        """
+        # 1. 系统 pnpm
+        pnpm = shutil.which("pnpm")
+        if pnpm:
+            return pnpm
+
+        node = shutil.which("node")
+        if not node:
+            return None
+
+        # 2. corepack enable
+        try:
+            logger.info("系统未安装 pnpm，尝试通过 corepack 启用...")
+            result = subprocess.run(
+                ["corepack", "enable"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                pnpm = shutil.which("pnpm")
+                if pnpm:
+                    logger.info(f"corepack 启用 pnpm 成功: {pnpm}")
+                    return pnpm
+        except Exception as e:
+            logger.debug(f"corepack enable 失败: {e}")
+
+        # 3. npm install -g pnpm
+        npm = shutil.which("npm")
+        if npm:
+            try:
+                logger.info("通过 npm 全局安装 pnpm...")
+                result = subprocess.run(
+                    [npm, "install", "-g", "pnpm"],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if result.returncode == 0:
+                    pnpm = shutil.which("pnpm")
+                    if pnpm:
+                        logger.info(f"npm 安装 pnpm 成功: {pnpm}")
+                        return pnpm
+            except Exception as e:
+                logger.warning(f"npm install -g pnpm 失败: {e}")
+
+        logger.error("无法获取 pnpm：corepack 和 npm 均失败")
+        return None
 
     # ============ 命令与环境 ============
 
@@ -139,9 +199,9 @@ class SourceRuntime:
             logger.info("源码模式：构建产物已存在，跳过构建")
             return True
 
-        pnpm = shutil.which("pnpm")
+        pnpm = self._ensure_pnpm()
         if not pnpm:
-            logger.error("源码模式：pnpm 不可用，无法构建")
+            logger.error("源码模式：无法获取 pnpm，无法构建")
             return False
 
         try:
