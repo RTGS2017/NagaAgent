@@ -68,10 +68,13 @@ def run(
 
 
 def get_cmd_version(cmd: str, args: list[str] | None = None) -> Optional[str]:
-    """获取命令版本号，失败返回 None"""
+    """获取命令版本号，失败返回 None。通过 shutil.which 解析 .cmd/.bat"""
+    resolved = shutil.which(cmd)
+    if not resolved:
+        return None
     try:
         result = subprocess.run(
-            [cmd, *(args or ["--version"])],
+            [resolved, *(args or ["--version"])],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode == 0:
