@@ -47,6 +47,7 @@ dependencies = [
     # ---------- Web 服务 / 兼容层 ----------
     "Flask>=3.1.0",
     "gevent>=25.0.0",
+    "py2neo>=2021.2.4",
 ]
 
 [build-system]
