@@ -58,7 +58,10 @@ def run(
     env: Optional[dict[str, str]] = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """执行命令并实时输出"""
+    """执行命令并实时输出。自动通过 shutil.which 解析 .cmd/.bat（Windows）"""
+    resolved = shutil.which(cmd[0])
+    if resolved:
+        cmd = [resolved, *cmd[1:]]
     log(f"$ {' '.join(cmd)}")
     return subprocess.run(
         cmd,
