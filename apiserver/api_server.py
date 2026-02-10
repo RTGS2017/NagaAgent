@@ -138,34 +138,35 @@ async def _call_agentserver(
         return resp.text
 
 
-async def _call_mcpserver(
-    method: str,
-    path: str,
-    params: Optional[Dict[str, Any]] = None,
-    timeout_seconds: float = 10.0,
-) -> Any:
-    """调用 MCP Server 内部接口"""
-    import httpx
-    from system.config import get_server_port
-
-    port = get_server_port("mcp_server")
-    url = f"http://127.0.0.1:{port}{path}"
-    try:
-        async with httpx.AsyncClient(timeout=timeout_seconds, trust_env=False) as client:
-            resp = await client.request(method, url, params=params)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"MCP Server 不可达: {e}")
-    if resp.status_code >= 400:
-        detail = resp.text
-        try:
-            detail = resp.json()
-        except Exception:
-            pass
-        raise HTTPException(status_code=resp.status_code, detail=detail)
-    try:
-        return resp.json()
-    except Exception:
-        return resp.text
+# [已禁用] MCP Server 已从 main.py 启动流程中移除，此代理函数不再有效，调用必定 503
+# async def _call_mcpserver(
+#     method: str,
+#     path: str,
+#     params: Optional[Dict[str, Any]] = None,
+#     timeout_seconds: float = 10.0,
+# ) -> Any:
+#     """调用 MCP Server 内部接口"""
+#     import httpx
+#     from system.config import get_server_port
+#
+#     port = get_server_port("mcp_server")
+#     url = f"http://127.0.0.1:{port}{path}"
+#     try:
+#         async with httpx.AsyncClient(timeout=timeout_seconds, trust_env=False) as client:
+#             resp = await client.request(method, url, params=params)
+#     except Exception as e:
+#         raise HTTPException(status_code=503, detail=f"MCP Server 不可达: {e}")
+#     if resp.status_code >= 400:
+#         detail = resp.text
+#         try:
+#             detail = resp.json()
+#         except Exception:
+#             pass
+#         raise HTTPException(status_code=resp.status_code, detail=detail)
+#     try:
+#         return resp.json()
+#     except Exception:
+#         return resp.text
 
 
 # ============ OpenClaw Skill Market ============
@@ -893,19 +894,35 @@ async def get_memory_stats():
 
 
 # ============ MCP Server 代理 ============
+# [已禁用] MCP Server 已从 main.py 启动流程中移除，旧代理端点调用 _call_mcpserver 必定 503
+# @app.get("/mcp/status")
+# async def get_mcp_status_proxy():
+#     """代理 MCP Server 状态查询"""
+#     return await _call_mcpserver("GET", "/status")
+#
+# @app.get("/mcp/tasks")
+# async def get_mcp_tasks_proxy(status: Optional[str] = None):
+#     """代理 MCP 任务列表"""
+#     params = {"status": status} if status else None
+#     return await _call_mcpserver("GET", "/tasks", params=params)
 
 
 @app.get("/mcp/status")
-async def get_mcp_status_proxy():
-    """代理 MCP Server 状态查询"""
-    return await _call_mcpserver("GET", "/status")
+async def get_mcp_status_offline():
+    """MCP Server 未启动时返回离线状态，避免前端 503"""
+    from datetime import datetime
+
+    return {
+        "server": "offline",
+        "timestamp": datetime.now().isoformat(),
+        "tasks": {"total": 0, "active": 0, "completed": 0, "failed": 0},
+    }
 
 
 @app.get("/mcp/tasks")
-async def get_mcp_tasks_proxy(status: Optional[str] = None):
-    """代理 MCP 任务列表"""
-    params = {"status": status} if status else None
-    return await _call_mcpserver("GET", "/tasks", params=params)
+async def get_mcp_tasks_offline(status: Optional[str] = None):
+    """MCP Server 未启动时返回空任务列表，避免前端 503"""
+    return {"tasks": [], "total": 0}
 
 
 @app.get("/memory/quintuples")

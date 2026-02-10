@@ -225,11 +225,30 @@ export type Config = typeof DEFAULT_CONFIG
 export const CONFIG = ref<Config>(JSON.parse(JSON.stringify(DEFAULT_CONFIG)))
 export const backendConnected = ref(false)
 
+function deepMerge<T extends Record<string, any>>(target: T, source: Record<string, any>): T {
+  const result = { ...target }
+  for (const key of Object.keys(source)) {
+    const tVal = result[key as keyof T]
+    const sVal = source[key]
+    if (
+      tVal && sVal
+      && typeof tVal === 'object' && !Array.isArray(tVal)
+      && typeof sVal === 'object' && !Array.isArray(sVal)
+    ) {
+      ;(result as any)[key] = deepMerge(tVal, sVal)
+    }
+    else {
+      ;(result as any)[key] = sVal
+    }
+  }
+  return result
+}
+
 let configWatchStop: (() => void) | null = null
 
 function connectBackend() {
   API.systemConfig().then((res) => {
-    CONFIG.value = res.config
+    CONFIG.value = deepMerge(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), res.config)
     backendConnected.value = true
     loadSystemPrompt()
     // Only set up sync watch once connected
