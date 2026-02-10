@@ -102,15 +102,6 @@ class OpenClawDetector:
                 status.installed = True
                 logger.info("打包环境：内嵌运行时可用，标记 OpenClaw 为已安装")
 
-        # 源码模式：submodule 可用时标记为已安装
-        if not status.installed and not runtime.is_packaged:
-            from .source_runtime import get_source_runtime
-            source_rt = get_source_runtime()
-            if source_rt.is_available:
-                status.installed = True
-                status.source_mode = True
-                logger.info("源码模式：submodule 可用，标记 OpenClaw 为已安装")
-
         # 3. 检查 Gateway 连接（可选）
         if check_connection and status.gateway_url:
             status.gateway_reachable = self._check_gateway_connection(status.gateway_url)

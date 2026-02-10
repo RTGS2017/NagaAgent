@@ -45,11 +45,6 @@ from .embedded_runtime import (
     get_embedded_runtime
 )
 
-from .source_runtime import (
-    SourceRuntime,
-    get_source_runtime
-)
-
 from .llm_config_bridge import (
     ensure_openclaw_config,
     inject_naga_llm_config
@@ -85,9 +80,6 @@ __all__ = [
     # Embedded Runtime
     "EmbeddedRuntime",
     "get_embedded_runtime",
-    # Source Runtime
-    "SourceRuntime",
-    "get_source_runtime",
     # LLM Config Bridge
     "ensure_openclaw_config",
     "inject_naga_llm_config",

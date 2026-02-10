@@ -114,29 +114,29 @@ async def lifespan(app: FastAPI):
                 global_openclaw = shutil.which("openclaw")
                 if global_openclaw:
                     logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
+                elif embedded_runtime.openclaw_installed:
+                    logger.info("打包环境：使用已安装的内嵌 OpenClaw")
                 else:
-                    logger.info("打包环境：使用内嵌运行时")
+                    logger.info("打包环境：首次启动，正在安装 OpenClaw...")
+                    installed = await embedded_runtime.install_openclaw()
+                    if not installed:
+                        logger.warning("打包环境：OpenClaw 安装失败")
 
             # === 开发环境 ===
             else:
                 if mode == "global":
                     logger.info("检测到全局安装的 OpenClaw")
-                elif mode == "source":
-                    from agentserver.openclaw.source_runtime import get_source_runtime
-                    source_rt = get_source_runtime()
-                    logger.info("源码模式：从 submodule 启动 OpenClaw")
-                    await source_rt.ensure_built()
                 else:
                     # 尝试自动安装 openclaw
                     installed = await _auto_install_openclaw()
                     if not installed:
-                        logger.warning(
-                            "OpenClaw 不可用：未全局安装，自动安装失败，"
-                            "且源码模式条件不满足（需要 Node.js >= 22 + submodule）"
-                        )
+                        logger.warning("OpenClaw 不可用：未全局安装，自动安装也失败")
 
             # === 统一：无配置文件则自动生成并启动 Gateway ===
-            openclaw_available = shutil.which("openclaw") or embedded_runtime.is_packaged
+            openclaw_available = (
+                shutil.which("openclaw")
+                or (embedded_runtime.is_packaged and embedded_runtime.openclaw_installed)
+            )
             if openclaw_available:
                 ensure_openclaw_config()
                 inject_naga_llm_config()
@@ -192,15 +192,6 @@ async def lifespan(app: FastAPI):
         embedded_runtime = get_embedded_runtime()
         if embedded_runtime.gateway_running:
             await embedded_runtime.stop_gateway()
-
-        # 停止 Gateway 进程（源码模式）
-        try:
-            from agentserver.openclaw.source_runtime import get_source_runtime
-            source_rt = get_source_runtime()
-            if source_rt.gateway_running:
-                await source_rt.stop_gateway()
-        except Exception:
-            pass
 
         logger.info("NagaAgent服务已关闭")
     except Exception as e:

@@ -72,19 +72,16 @@ class EmbeddedRuntime:
         return self._runtime_root
 
     @property
+    def openclaw_installed(self) -> bool:
+        """打包环境下 openclaw 是否已安装到运行时目录"""
+        if not self.is_packaged or not self._runtime_root:
+            return False
+        return self.openclaw_path is not None
+
+    @property
     def has_global_install(self) -> bool:
         """检测 PATH 中是否有全局安装的 openclaw 命令"""
         return shutil.which("openclaw") is not None
-
-    @property
-    def is_source_mode(self) -> bool:
-        """是否处于源码模式（非打包、非全局安装、submodule 可用）"""
-        if IS_PACKAGED:
-            return False
-        if shutil.which("openclaw"):
-            return False
-        from .source_runtime import get_source_runtime
-        return get_source_runtime().is_available
 
     @property
     def runtime_mode(self) -> str:
@@ -92,15 +89,12 @@ class EmbeddedRuntime:
         返回当前运行时模式：
         - "packaged": 打包环境内嵌运行时
         - "global": 全局安装的 openclaw
-        - "source": submodule 源码模式
         - "unavailable": 不可用
         """
         if self.is_packaged:
             return "packaged"
         if shutil.which("openclaw"):
             return "global"
-        if self.is_source_mode:
-            return "source"
         return "unavailable"
 
     # ============ 可执行文件路径 ============
@@ -128,27 +122,14 @@ class EmbeddedRuntime:
         """openclaw CLI 可执行文件路径"""
         if self.is_packaged:
             assert self._runtime_root is not None
-            # 新结构：openclaw.mjs（submodule 构建方式）
-            mjs = self._runtime_root / "openclaw" / "openclaw.mjs"
-            if mjs.exists():
-                return str(mjs)
-            # 旧结构兼容：node_modules/.bin/openclaw
+            # npm install openclaw 后的路径：node_modules/.bin/openclaw
             if platform.system() == "Windows":
                 cmd = self._runtime_root / "openclaw" / "node_modules" / ".bin" / "openclaw.cmd"
             else:
                 cmd = self._runtime_root / "openclaw" / "node_modules" / ".bin" / "openclaw"
             return str(cmd) if cmd.exists() else None
-        # 开发环境：先检查全局安装
-        global_openclaw = shutil.which("openclaw")
-        if global_openclaw:
-            return global_openclaw
-        # 回退到源码模式
-        if self.is_source_mode:
-            from .source_runtime import get_source_runtime
-            cmd = get_source_runtime().openclaw_cmd
-            # 返回 mjs 路径（需配合 node_path 使用）
-            return cmd[-1] if cmd else None
-        return None
+        # 开发环境：检查全局安装
+        return shutil.which("openclaw")
 
     @property
     def clawhub_path(self) -> Optional[str]:
@@ -170,12 +151,8 @@ class EmbeddedRuntime:
         env = os.environ.copy()
         if self.is_packaged and self._runtime_root is not None:
             node_dir = str(self._runtime_root / "node")
-            # 新结构：node_modules/.bin 在 openclaw/ 下
             bin_dir = str(self._runtime_root / "openclaw" / "node_modules" / ".bin")
             env["PATH"] = f"{node_dir}{os.pathsep}{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-        elif self.is_source_mode:
-            from .source_runtime import get_source_runtime
-            return get_source_runtime().env
         return env
 
     # ============ Node.js 版本检测 ============
@@ -206,28 +183,55 @@ class EmbeddedRuntime:
             logger.warning(f"检查 Node.js 版本失败: {e}")
         return False, None
 
+    # ============ 运行时安装 ============
+
+    async def install_openclaw(self) -> bool:
+        """在打包环境下用内嵌 npm 安装 openclaw"""
+        npm = self.npm_path
+        node = self.node_path
+        if not npm or not node:
+            logger.error("内嵌 Node.js/npm 不可用，无法安装 OpenClaw")
+            return False
+
+        install_dir = self._runtime_root / "openclaw"
+        install_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("首次启动：正在安装 OpenClaw，请稍候...")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                npm, "install", "openclaw",
+                cwd=str(install_dir),
+                env=self.env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+        except asyncio.TimeoutError:
+            logger.error("npm install openclaw 超时（300秒）")
+            return False
+        except Exception as e:
+            logger.error(f"npm install openclaw 执行异常: {e}")
+            return False
+
+        if proc.returncode != 0:
+            logger.error(f"npm install openclaw 失败: {stderr.decode()[:500]}")
+            return False
+
+        # 验证安装
+        if self.openclaw_path:
+            logger.info(f"OpenClaw 安装成功: {self.openclaw_path}")
+            return True
+        logger.error("npm install 执行成功但 openclaw 未找到")
+        return False
+
     # ============ Gateway 进程管理 ============
 
     def _build_gateway_cmd(self) -> Optional[List[str]]:
         """构建启动 Gateway 的命令列表"""
-        # 源码模式：委托给 SourceRuntime
-        if self.is_source_mode:
-            from .source_runtime import get_source_runtime
-            cmd = get_source_runtime().openclaw_cmd
-            return [*cmd, "gateway"] if cmd else None
-
         openclaw = self.openclaw_path
         if not openclaw:
             return None
 
-        # 打包环境新结构：需要用 node 运行 openclaw.mjs
-        if self.is_packaged and openclaw.endswith(".mjs"):
-            node = self.node_path
-            if not node:
-                return None
-            return [node, openclaw, "gateway"]
-
-        # 全局安装或旧结构
         return [openclaw, "gateway"]
 
     async def start_gateway(self) -> bool:
@@ -314,8 +318,8 @@ class EmbeddedRuntime:
             self._onboarded = True
             return True
 
-        # 打包环境或源码模式：自动生成配置
-        if self.is_packaged or self.is_source_mode:
+        # 打包环境：自动生成配置
+        if self.is_packaged:
             from .llm_config_bridge import ensure_openclaw_config, inject_naga_llm_config
             try:
                 ensure_openclaw_config()

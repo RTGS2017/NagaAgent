@@ -4,16 +4,18 @@
 NagaAgent Windows 完整构建脚本
 
 流程：
-  1. 环境检查（Python, Node.js, npm, git submodule）
+  1. 环境检查（Python, Node.js, npm）
   2. 同步 Python 依赖 + build 组（pyinstaller）
-  3. 准备 OpenClaw 内嵌运行时（从 submodule 构建）
+  3. 准备 OpenClaw 运行时（下载 Node.js 便携版）
   4. PyInstaller 编译 Python 后端
   5. Electron 前端构建 + 打包
   6. 输出汇总
 
+OpenClaw 本身不再在构建时安装，而是首次启动时通过内嵌 npm 自动安装。
+
 用法:
   python scripts/build-win.py            # 完整构建
-  python scripts/build-win.py --skip-openclaw   # 跳过 OpenClaw 准备
+  python scripts/build-win.py --skip-openclaw   # 跳过 Node.js 便携版准备
   python scripts/build-win.py --backend-only    # 仅编译后端
 """
 
@@ -32,7 +34,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 BACKEND_DIST_DIR = FRONTEND_DIR / "backend-dist"
 SPEC_FILE = PROJECT_ROOT / "naga-backend.spec"
-SUBMODULE_DIR = PROJECT_ROOT / "openclaw"
 PREPARE_SCRIPT = PROJECT_ROOT / "scripts" / "prepare_openclaw_runtime.py"
 
 # 最低版本要求
@@ -126,14 +127,6 @@ def check_environment() -> bool:
         log("  npm 未安装  ✗")
         ok = False
 
-    # git submodule
-    if SUBMODULE_DIR.exists() and (SUBMODULE_DIR / "package.json").exists():
-        log(f"  openclaw submodule  ✓")
-    else:
-        log("  openclaw submodule 未初始化  ✗")
-        log("  请运行: git submodule update --init --recursive")
-        ok = False
-
     return ok
 
 
@@ -148,19 +141,16 @@ def sync_dependencies() -> None:
 # ============ Step 3: 准备 OpenClaw 运行时 ============
 
 def prepare_openclaw() -> None:
-    """调用 prepare_openclaw_runtime.py 构建内嵌运行时"""
+    """调用 prepare_openclaw_runtime.py 下载 Node.js 便携版"""
     if not PREPARE_SCRIPT.exists():
         raise FileNotFoundError(f"准备脚本不存在: {PREPARE_SCRIPT}")
     run([sys.executable, str(PREPARE_SCRIPT)], cwd=PROJECT_ROOT)
-    # 验证产物
+    # 验证产物：只需要 node.exe，openclaw 首次启动时自动安装
     runtime_dir = BACKEND_DIST_DIR / "openclaw-runtime"
-    mjs = runtime_dir / "openclaw" / "openclaw.mjs"
     node_exe = runtime_dir / "node" / "node.exe"
-    if not mjs.exists():
-        raise FileNotFoundError(f"OpenClaw 构建产物缺失: {mjs}")
     if not node_exe.exists():
         raise FileNotFoundError(f"Node.js 便携版缺失: {node_exe}")
-    log("OpenClaw 运行时准备完成")
+    log("Node.js 便携版准备完成（OpenClaw 将在首次启动时自动安装）")
 
 
 # ============ Step 4: PyInstaller 编译后端 ============

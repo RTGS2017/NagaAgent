@@ -2,22 +2,15 @@
 
 ## 概述
 
-OpenClaw 运行时（Node.js + OpenClaw）内嵌到打包产物中，从 git submodule 源码构建。
+打包产物中内嵌 Node.js 便携版，首次启动时通过内嵌 npm 自动执行 `npm install openclaw`。
 
-支持三层回退策略：
+支持两层回退策略：
 1. **全局安装**：openclaw 在 PATH 中 → 优先使用
-2. **打包环境**：PyInstaller 内嵌运行时（从 submodule 构建）
-3. **源码模式**：开发环境下自动回退到 submodule + Node.js >= 22
+2. **打包环境**：内嵌 Node.js + 运行时自动安装 openclaw
 
 ## 打包前准备
 
-### 0. 初始化 submodule
-
-```bash
-git submodule update --init --recursive
-```
-
-### 1. 准备 OpenClaw 运行时
+### 1. 准备 Node.js 便携版
 
 在 Windows 环境下执行：
 
@@ -27,9 +20,9 @@ python scripts/prepare_openclaw_runtime.py
 
 该脚本会：
 - 下载 Node.js v22 LTS 便携版 (win-x64)
-- 在 submodule 目录执行 `pnpm install` + `pnpm build`
-- 将构建产物复制到 `frontend/backend-dist/openclaw-runtime/openclaw/`
-- 安装生产依赖、清理不必要文件减小体积
+- 解压到 `frontend/backend-dist/openclaw-runtime/node/`
+
+> OpenClaw 本身不再在构建时安装，首次启动时由内嵌 npm 自动执行 `npm install openclaw`。
 
 执行完成后确认目录结构：
 
@@ -38,15 +31,7 @@ frontend/backend-dist/openclaw-runtime/
   node/
     node.exe
     npm.cmd
-  openclaw/
-    openclaw.mjs          ← CLI 入口
-    package.json
-    dist/                  ← 构建产物
-      entry.js
-    node_modules/          ← 生产依赖
-    skills/
-    extensions/
-    assets/
+    ...
 ```
 
 ### 2. 编译后端
@@ -85,16 +70,9 @@ Naga Agent/
       node/
         node.exe
         npm.cmd
-      openclaw/
-        openclaw.mjs        ← CLI 入口
-        dist/
-          entry.js
-        node_modules/        ← 生产依赖
-        skills/
-        extensions/
 ```
 
-**通过标准**：`openclaw-runtime` 目录存在且包含上述文件。
+**通过标准**：`openclaw-runtime/node/` 目录存在且包含 `node.exe`。首次启动后会自动创建 `openclaw/` 目录。
 
 ### 测试 2：开发环境兼容性
 
@@ -107,8 +85,8 @@ uv run main.py
 **通过标准**：
 - agentserver 正常启动，无报错
 - 如果系统已安装 OpenClaw，功能正常（全局模式）
-- 如果系统未安装 OpenClaw 但有 Node.js >= 22 + pnpm，自动使用源码模式
-- 日志中出现 `OpenClaw 运行时模式: source` 或 `global`
+- 如果系统未安装 OpenClaw 且有 npm，自动尝试 `npm install -g openclaw`
+- 日志中出现 `OpenClaw 运行时模式: global` 或 `unavailable`
 
 ### 测试 3：打包环境 Gateway 自动启动
 
@@ -116,7 +94,8 @@ uv run main.py
 
 **通过标准**：
 - 应用正常启动
-- agentserver 日志中出现 `内嵌运行时目录: ...`
+- agentserver 日志中出现 `首次启动：正在安装 OpenClaw，请稍候...`
+- 日志中出现 `OpenClaw 安装成功`
 - 日志中出现 `内嵌 OpenClaw Gateway 已启动`
 - 访问 `http://127.0.0.1:8001/openclaw/health` 返回正常状态
 
@@ -160,14 +139,15 @@ uv run main.py
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `agentserver/openclaw/source_runtime.py` | 新建 | 源码运行时管理器（submodule 模式） |
 | `agentserver/openclaw/llm_config_bridge.py` | 新建 | 配置自动生成 + LLM 桥接 |
 | `system/logging_setup.py` | 新建 | 统一日志管理（文件轮转 + OpenClaw 专用日志） |
-| `agentserver/openclaw/embedded_runtime.py` | 修改 | 三层回退逻辑 + 适配新运行时目录结构 |
-| `agentserver/openclaw/detector.py` | 修改 | 增加源码模式检测 |
-| `agentserver/openclaw/installer.py` | 修改 | 增加 SOURCE 安装方式 |
-| `agentserver/openclaw/__init__.py` | 修改 | 导出新模块 |
-| `agentserver/agent_server.py` | 修改 | 三层回退启动流程 + LLM 自动注入 |
-| `scripts/prepare_openclaw_runtime.py` | 修改 | 改为从 submodule 构建运行时 |
+| `agentserver/openclaw/embedded_runtime.py` | 修改 | 打包环境运行时自动安装 openclaw |
+| `agentserver/openclaw/detector.py` | 修改 | 打包环境检测 |
+| `agentserver/openclaw/installer.py` | 修改 | 安装检测简化 |
+| `agentserver/openclaw/__init__.py` | 修改 | 移除 source_runtime 导出 |
+| `agentserver/agent_server.py` | 修改 | 两层回退启动流程 + 运行时按需安装 |
+| `scripts/prepare_openclaw_runtime.py` | 修改 | 简化为仅下载 Node.js 便携版 |
+| `scripts/build-win.py` | 修改 | 移除 submodule 检查，简化 openclaw 步骤 |
+| `agentserver/openclaw/source_runtime.py` | 删除 | 不再需要 submodule 源码模式 |
 | `main.py` | 修改 | 调用 setup_logging() 统一日志 |
 | `build.md` | 修改 | 更新打包说明 |
