@@ -19,6 +19,7 @@ class OpenClawStatus:
     """OpenClaw 状态信息"""
     # 安装状态
     installed: bool = False
+    source_mode: bool = False
     config_path: Optional[str] = None
 
     # Gateway 配置
@@ -42,6 +43,7 @@ class OpenClawStatus:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "installed": self.installed,
+            "source_mode": self.source_mode,
             "config_path": self.config_path,
             "gateway_url": self.gateway_url,
             "gateway_port": self.gateway_port,
@@ -93,12 +95,21 @@ class OpenClawDetector:
                     logger.warning(f"读取 OpenClaw 配置失败: {e}")
 
         # 打包环境下，即使 ~/.openclaw/ 不存在，只要内嵌运行时可用也标记为已安装
+        from .embedded_runtime import get_embedded_runtime
+        runtime = get_embedded_runtime()
         if not status.installed:
-            from .embedded_runtime import get_embedded_runtime
-            runtime = get_embedded_runtime()
             if runtime.is_packaged and runtime.openclaw_path:
                 status.installed = True
                 logger.info("打包环境：内嵌运行时可用，标记 OpenClaw 为已安装")
+
+        # 源码模式：submodule 可用时标记为已安装
+        if not status.installed and not runtime.is_packaged:
+            from .source_runtime import get_source_runtime
+            source_rt = get_source_runtime()
+            if source_rt.is_available:
+                status.installed = True
+                status.source_mode = True
+                logger.info("源码模式：submodule 可用，标记 OpenClaw 为已安装")
 
         # 3. 检查 Gateway 连接（可选）
         if check_connection and status.gateway_url:

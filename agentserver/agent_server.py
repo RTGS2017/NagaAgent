@@ -7,6 +7,8 @@ NagaAgent独立服务 - 通过OpenClaw执行任务
 
 import asyncio
 import uuid
+import shutil
+import socket
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -22,12 +24,29 @@ from agentserver.openclaw.embedded_runtime import get_embedded_runtime
 
 # 配置日志
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+
+
+async def _start_gateway_if_port_free(runtime) -> bool:
+    """检测端口是否被占用，未占用则启动 Gateway"""
+    port_in_use = False
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        port_in_use = sock.connect_ex(("127.0.0.1", 18789)) == 0
+        sock.close()
+    except Exception:
+        pass
+
+    if port_in_use:
+        logger.info("端口 18789 已被占用，跳过 Gateway 启动")
+        return False
+
+    gw_ok = await runtime.start_gateway()
+    if gw_ok:
+        logger.info("OpenClaw Gateway 启动成功")
+    else:
+        logger.warning("OpenClaw Gateway 启动失败")
+    return gw_ok
 
 
 @asynccontextmanager
@@ -45,47 +64,55 @@ async def lifespan(app: FastAPI):
             llm_config = {"model": config.api.model, "api_key": config.api.api_key, "api_base": config.api.base_url}
             Modules.task_scheduler.set_llm_config(llm_config)
 
-        # 初始化 OpenClaw 客户端 - 优先从检测器读取配置
+        # 初始化 OpenClaw 客户端 - 三层回退策略
         try:
             from agentserver.openclaw import detect_openclaw, OpenClawConfig as ClientOpenClawConfig
+            from agentserver.openclaw.llm_config_bridge import ensure_openclaw_config, inject_naga_llm_config
 
-            # 打包环境下自动启动内嵌 Gateway
             embedded_runtime = get_embedded_runtime()
-            if embedded_runtime.is_packaged:
-                logger.info("打包环境：准备启动内嵌 OpenClaw Gateway")
-                # 首次运行时自动执行 onboard 初始化
-                await embedded_runtime.ensure_onboarded()
-                # 检测端口是否已被占用
-                import socket
-                port_in_use = False
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(1)
-                    port_in_use = sock.connect_ex(("127.0.0.1", 18789)) == 0
-                    sock.close()
-                except Exception:
-                    pass
-                if port_in_use:
-                    logger.info("端口 18789 已被占用，跳过内嵌 Gateway 启动")
-                else:
-                    gw_ok = await embedded_runtime.start_gateway()
-                    if gw_ok:
-                        logger.info("内嵌 OpenClaw Gateway 启动成功")
-                    else:
-                        logger.warning("内嵌 OpenClaw Gateway 启动失败")
+            mode = embedded_runtime.runtime_mode
+            logger.info(f"OpenClaw 运行时模式: {mode}")
 
-            # 检测 OpenClaw 安装状态
+            # === 打包环境 ===
+            if embedded_runtime.is_packaged:
+                global_openclaw = shutil.which("openclaw")
+                if global_openclaw:
+                    logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
+                else:
+                    logger.info("打包环境：使用内嵌运行时")
+                    ensure_openclaw_config()
+                    inject_naga_llm_config()
+                    await _start_gateway_if_port_free(embedded_runtime)
+
+            # === 开发环境 ===
+            else:
+                openclaw_status = detect_openclaw(check_connection=False)
+                if openclaw_status.installed and not openclaw_status.source_mode:
+                    logger.info("检测到全局安装的 OpenClaw")
+                else:
+                    # 尝试源码模式
+                    from agentserver.openclaw.source_runtime import get_source_runtime
+                    source_rt = get_source_runtime()
+                    if source_rt.is_available:
+                        logger.info("源码模式：从 submodule 启动 OpenClaw")
+                        await source_rt.ensure_built()
+                        ensure_openclaw_config()
+                        inject_naga_llm_config()
+                        await _start_gateway_if_port_free(embedded_runtime)
+                    else:
+                        logger.warning("OpenClaw 不可用：未全局安装，且源码模式条件不满足")
+
+            # 检测最终状态并初始化客户端
             openclaw_status = detect_openclaw(check_connection=False)
 
             if openclaw_status.installed:
-                # 使用检测到的配置
                 openclaw_config = ClientOpenClawConfig(
                     gateway_url=openclaw_status.gateway_url or "http://127.0.0.1:18789",
                     gateway_token=openclaw_status.gateway_token,
                     hooks_token=openclaw_status.hooks_token,
                     timeout=120,
                 )
-                logger.info(f"从 ~/.openclaw 检测到 OpenClaw 配置: {openclaw_config.gateway_url}")
+                logger.info(f"OpenClaw 配置: {openclaw_config.gateway_url}")
                 logger.info(
                     f"  - gateway_token: {'***' + openclaw_config.gateway_token[-8:] if openclaw_config.gateway_token else '未配置'}"
                 )
@@ -93,7 +120,6 @@ async def lifespan(app: FastAPI):
                     f"  - hooks_token: {'***' + openclaw_config.hooks_token[-8:] if openclaw_config.hooks_token else '未配置'}"
                 )
             else:
-                # 回退到 config.json 中的配置
                 openclaw_config = ClientOpenClawConfig(
                     gateway_url=getattr(config.openclaw, "gateway_url", "http://127.0.0.1:18789")
                     if hasattr(config, "openclaw")
@@ -122,10 +148,20 @@ async def lifespan(app: FastAPI):
 
     # shutdown
     try:
-        # 停止内嵌 Gateway 进程
+        # 停止 Gateway 进程（内嵌模式）
         embedded_runtime = get_embedded_runtime()
         if embedded_runtime.gateway_running:
             await embedded_runtime.stop_gateway()
+
+        # 停止 Gateway 进程（源码模式）
+        try:
+            from agentserver.openclaw.source_runtime import get_source_runtime
+            source_rt = get_source_runtime()
+            if source_rt.gateway_running:
+                await source_rt.stop_gateway()
+        except Exception:
+            pass
+
         logger.info("NagaAgent服务已关闭")
     except Exception as e:
         logger.error(f"服务关闭失败: {e}")

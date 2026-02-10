@@ -14,7 +14,7 @@ import logging
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,38 @@ class EmbeddedRuntime:
     def runtime_root(self) -> Optional[Path]:
         return self._runtime_root
 
+    @property
+    def has_global_install(self) -> bool:
+        """检测 PATH 中是否有全局安装的 openclaw 命令"""
+        return shutil.which("openclaw") is not None
+
+    @property
+    def is_source_mode(self) -> bool:
+        """是否处于源码模式（非打包、非全局安装、submodule 可用）"""
+        if IS_PACKAGED:
+            return False
+        if shutil.which("openclaw"):
+            return False
+        from .source_runtime import get_source_runtime
+        return get_source_runtime().is_available
+
+    @property
+    def runtime_mode(self) -> str:
+        """
+        返回当前运行时模式：
+        - "packaged": 打包环境内嵌运行时
+        - "global": 全局安装的 openclaw
+        - "source": submodule 源码模式
+        - "unavailable": 不可用
+        """
+        if self.is_packaged:
+            return "packaged"
+        if shutil.which("openclaw"):
+            return "global"
+        if self.is_source_mode:
+            return "source"
+        return "unavailable"
+
     # ============ 可执行文件路径 ============
 
     @property
@@ -96,12 +128,27 @@ class EmbeddedRuntime:
         """openclaw CLI 可执行文件路径"""
         if self.is_packaged:
             assert self._runtime_root is not None
+            # 新结构：openclaw.mjs（submodule 构建方式）
+            mjs = self._runtime_root / "openclaw" / "openclaw.mjs"
+            if mjs.exists():
+                return str(mjs)
+            # 旧结构兼容：node_modules/.bin/openclaw
             if platform.system() == "Windows":
                 cmd = self._runtime_root / "openclaw" / "node_modules" / ".bin" / "openclaw.cmd"
             else:
                 cmd = self._runtime_root / "openclaw" / "node_modules" / ".bin" / "openclaw"
             return str(cmd) if cmd.exists() else None
-        return shutil.which("openclaw")
+        # 开发环境：先检查全局安装
+        global_openclaw = shutil.which("openclaw")
+        if global_openclaw:
+            return global_openclaw
+        # 回退到源码模式
+        if self.is_source_mode:
+            from .source_runtime import get_source_runtime
+            cmd = get_source_runtime().openclaw_cmd
+            # 返回 mjs 路径（需配合 node_path 使用）
+            return cmd[-1] if cmd else None
+        return None
 
     @property
     def clawhub_path(self) -> Optional[str]:
@@ -123,9 +170,12 @@ class EmbeddedRuntime:
         env = os.environ.copy()
         if self.is_packaged and self._runtime_root is not None:
             node_dir = str(self._runtime_root / "node")
+            # 新结构：node_modules/.bin 在 openclaw/ 下
             bin_dir = str(self._runtime_root / "openclaw" / "node_modules" / ".bin")
-            # 将内嵌路径放在 PATH 最前面
             env["PATH"] = f"{node_dir}{os.pathsep}{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+        elif self.is_source_mode:
+            from .source_runtime import get_source_runtime
+            return get_source_runtime().env
         return env
 
     # ============ Node.js 版本检测 ============
@@ -158,26 +208,48 @@ class EmbeddedRuntime:
 
     # ============ Gateway 进程管理 ============
 
+    def _build_gateway_cmd(self) -> Optional[List[str]]:
+        """构建启动 Gateway 的命令列表"""
+        # 源码模式：委托给 SourceRuntime
+        if self.is_source_mode:
+            from .source_runtime import get_source_runtime
+            cmd = get_source_runtime().openclaw_cmd
+            return [*cmd, "gateway"] if cmd else None
+
+        openclaw = self.openclaw_path
+        if not openclaw:
+            return None
+
+        # 打包环境新结构：需要用 node 运行 openclaw.mjs
+        if self.is_packaged and openclaw.endswith(".mjs"):
+            node = self.node_path
+            if not node:
+                return None
+            return [node, openclaw, "gateway"]
+
+        # 全局安装或旧结构
+        return [openclaw, "gateway"]
+
     async def start_gateway(self) -> bool:
         """
-        启动内嵌 OpenClaw Gateway 进程。
+        启动 OpenClaw Gateway 进程。
 
         Returns:
             是否启动成功
         """
         if self._gateway_process is not None:
-            logger.info("内嵌 Gateway 进程已在运行")
+            logger.info("Gateway 进程已在运行")
             return True
 
-        openclaw = self.openclaw_path
-        if not openclaw:
+        cmd = self._build_gateway_cmd()
+        if not cmd:
             logger.error("找不到 openclaw 可执行文件，无法启动 Gateway")
             return False
 
         try:
-            logger.info(f"启动内嵌 OpenClaw Gateway: {openclaw} gateway")
+            logger.info(f"启动 OpenClaw Gateway: {' '.join(cmd)}")
             self._gateway_process = await asyncio.create_subprocess_exec(
-                openclaw, "gateway",
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=self.env,
@@ -187,14 +259,17 @@ class EmbeddedRuntime:
 
             if self._gateway_process.returncode is not None:
                 stderr = await self._gateway_process.stderr.read() if self._gateway_process.stderr else b""
-                logger.error(f"Gateway 进程异常退出 (code={self._gateway_process.returncode}): {stderr.decode()[:500]}")
+                logger.error(
+                    f"Gateway 进程异常退出 (code={self._gateway_process.returncode}): "
+                    f"{stderr.decode()[:500]}"
+                )
                 self._gateway_process = None
                 return False
 
-            logger.info("内嵌 OpenClaw Gateway 已启动")
+            logger.info("OpenClaw Gateway 已启动")
             return True
         except Exception as e:
-            logger.error(f"启动内嵌 Gateway 失败: {e}")
+            logger.error(f"启动 Gateway 失败: {e}")
             self._gateway_process = None
             return False
 
@@ -226,8 +301,10 @@ class EmbeddedRuntime:
 
     async def ensure_onboarded(self) -> bool:
         """
-        确保 OpenClaw 已完成 onboard 初始化。
-        如果 ~/.openclaw/openclaw.json 不存在则自动执行 `openclaw onboard`。
+        确保 OpenClaw 已完成初始化配置。
+
+        打包环境和源码模式下：使用 llm_config_bridge 自动生成配置。
+        全局安装：使用 openclaw onboard 命令。
 
         Returns:
             是否已完成初始化
@@ -237,6 +314,20 @@ class EmbeddedRuntime:
             self._onboarded = True
             return True
 
+        # 打包环境或源码模式：自动生成配置
+        if self.is_packaged or self.is_source_mode:
+            from .llm_config_bridge import ensure_openclaw_config, inject_naga_llm_config
+            try:
+                ensure_openclaw_config()
+                inject_naga_llm_config()
+                self._onboarded = True
+                logger.info("已自动生成 OpenClaw 配置")
+                return True
+            except Exception as e:
+                logger.error(f"自动生成配置失败: {e}")
+                return False
+
+        # 全局安装：使用 openclaw onboard
         openclaw = self.openclaw_path
         if not openclaw:
             logger.warning("找不到 openclaw，无法执行 onboard")

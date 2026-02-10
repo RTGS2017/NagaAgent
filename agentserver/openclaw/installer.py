@@ -21,6 +21,7 @@ class InstallMethod(Enum):
     """安装方式"""
     NPM = "npm"
     SCRIPT = "script"
+    SOURCE = "source"
     UNKNOWN = "unknown"
 
 
@@ -122,6 +123,11 @@ class OpenClawInstaller:
         # 1. 检查命令是否可用
         openclaw_exe = runtime.openclaw_path
         if not openclaw_exe:
+            # 检查源码模式
+            from .source_runtime import get_source_runtime
+            source_rt = get_source_runtime()
+            if source_rt.is_available:
+                return InstallStatus.NEEDS_SETUP, None
             return InstallStatus.NOT_INSTALLED, None
 
         # 2. 获取版本
