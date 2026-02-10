@@ -58,3 +58,10 @@ include = ["apiserver", "agentserver", "summer_memory", "thinking", "ui", "voice
 
 [tool.ruff]
 line-length = 120
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.18.0",
+    "python-multipart>=0.0.22",
+]
+
