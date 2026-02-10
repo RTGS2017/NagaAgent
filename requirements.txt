@@ -1,39 +1,68 @@
-# NagaAgent 核心依赖
-aiohttp==3.12.4
-APScheduler==3.11.0
-cryptography==46.0.3
-edge-tts==7.0.2
-emoji==2.14.1
-fastapi==0.115.11
-httpx==0.28.1
-litellm==1.80.7
-mcp==1.15.0
-numpy==2.2.6
-openai==2.8.1
-pandas==2.2.3
-pillow==11.3.0
-psutil==7.1.3
-pydantic==2.11.7
-PyYAML==6.0.2
-redis==5.2.1
-requests==2.32.5
-setproctitle==1.3.5
-sounddevice==0.5.2
-sse-starlette==2.3.6
-tiktoken==0.11.0
-uvicorn==0.34.0
-watchfiles==1.0.4
-websockets==15.0
-Flask==3.1.2
-gevent==25.5.1
+# NagaAgent 依赖（一键打包 build.py 与 PyInstaller 均使用此文件）
+# Python 建议 3.11
 
-# MCP 技能 / 可选功能
-datasets==3.6.0
-langchain-community==0.3.30
-langchain-openai==1.1.0
-pdfminer.six==20250506
-polars==1.37.1
-pyarrow==19.0.1
-pypdfium2==4.30.1
-tokenizers==0.21.0
-# torch==2.6.0
+# ---------- 核心 / 配置 ----------
+charset-normalizer>=3.4.0
+json5>=0.9.0
+PyYAML>=6.0.2
+pydantic>=2.11.0
+requests>=2.32.0
+
+# ---------- Web 服务 ----------
+fastapi>=0.115.0
+uvicorn>=0.34.0
+starlette
+sse-starlette>=2.3.0
+httpx>=0.28.0
+httpcore
+websockets>=15.0
+
+# ---------- LLM / 对话 ----------
+openai>=2.8.0
+litellm>=1.80.0
+tiktoken>=0.11.0
+langchain-openai>=1.1.0
+langchain-community>=0.3.30
+
+# ---------- 异步 / 任务 ----------
+aiohttp>=3.12.0
+anyio
+APScheduler>=3.11.0
+
+# ---------- 系统 / 工具 ----------
+numpy>=2.2.0
+pandas>=2.2.0
+pillow>=11.0.0
+psutil>=7.1.0
+emoji>=2.14.0
+cryptography>=46.0.0
+setproctitle>=1.3.5
+watchfiles>=1.0.0
+
+# ---------- 语音 / 音频 ----------
+edge-tts>=7.0.0
+sounddevice>=0.5.0
+
+# ---------- nagaagent_core / 兼容层 ----------
+Flask>=3.1.0
+gevent>=25.0.0
+
+# ---------- MCP 核心（已禁用：main 不再启动 mcpserver） ----------
+# mcp>=1.15.0
+# redis>=5.2.0
+
+# ---------- MCP 技能 / 可选（已禁用） ----------
+# datasets>=3.6.0
+# pdfminer.six>=20250506
+# polars>=1.37.0
+# pyarrow>=19.0.0
+# pypdfium2>=4.30.0
+# tokenizers>=0.21.0
+# python-docx>=1.2.0
+# fastmcp>=2.12.0
+
+# ---------- MQTT（已禁用：main 不再启动 mqtt_tool） ----------
+# paho-mqtt>=2.1.0
+
+# ---------- 打包用（执行 python build.py 或 pyinstaller 时需安装） ----------
+# pyinstaller>=6.0.0

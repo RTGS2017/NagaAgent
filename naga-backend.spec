@@ -14,17 +14,17 @@ block_cipher = None
 # 项目根目录
 PROJECT_ROOT = os.path.dirname(os.path.abspath(SPECPATH))
 
-# 需要打包的数据文件
+# 需要打包的数据文件（mcpserver / mqtt_tool 已禁用，不再打包）
 datas = [
     ('system/prompts', 'system/prompts'),
     ('config.json', '.'),
-    ('mcpserver', 'mcpserver'),
+    # ('mcpserver', 'mcpserver'),  # 已禁用
     ('agentserver', 'agentserver'),
     ('apiserver', 'apiserver'),
     ('system', 'system'),
     ('summer_memory', 'summer_memory'),
     ('voice', 'voice'),
-    ('mqtt_tool', 'mqtt_tool'),
+    # ('mqtt_tool', 'mqtt_tool'),  # 已禁用
     ('skills', 'skills'),
     ('nagaagent_core', 'nagaagent_core'),
 ]
@@ -64,10 +64,10 @@ hiddenimports = [
     # 异步
     'asyncio',
     'anyio',
-    # 其他
-    'key_value',
-    'key_value.aio',
-    'redis',
+    # 其他（MCP/redis 已禁用）
+    # 'key_value',
+    # 'key_value.aio',
+    # 'redis',
     'requests',
     # tiktoken 编码
     'tiktoken',
