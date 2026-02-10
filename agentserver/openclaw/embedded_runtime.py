@@ -182,8 +182,23 @@ class EmbeddedRuntime:
                 stderr=asyncio.subprocess.PIPE,
                 env=self.env,
             )
-            # 等待 Gateway 就绪
-            await asyncio.sleep(3)
+            # 轮询等待 Gateway 就绪（替代固定 sleep(3)）
+            import socket
+            ready = False
+            for attempt in range(15):  # 最多等 15 秒
+                await asyncio.sleep(1)
+                if self._gateway_process.returncode is not None:
+                    break  # 进程已退出
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    if sock.connect_ex(("127.0.0.1", 18789)) == 0:
+                        ready = True
+                        sock.close()
+                        break
+                    sock.close()
+                except Exception:
+                    pass
 
             if self._gateway_process.returncode is not None:
                 stderr = await self._gateway_process.stderr.read() if self._gateway_process.stderr else b""
@@ -191,8 +206,11 @@ class EmbeddedRuntime:
                 self._gateway_process = None
                 return False
 
-            logger.info("内嵌 OpenClaw Gateway 已启动")
-            return True
+            if ready:
+                logger.info("内嵌 OpenClaw Gateway 已启动（端口就绪）")
+            else:
+                logger.warning("Gateway 进程运行中但端口未就绪，继续运行...")
+            return self._gateway_process is not None and self._gateway_process.returncode is None
         except Exception as e:
             logger.error(f"启动内嵌 Gateway 失败: {e}")
             self._gateway_process = None
@@ -224,6 +242,32 @@ class EmbeddedRuntime:
 
     # ============ Onboard 初始化 ============
 
+    def _generate_fallback_config(self) -> bool:
+        """onboard 失败时的兜底：直接生成 ~/.openclaw/openclaw.json"""
+        import json
+
+        config_dir = Path.home() / ".openclaw"
+        config_file = config_dir / "openclaw.json"
+        workspace_dir = config_dir / "workspace"
+
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+
+            # 从 installer 的 build_config_from_naga() 获取配置，避免重复代码
+            from .installer import OpenClawInstaller
+            openclaw_config = OpenClawInstaller.build_config_from_naga()
+
+            config_file.write_text(
+                json.dumps(openclaw_config, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            logger.info(f"Fallback 配置已生成: {config_file}")
+            return True
+        except Exception as e:
+            logger.error(f"生成 fallback 配置失败: {e}")
+            return False
+
     async def ensure_onboarded(self) -> bool:
         """
         确保 OpenClaw 已完成 onboard 初始化。
@@ -239,8 +283,8 @@ class EmbeddedRuntime:
 
         openclaw = self.openclaw_path
         if not openclaw:
-            logger.warning("找不到 openclaw，无法执行 onboard")
-            return False
+            logger.warning("找不到 openclaw，无法执行 onboard，尝试 fallback 配置生成")
+            return self._generate_fallback_config()
 
         try:
             logger.info("首次运行，执行 openclaw onboard 初始化...")
@@ -259,13 +303,18 @@ class EmbeddedRuntime:
                 return True
             else:
                 logger.warning(f"onboard 执行后配置文件未生成: {stderr.decode()[:300]}")
-                return False
         except asyncio.TimeoutError:
             logger.error("openclaw onboard 超时")
-            return False
         except Exception as e:
             logger.error(f"openclaw onboard 失败: {e}")
-            return False
+
+        # onboard 失败，尝试 fallback 直接生成配置
+        if not config_file.exists():
+            logger.warning("openclaw onboard 未生成配置，使用 fallback 直接生成...")
+            if self._generate_fallback_config():
+                self._onboarded = True
+                return True
+        return False
 
 
 # ============ 全局单例 ============

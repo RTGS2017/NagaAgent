@@ -30,6 +30,19 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
+def _is_port_in_use(port: int) -> bool:
+    """检测端口是否被占用"""
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(("127.0.0.1", port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI应用生命周期"""
@@ -53,26 +66,21 @@ async def lifespan(app: FastAPI):
             embedded_runtime = get_embedded_runtime()
             if embedded_runtime.is_packaged:
                 logger.info("打包环境：准备启动内嵌 OpenClaw Gateway")
-                # 首次运行时自动执行 onboard 初始化
-                await embedded_runtime.ensure_onboarded()
+
+                # 首次运行时自动执行 onboard 初始化（含 fallback 配置生成）
+                onboard_ok = await embedded_runtime.ensure_onboarded()
+                if not onboard_ok:
+                    logger.error("OpenClaw 初始化失败（onboard + fallback 均失败）")
+
                 # 检测端口是否已被占用
-                import socket
-                port_in_use = False
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(1)
-                    port_in_use = sock.connect_ex(("127.0.0.1", 18789)) == 0
-                    sock.close()
-                except Exception:
-                    pass
-                if port_in_use:
+                if _is_port_in_use(18789):
                     logger.info("端口 18789 已被占用，跳过内嵌 Gateway 启动")
                 else:
                     gw_ok = await embedded_runtime.start_gateway()
                     if gw_ok:
                         logger.info("内嵌 OpenClaw Gateway 启动成功")
                     else:
-                        logger.warning("内嵌 OpenClaw Gateway 启动失败")
+                        logger.error("内嵌 OpenClaw Gateway 启动失败")
 
             # 检测 OpenClaw 安装状态
             openclaw_status = detect_openclaw(check_connection=False)

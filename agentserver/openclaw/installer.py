@@ -68,7 +68,7 @@ class OpenClawInstaller:
         from .embedded_runtime import get_embedded_runtime
         return get_embedded_runtime()
 
-    # 默认配置模板（使用免费的 GLM 模型）
+    # 默认配置模板（使用免费的 GLM 模型作为兜底）
     DEFAULT_CONFIG_TEMPLATE = {
         "agents": {
             "defaults": {
@@ -104,6 +104,66 @@ class OpenClawInstaller:
             }
         }
     }
+
+    @staticmethod
+    def build_config_from_naga() -> Dict[str, Any]:
+        """从 NagaAgent config.api 构建 OpenClaw 配置"""
+        import json
+        import secrets
+        from system.config import config
+
+        token = secrets.token_hex(24)
+        api = config.api
+        workspace = str(Path.home() / ".openclaw" / "workspace")
+
+        return {
+            "meta": {
+                "lastTouchedVersion": "naga-generated",
+                "lastTouchedAt": "",
+            },
+            "env": {"shellEnv": {"enabled": False}},
+            "models": {
+                "providers": {
+                    "naga-provider": {
+                        "baseUrl": api.base_url,
+                        "apiKey": api.api_key,
+                        "auth": "api-key",
+                        "api": "openai-completions",
+                        "headers": {},
+                        "authHeader": False,
+                        "models": [{
+                            "id": api.model,
+                            "name": api.model,
+                            "api": "openai-completions",
+                            "reasoning": False,
+                            "input": ["text"],
+                            "cost": {"input": 1, "output": 1, "cacheRead": 1, "cacheWrite": 1},
+                            "contextWindow": 128000,
+                            "maxTokens": api.max_tokens,
+                            "compat": {"maxTokensField": "max_tokens"},
+                        }],
+                    }
+                }
+            },
+            "agents": {
+                "defaults": {
+                    "model": {"primary": f"naga-provider/{api.model}"},
+                    "models": {f"naga-provider/{api.model}": {"alias": "NAGA"}},
+                    "workspace": workspace,
+                    "compaction": {"mode": "safeguard"},
+                    "maxConcurrent": 4,
+                    "subagents": {"maxConcurrent": 8},
+                }
+            },
+            "hooks": {"enabled": True, "path": "/hooks", "token": token},
+            "gateway": {
+                "port": 18789,
+                "mode": "local",
+                "bind": "loopback",
+                "auth": {"mode": "token", "token": token},
+            },
+            "skills": {"install": {"nodeManager": "npm"}},
+        }
 
     def __init__(self):
         self._install_status = InstallStatus.NOT_INSTALLED
