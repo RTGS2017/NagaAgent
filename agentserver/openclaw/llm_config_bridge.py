@@ -39,6 +39,7 @@ def ensure_openclaw_config() -> bool:
 
         minimal_config = {
             "gateway": {
+                "mode": "local",
                 "port": 18789,
                 "bind": "loopback",
                 "auth": {"mode": "token", "token": gateway_token},
