@@ -5,16 +5,14 @@ NagaAgent 一键打包脚本
 
 用法:
     python build.py                          # 完整打包
-    python build.py --skip-openclaw          # 跳过 OpenClaw 运行时准备
     python build.py --skip-backend           # 跳过后端编译
     python build.py --skip-frontend          # 跳过前端打包
     python build.py --skip-clean             # 跳过清理缓存
 
 流程:
     Step 0: 清理缓存 (dist, build, frontend/backend-dist 等)
-    Step 1: 准备 OpenClaw 运行时 (Node.js + openclaw npm 包)
-    Step 2: PyInstaller 编译后端
-    Step 3: Electron 打包前端
+    Step 1: PyInstaller 编译后端
+    Step 2: Electron 打包前端
 
 最终产物: frontend/release/Naga Agent Setup x.x.x.exe
 """
@@ -39,7 +37,6 @@ CLEAN_DIRS: list[tuple[Path, str]] = [
     (PROJECT_ROOT / "dist", "PyInstaller 输出"),
     (PROJECT_ROOT / "build", "PyInstaller 中间文件"),
     (BACKEND_DIST_DIR / "naga-backend", "后端复制目标"),
-    (BACKEND_DIST_DIR / "openclaw-runtime", "OpenClaw 运行时"),
     (FRONTEND_DIR / "dist", "Vite 构建输出"),
     (FRONTEND_DIR / "dist-electron", "Electron 构建输出"),
     (FRONTEND_DIR / "release", "Electron-builder 最终产物"),
@@ -48,8 +45,10 @@ CLEAN_DIRS: list[tuple[Path, str]] = [
 
 # ============ 日志工具 ============
 
+
 class Colors:
     """ANSI 颜色码"""
+
     RESET = "\033[0m"
     GREEN = "\033[32m"
     YELLOW = "\033[33m"
@@ -90,6 +89,7 @@ def log_err(msg: str) -> None:
 
 # ============ 工具函数 ============
 
+
 def check_command(cmd: str) -> Optional[str]:
     """检查命令是否可用，返回路径或 None"""
     return shutil.which(cmd)
@@ -112,9 +112,7 @@ def run_cmd(
     )
 
     if result.returncode != 0:
-        raise RuntimeError(
-            f"命令执行失败 (exit={result.returncode}): {desc or cmd_str}"
-        )
+        raise RuntimeError(f"命令执行失败 (exit={result.returncode}): {desc or cmd_str}")
 
 
 def remove_dir(path: Path, label: str) -> None:
@@ -135,6 +133,7 @@ def format_duration(seconds: float) -> str:
 
 # ============ 步骤实现 ============
 
+
 def step_clean() -> None:
     """Step 0: 清理缓存"""
     log_step(0, "清理缓存")
@@ -150,37 +149,9 @@ def step_clean() -> None:
         log(f"  共清理 {cleaned} 个目录")
 
 
-def step_openclaw() -> None:
-    """Step 1: 准备 OpenClaw 运行时"""
-    log_step(1, "准备 OpenClaw 运行时")
-
-    script = PROJECT_ROOT / "scripts" / "prepare_openclaw_runtime.py"
-    if not script.exists():
-        raise FileNotFoundError(f"脚本不存在: {script}")
-
-    run_cmd(
-        [sys.executable, str(script)],
-        desc="准备 OpenClaw 运行时",
-    )
-
-    # 验证输出
-    runtime_dir = BACKEND_DIST_DIR / "openclaw-runtime"
-    if not runtime_dir.exists():
-        raise RuntimeError(f"OpenClaw 运行时目录未生成: {runtime_dir}")
-
-    node_exe = runtime_dir / "node" / "node.exe"
-    openclaw_cmd = runtime_dir / "openclaw" / "node_modules" / ".bin" / "openclaw.cmd"
-    if not node_exe.exists():
-        raise RuntimeError(f"node.exe 未找到: {node_exe}")
-    if not openclaw_cmd.exists():
-        raise RuntimeError(f"openclaw.cmd 未找到: {openclaw_cmd}")
-
-    log_ok("OpenClaw 运行时准备完成")
-
-
 def step_backend() -> None:
-    """Step 2: PyInstaller 编译后端"""
-    log_step(2, "PyInstaller 编译后端")
+    """Step 1: PyInstaller 编译后端"""
+    log_step(1, "PyInstaller 编译后端")
 
     spec_file = PROJECT_ROOT / "naga-backend.spec"
     if not spec_file.exists():
@@ -219,8 +190,8 @@ def step_backend() -> None:
 
 
 def step_frontend() -> None:
-    """Step 3: Electron 打包前端"""
-    log_step(3, "Electron 打包前端")
+    """Step 2: Electron 打包前端"""
+    log_step(2, "Electron 打包前端")
 
     if not FRONTEND_DIR.exists():
         raise FileNotFoundError(f"前端目录不存在: {FRONTEND_DIR}")
@@ -266,14 +237,13 @@ def step_frontend() -> None:
 
 # ============ 主流程 ============
 
+
 def check_prerequisites(args: argparse.Namespace) -> None:
     """检查前置依赖"""
     log("检查前置依赖...")
 
     if platform.system() != "Windows":
-        raise RuntimeError(
-            f"当前平台: {platform.system()}，此脚本仅支持 Windows 打包"
-        )
+        raise RuntimeError(f"当前平台: {platform.system()}，此脚本仅支持 Windows 打包")
 
     # 检查 uv（后端编译需要）
     if not args.skip_backend:
@@ -282,7 +252,7 @@ def check_prerequisites(args: argparse.Namespace) -> None:
         log_ok("uv 可用")
 
     # 检查 npm / node（前端打包需要）
-    if not args.skip_frontend or not args.skip_openclaw:
+    if not args.skip_frontend:
         if not check_command("node"):
             raise RuntimeError("未找到 node，请先安装 Node.js 22+")
         if not check_command("npm"):
@@ -293,7 +263,6 @@ def check_prerequisites(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="NagaAgent 一键打包脚本")
     parser.add_argument("--skip-clean", action="store_true", help="跳过清理缓存")
-    parser.add_argument("--skip-openclaw", action="store_true", help="跳过 OpenClaw 运行时准备")
     parser.add_argument("--skip-backend", action="store_true", help="跳过后端编译")
     parser.add_argument("--skip-frontend", action="store_true", help="跳过前端打包")
     args = parser.parse_args()
@@ -315,15 +284,7 @@ def main() -> None:
             step_clean()
             log(f"  耗时: {format_duration(time.time() - t)}")
 
-        # Step 1: OpenClaw 运行时
-        if not args.skip_openclaw:
-            t = time.time()
-            step_openclaw()
-            log(f"  耗时: {format_duration(time.time() - t)}")
-        else:
-            log("\n  [SKIP] 跳过 OpenClaw 运行时准备", Colors.YELLOW)
-
-        # Step 2: 后端编译
+        # Step 1: 后端编译
         if not args.skip_backend:
             t = time.time()
             step_backend()
@@ -331,7 +292,7 @@ def main() -> None:
         else:
             log("\n  [SKIP] 跳过后端编译", Colors.YELLOW)
 
-        # Step 3: 前端打包
+        # Step 2: 前端打包
         if not args.skip_frontend:
             t = time.time()
             step_frontend()
