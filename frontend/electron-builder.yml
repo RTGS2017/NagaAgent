@@ -32,6 +32,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  unicode: true
   shortcutName: Naga Agent
 
 mac:
