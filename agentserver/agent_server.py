@@ -116,9 +116,6 @@ async def lifespan(app: FastAPI):
                     logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
                 else:
                     logger.info("打包环境：使用内嵌运行时")
-                    ensure_openclaw_config()
-                    inject_naga_llm_config()
-                    await _start_gateway_if_port_free(embedded_runtime)
 
             # === 开发环境 ===
             else:
@@ -129,20 +126,21 @@ async def lifespan(app: FastAPI):
                     source_rt = get_source_runtime()
                     logger.info("源码模式：从 submodule 启动 OpenClaw")
                     await source_rt.ensure_built()
-                    ensure_openclaw_config()
-                    inject_naga_llm_config()
-                    await _start_gateway_if_port_free(embedded_runtime)
                 else:
                     # 尝试自动安装 openclaw
                     installed = await _auto_install_openclaw()
-                    if installed:
-                        ensure_openclaw_config()
-                        inject_naga_llm_config()
-                    else:
+                    if not installed:
                         logger.warning(
                             "OpenClaw 不可用：未全局安装，自动安装失败，"
                             "且源码模式条件不满足（需要 Node.js >= 22 + submodule）"
                         )
+
+            # === 统一：无配置文件则自动生成并启动 Gateway ===
+            openclaw_available = shutil.which("openclaw") or embedded_runtime.is_packaged
+            if openclaw_available:
+                ensure_openclaw_config()
+                inject_naga_llm_config()
+                await _start_gateway_if_port_free(embedded_runtime)
 
             # 检测最终状态并初始化客户端
             openclaw_status = detect_openclaw(check_connection=False)
