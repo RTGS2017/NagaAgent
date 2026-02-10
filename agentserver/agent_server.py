@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NagaAgent独立服务 - 基于博弈论的电脑控制智能体
-提供意图识别和电脑控制任务执行功能
+NagaAgent独立服务 - 通过OpenClaw执行任务
+提供意图识别和OpenClaw任务调度功能
 """
 
 import asyncio
@@ -16,9 +16,7 @@ from contextlib import asynccontextmanager
 
 from system.config import config
 from system.background_analyzer import get_background_analyzer
-from agentserver.agent_computer_control import ComputerControlAgent
 from agentserver.task_scheduler import get_task_scheduler, TaskStep
-from agentserver.toolkit_manager import toolkit_manager
 from agentserver.openclaw import get_openclaw_client, set_openclaw_config
 
 # 配置日志
@@ -38,8 +36,6 @@ async def lifespan(app: FastAPI):
     try:
         # 初始化意图分析器
         Modules.analyzer = get_background_analyzer()
-        # 初始化电脑控制智能体
-        Modules.computer_control = ComputerControlAgent()
         # 初始化任务调度器
         Modules.task_scheduler = get_task_scheduler()
 
@@ -90,7 +86,7 @@ async def lifespan(app: FastAPI):
             logger.warning(f"OpenClaw客户端初始化失败（可选功能）: {e}")
             Modules.openclaw_client = None
 
-        logger.info("NagaAgent电脑控制服务初始化完成")
+        logger.info("NagaAgent服务初始化完成")
     except Exception as e:
         logger.error(f"服务初始化失败: {e}")
         raise
@@ -100,19 +96,18 @@ async def lifespan(app: FastAPI):
 
     # shutdown
     try:
-        logger.info("NagaAgent电脑控制服务已关闭")
+        logger.info("NagaAgent服务已关闭")
     except Exception as e:
         logger.error(f"服务关闭失败: {e}")
 
 
-app = FastAPI(title="NagaAgent Computer Control Server", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="NagaAgent Server", version="1.0.0", lifespan=lifespan)
 
 
 class Modules:
     """全局模块管理器"""
 
     analyzer = None
-    computer_control = None
     task_scheduler = None
     openclaw_client = None
 
@@ -122,22 +117,31 @@ def _now_iso() -> str:
     return datetime.now().isoformat()
 
 
-async def _process_computer_control_task(instruction: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-    """处理电脑控制任务"""
+async def _process_openclaw_task(instruction: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    """通过 OpenClaw 执行任务"""
     try:
-        logger.info(f"开始处理电脑控制任务: {instruction}")
+        if not Modules.openclaw_client:
+            return {"success": False, "error": "OpenClaw 客户端未初始化", "task_type": "openclaw", "instruction": instruction}
 
-        # 直接调用电脑控制智能体
-        result = await Modules.computer_control.handle_handoff(
-            {"action": "automate_task", "target": instruction, "parameters": {}}
+        logger.info(f"开始通过 OpenClaw 执行任务: {instruction}")
+
+        task = await Modules.openclaw_client.send_message(
+            message=instruction,
+            session_key=session_id,
+            name="NagaAgent",
         )
 
-        logger.info(f"电脑控制任务完成: {instruction}")
-        return {"success": True, "result": result, "task_type": "computer_control", "instruction": instruction}
+        logger.info(f"OpenClaw 任务完成: {instruction}, 状态: {task.status.value}")
+        return {
+            "success": task.status.value == "completed",
+            "result": task.to_dict(),
+            "task_type": "openclaw",
+            "instruction": instruction,
+        }
 
     except Exception as e:
-        logger.error(f"电脑控制任务失败: {e}")
-        return {"success": False, "error": str(e), "task_type": "computer_control", "instruction": instruction}
+        logger.error(f"OpenClaw 任务失败: {e}")
+        return {"success": False, "error": str(e), "task_type": "openclaw", "instruction": instruction}
 
 
 async def _execute_agent_tasks_async(
@@ -175,8 +179,8 @@ async def _execute_agent_tasks_async(
                     ),
                 )
 
-                # 执行电脑控制任务
-                result = await _process_computer_control_task(instruction, session_id)
+                # 通过 OpenClaw 执行任务
+                result = await _process_openclaw_task(instruction, session_id)
                 results.append({"agent_call": agent_call, "result": result, "step_index": i})
 
                 # 更新任务步骤结果
@@ -259,15 +263,15 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": _now_iso(),
-        "modules": {"analyzer": Modules.analyzer is not None, "computer_control": Modules.computer_control is not None},
+        "modules": {"analyzer": Modules.analyzer is not None, "openclaw": Modules.openclaw_client is not None},
     }
 
 
 @app.post("/schedule")
 async def schedule_agent_tasks(payload: Dict[str, Any]):
     """统一的任务调度端点 - 应用与MCP服务器相同的会话管理逻辑"""
-    if not Modules.computer_control or not Modules.task_scheduler:
-        raise HTTPException(503, "电脑控制智能体或任务调度器未就绪")
+    if not Modules.openclaw_client or not Modules.task_scheduler:
+        raise HTTPException(503, "OpenClaw客户端或任务调度器未就绪")
 
     # 提取新的请求格式参数
     query = payload.get("query", "")
@@ -324,9 +328,9 @@ async def schedule_agent_tasks(payload: Dict[str, Any]):
 
 @app.post("/analyze_and_execute")
 async def analyze_and_execute(payload: Dict[str, Any]):
-    """意图分析和电脑控制任务执行 - 保持向后兼容"""
-    if not Modules.analyzer or not Modules.computer_control:
-        raise HTTPException(503, "分析器或电脑控制智能体未就绪")
+    """意图分析和任务执行 - 保持向后兼容"""
+    if not Modules.analyzer or not Modules.openclaw_client:
+        raise HTTPException(503, "分析器或OpenClaw客户端未就绪")
 
     messages = (payload or {}).get("messages", [])
     if not isinstance(messages, list):
@@ -352,17 +356,17 @@ async def analyze_and_execute(payload: Dict[str, Any]):
             return {
                 "success": True,
                 "status": "no_tasks",
-                "message": "未发现可执行的电脑控制任务",
+                "message": "未发现可执行的任务",
                 "accepted_at": _now_iso(),
                 "session_id": session_id,
             }
 
-        logger.info(f"会话 {session_id} 发现 {len(tasks)} 个电脑控制任务")
+        logger.info(f"会话 {session_id} 发现 {len(tasks)} 个任务")
 
-        # 处理每个任务
+        # 通过 OpenClaw 处理每个任务
         results = []
         for task_instruction in tasks:
-            result = await _process_computer_control_task(task_instruction, session_id)
+            result = await _process_openclaw_task(task_instruction["instruction"], session_id)
             results.append(result)
 
         return {
@@ -377,44 +381,6 @@ async def analyze_and_execute(payload: Dict[str, Any]):
     except Exception as e:
         logger.error(f"意图分析和任务执行失败: {e}")
         raise HTTPException(500, f"处理失败: {e}")
-
-
-@app.get("/computer_control/availability")
-async def get_computer_control_availability():
-    """获取电脑控制可用性"""
-    try:
-        if not Modules.computer_control:
-            return {"ready": False, "reasons": ["电脑控制智能体未初始化"]}
-
-        # 检查电脑控制能力
-        capabilities = Modules.computer_control.get_capabilities()
-        return {"ready": capabilities.get("enabled", False), "capabilities": capabilities, "timestamp": _now_iso()}
-    except Exception as e:
-        logger.error(f"检查电脑控制可用性失败: {e}")
-        return {"ready": False, "reasons": [f"检查失败: {e}"]}
-
-
-@app.post("/computer_control/execute")
-async def execute_computer_control_task(payload: Dict[str, Any]):
-    """直接执行电脑控制任务"""
-    if not Modules.computer_control:
-        raise HTTPException(503, "电脑控制智能体未就绪")
-
-    instruction = payload.get("instruction", "")
-    if not instruction:
-        raise HTTPException(400, "instruction不能为空")
-
-    try:
-        result = await _process_computer_control_task(instruction)
-        return {
-            "success": result.get("success", False),
-            "result": result.get("result"),
-            "error": result.get("error"),
-            "instruction": instruction,
-        }
-    except Exception as e:
-        logger.error(f"执行电脑控制任务失败: {e}")
-        raise HTTPException(500, f"执行失败: {e}")
 
 
 # ============ 任务记忆管理API ============
@@ -656,125 +622,6 @@ async def clear_session_memory(session_id: str):
     except Exception as e:
         logger.error(f"清除会话记忆失败: {e}")
         raise HTTPException(500, f"清除失败: {e}")
-
-
-# ============ 文件编辑工具包API ============
-
-
-@app.get("/tools")
-async def list_tools():
-    """列出所有可用的工具"""
-    try:
-        tools = toolkit_manager.get_all_tools()
-        return {"success": True, "tools": tools, "count": len(tools)}
-    except Exception as e:
-        logger.error(f"获取工具列表失败: {e}")
-        raise HTTPException(500, f"获取失败: {e}")
-
-
-@app.get("/toolkits")
-async def list_toolkits():
-    """列出所有可用的工具包"""
-    try:
-        toolkits = toolkit_manager.list_toolkits()
-        return {"success": True, "toolkits": toolkits, "count": len(toolkits)}
-    except Exception as e:
-        logger.error(f"获取工具包列表失败: {e}")
-        raise HTTPException(500, f"获取失败: {e}")
-
-
-@app.get("/toolkits/{toolkit_name}")
-async def get_toolkit_info(toolkit_name: str):
-    """获取工具包详细信息"""
-    try:
-        info = toolkit_manager.get_toolkit_info(toolkit_name)
-        if not info:
-            raise HTTPException(404, f"工具包不存在: {toolkit_name}")
-
-        return {"success": True, "toolkit": info}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取工具包信息失败: {e}")
-        raise HTTPException(500, f"获取失败: {e}")
-
-
-@app.post("/tools/{toolkit_name}/{tool_name}")
-async def call_tool(toolkit_name: str, tool_name: str, arguments: Dict[str, Any]):
-    """调用工具"""
-    try:
-        result = await toolkit_manager.call_tool(toolkit_name, tool_name, arguments)
-        return {"success": True, "toolkit": toolkit_name, "tool": tool_name, "result": result}
-    except Exception as e:
-        logger.error(f"调用工具失败 {toolkit_name}.{tool_name}: {e}")
-        raise HTTPException(500, f"调用失败: {e}")
-
-
-# ============ 文件编辑专用API ============
-
-
-@app.post("/file/edit")
-async def edit_file(request: Dict[str, str]):
-    """编辑文件 - 使用SEARCH/REPLACE格式"""
-    try:
-        path = request.get("path")
-        diff = request.get("diff")
-
-        if not path or not diff:
-            raise HTTPException(400, "缺少必要参数: path 和 diff")
-
-        result = await toolkit_manager.call_tool("file_edit", "edit_file", {"path": path, "diff": diff})
-
-        return {"success": True, "result": result}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"编辑文件失败: {e}")
-        raise HTTPException(500, f"编辑失败: {e}")
-
-
-@app.post("/file/write")
-async def write_file(request: Dict[str, str]):
-    """写入文件"""
-    try:
-        path = request.get("path")
-        content = request.get("content")
-
-        if not path or content is None:
-            raise HTTPException(400, "缺少必要参数: path 和 content")
-
-        result = await toolkit_manager.call_tool("file_edit", "write_file", {"path": path, "file_text": content})
-
-        return {"success": True, "result": result}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"写入文件失败: {e}")
-        raise HTTPException(500, f"写入失败: {e}")
-
-
-@app.get("/file/read")
-async def read_file(path: str):
-    """读取文件"""
-    try:
-        result = await toolkit_manager.call_tool("file_edit", "read_file", {"path": path})
-
-        return {"success": True, "content": result}
-    except Exception as e:
-        logger.error(f"读取文件失败: {e}")
-        raise HTTPException(500, f"读取失败: {e}")
-
-
-@app.get("/file/list")
-async def list_files(directory: str = "."):
-    """列出目录文件"""
-    try:
-        result = await toolkit_manager.call_tool("file_edit", "list_files", {"directory": directory})
-
-        return {"success": True, "result": result}
-    except Exception as e:
-        logger.error(f"列出文件失败: {e}")
-        raise HTTPException(500, f"列出失败: {e}")
 
 
 # ============ OpenClaw 集成 API ============

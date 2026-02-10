@@ -396,109 +396,15 @@ class BackgroundAnalyzer:
     async def _dispatch_tool_calls(
         self, tool_calls: List[Dict[str, Any]], session_id: str, analysis_session_id: Optional[str] = None
     ):
-        """根据agentType将工具调用分发到相应的服务器"""
+        """将工具调用分发到OpenClaw"""
         try:
+            openclaw_calls = [tc for tc in tool_calls if tc.get("agentType") == "openclaw"]
 
-            # 按agentType分组
-            mcp_calls = []
-            agent_calls = []
-            openclaw_calls = []
-
-            for tool_call in tool_calls:
-                agent_type = tool_call.get("agentType", "")
-                if agent_type == "mcp":
-                    mcp_calls.append(tool_call)
-                elif agent_type == "agent":
-                    agent_calls.append(tool_call)
-                elif agent_type == "openclaw":
-                    openclaw_calls.append(tool_call)
-
-            # 分发MCP任务到MCP服务器
-            if mcp_calls:
-                await self._send_to_mcp_server(mcp_calls, session_id, analysis_session_id)
-
-            # 分发Agent任务到agentserver
-            if agent_calls:
-                await self._send_to_agent_server(agent_calls, session_id, analysis_session_id)
-
-            # 分发OpenClaw任务到agentserver（通过OpenClaw客户端）
             if openclaw_calls:
                 await self._send_to_openclaw(openclaw_calls, session_id, analysis_session_id)
 
         except Exception as e:
             logger.error(f"工具调用分发失败: {e}")
-
-    async def _send_to_mcp_server(
-        self, mcp_calls: List[Dict[str, Any]], session_id: str, analysis_session_id: Optional[str] = None
-    ):
-        """发送MCP任务到MCP服务器"""
-        try:
-            import httpx
-            import uuid
-
-            from system.config import get_server_port
-
-            # 构建MCP服务器请求
-            mcp_payload = {
-                "query": f"批量MCP工具调用 ({len(mcp_calls)} 个)",
-                "tool_calls": mcp_calls,
-                "session_id": session_id,
-                "request_id": str(uuid.uuid4()),
-                "callback_url": f"http://localhost:{get_server_port('api_server')}/tool_result_callback",
-            }
-
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"http://localhost:{get_server_port('mcp_server')}/schedule", json=mcp_payload
-                )
-
-                if response.status_code == 200:
-                    result = response.json()
-                    logger.info(
-                        f"[博弈论] 分析会话 {analysis_session_id or 'unknown'} MCP任务调度成功: {result.get('task_id', 'unknown')}"
-                    )
-                else:
-                    logger.error(f"[博弈论] MCP任务调度失败: {response.status_code} - {response.text}")
-
-        except Exception as e:
-            logger.error(f"[博弈论] 发送MCP任务失败: {e}")
-
-    async def _send_to_agent_server(
-        self, agent_calls: List[Dict[str, Any]], session_id: str, analysis_session_id: Optional[str] = None
-    ):
-        """发送Agent任务到agentserver - 应用与MCP服务器相同的会话管理逻辑"""
-        try:
-            import httpx
-            import uuid
-
-            from system.config import get_server_port
-
-            # 构建agentserver请求 - 应用与MCP服务器相同的会话管理逻辑
-            agent_payload = {
-                "query": f"批量Agent任务执行 ({len(agent_calls)} 个)",
-                "agent_calls": agent_calls,  # 传递完整的agent_calls信息
-                "session_id": session_id,
-                "analysis_session_id": analysis_session_id,  # 传递独立分析会话ID
-                "request_id": str(uuid.uuid4()),  # 生成独立请求ID
-                "callback_url": f"http://localhost:{get_server_port('api_server')}/agent_result_callback",  # 添加回调URL
-            }
-
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"http://localhost:{get_server_port('agent_server')}/schedule",  # 使用统一的schedule端点
-                    json=agent_payload,
-                )
-
-                if response.status_code == 200:
-                    result = response.json()
-                    logger.info(
-                        f"[博弈论] 分析会话 {analysis_session_id or 'unknown'} Agent任务调度成功: {result.get('task_id', 'unknown')}"
-                    )
-                else:
-                    logger.error(f"[博弈论] Agent任务调度失败: {response.status_code} - {response.text}")
-
-        except Exception as e:
-            logger.error(f"[博弈论] 发送Agent任务失败: {e}")
 
     async def _send_to_openclaw(
         self, openclaw_calls: List[Dict[str, Any]], session_id: str, analysis_session_id: Optional[str] = None

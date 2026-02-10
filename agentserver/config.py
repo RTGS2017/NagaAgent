@@ -67,30 +67,6 @@ class AgentManagerConfig:
 # 默认Agent管理器配置实例
 DEFAULT_AGENT_MANAGER_CONFIG = AgentManagerConfig()
 
-# ============ 电脑控制Agent配置 ============
-
-@dataclass
-class ComputerControlConfig:
-    """电脑控制Agent配置"""
-    # 执行配置
-    max_execution_time: int = 60            # 最大执行时间（秒）
-    enable_screenshot: bool = True          # 是否启用截图功能
-    screenshot_quality: int = 80            # 截图质量（1-100）
-    
-    # 安全配置
-    enable_safety_checks: bool = True       # 是否启用安全检查
-    blocked_commands: list = None           # 被阻止的命令列表
-    
-    def __post_init__(self):
-        if self.blocked_commands is None:
-            self.blocked_commands = [
-                "rm -rf /", "format c:", "del /f /s /q c:\\",
-                "shutdown", "reboot", "halt"
-            ]
-
-# 默认电脑控制配置实例
-DEFAULT_COMPUTER_CONTROL_CONFIG = ComputerControlConfig()
-
 # ============ OpenClaw 配置 ============
 
 @dataclass
@@ -128,7 +104,6 @@ class AgentServerConfig:
     # 子模块配置
     task_scheduler: TaskSchedulerConfig = None
     agent_manager: AgentManagerConfig = None
-    computer_control: ComputerControlConfig = None
     openclaw: OpenClawConfig = None
 
     # 日志配置
@@ -145,8 +120,6 @@ class AgentServerConfig:
             self.task_scheduler = DEFAULT_TASK_SCHEDULER_CONFIG
         if self.agent_manager is None:
             self.agent_manager = DEFAULT_AGENT_MANAGER_CONFIG
-        if self.computer_control is None:
-            self.computer_control = DEFAULT_COMPUTER_CONTROL_CONFIG
         if self.openclaw is None:
             self.openclaw = DEFAULT_OPENCLAW_CONFIG
 
@@ -162,10 +135,6 @@ def get_task_scheduler_config() -> TaskSchedulerConfig:
 def get_agent_manager_config() -> AgentManagerConfig:
     """获取Agent管理器配置"""
     return config.agent_manager
-
-def get_computer_control_config() -> ComputerControlConfig:
-    """获取电脑控制配置"""
-    return config.computer_control
 
 def get_openclaw_config() -> OpenClawConfig:
     """获取 OpenClaw 配置"""

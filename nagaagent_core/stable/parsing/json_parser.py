@@ -91,9 +91,10 @@ def validate_tool_call(tool_call: Dict[str, Any]) -> bool:
     if not isinstance(tool_call, dict):
         return False
     
-    # 检查必要字段
-    required_fields = ["agentType", "service_name", "tool_name"]
-    return all(tool_call.get(field) for field in required_fields)
+    # 检查必要字段 - 只需要 agentType 和 message
+    if tool_call.get("agentType") == "openclaw":
+        return bool(tool_call.get("message") or tool_call.get("task_type"))
+    return bool(tool_call.get("agentType"))
 
 
 def extract_json_blocks(text: str) -> List[str]:
