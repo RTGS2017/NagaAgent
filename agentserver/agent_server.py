@@ -49,6 +49,42 @@ async def _start_gateway_if_port_free(runtime) -> bool:
     return gw_ok
 
 
+async def _auto_install_openclaw() -> bool:
+    """尝试通过 npm install -g openclaw 自动安装"""
+    npm = shutil.which("npm")
+    if not npm:
+        logger.warning("自动安装 OpenClaw 失败：npm 不可用")
+        return False
+
+    try:
+        logger.info("OpenClaw 未安装，正在执行 npm install -g openclaw，请稍候...")
+        proc = await asyncio.create_subprocess_exec(
+            npm, "install", "-g", "openclaw",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+
+        if proc.returncode != 0:
+            logger.error(f"npm install -g openclaw 失败: {stderr.decode()[:500]}")
+            return False
+
+        # 验证安装成功
+        if shutil.which("openclaw"):
+            logger.info("OpenClaw 自动安装成功")
+            return True
+        else:
+            logger.error("npm install -g openclaw 执行成功但 openclaw 命令未找到")
+            return False
+
+    except asyncio.TimeoutError:
+        logger.error("npm install -g openclaw 超时（120秒）")
+        return False
+    except Exception as e:
+        logger.error(f"自动安装 OpenClaw 失败: {e}")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI应用生命周期"""
@@ -86,21 +122,27 @@ async def lifespan(app: FastAPI):
 
             # === 开发环境 ===
             else:
-                openclaw_status = detect_openclaw(check_connection=False)
-                if openclaw_status.installed and not openclaw_status.source_mode:
+                if mode == "global":
                     logger.info("检测到全局安装的 OpenClaw")
-                else:
-                    # 尝试源码模式
+                elif mode == "source":
                     from agentserver.openclaw.source_runtime import get_source_runtime
                     source_rt = get_source_runtime()
-                    if source_rt.is_available:
-                        logger.info("源码模式：从 submodule 启动 OpenClaw")
-                        await source_rt.ensure_built()
+                    logger.info("源码模式：从 submodule 启动 OpenClaw")
+                    await source_rt.ensure_built()
+                    ensure_openclaw_config()
+                    inject_naga_llm_config()
+                    await _start_gateway_if_port_free(embedded_runtime)
+                else:
+                    # 尝试自动安装 openclaw
+                    installed = await _auto_install_openclaw()
+                    if installed:
                         ensure_openclaw_config()
                         inject_naga_llm_config()
-                        await _start_gateway_if_port_free(embedded_runtime)
                     else:
-                        logger.warning("OpenClaw 不可用：未全局安装，且源码模式条件不满足")
+                        logger.warning(
+                            "OpenClaw 不可用：未全局安装，自动安装失败，"
+                            "且源码模式条件不满足（需要 Node.js >= 22 + submodule）"
+                        )
 
             # 检测最终状态并初始化客户端
             openclaw_status = detect_openclaw(check_connection=False)

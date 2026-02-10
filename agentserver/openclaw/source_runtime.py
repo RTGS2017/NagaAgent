@@ -199,13 +199,17 @@ class SourceRuntime:
             logger.info("源码模式：构建产物已存在，跳过构建")
             return True
 
+        logger.info(
+            "源码模式：首次运行需要构建 OpenClaw，这可能需要 2~5 分钟，请耐心等待..."
+        )
+
         pnpm = self._ensure_pnpm()
         if not pnpm:
             logger.error("源码模式：无法获取 pnpm，无法构建")
             return False
 
         try:
-            logger.info("源码模式：执行 pnpm install ...")
+            logger.info("源码模式：执行 pnpm install（安装依赖）...")
             proc = await asyncio.create_subprocess_exec(
                 pnpm, "install",
                 cwd=str(self._source_root),
