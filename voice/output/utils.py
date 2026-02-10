@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # 加入项目根目录到模块查找路径
 # utils.py
-from nagaagent_core.api import request, jsonify
+from flask import request, jsonify
 from functools import wraps
 from system.config import config  # 使用统一配置系统
 DEFAULT_LANGUAGE = config.tts.default_language # 统一配置

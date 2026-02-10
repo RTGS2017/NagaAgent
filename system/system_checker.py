@@ -15,8 +15,8 @@ import psutil
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
-from nagaagent_core.vendors.charset_normalizer import from_path
-from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
+from charset_normalizer import from_path
+import json5  # 支持带注释的JSON解析
 
 class SystemChecker:
     """系统环境检测器"""
@@ -47,20 +47,15 @@ class SystemChecker:
             "https://pypi.org/simple/"
         ]
 
-        # 核心依赖包（更新为nagaagent-core包含的依赖）
+        # 核心依赖包（与 requirements.txt 一致，从虚拟环境引入）
         self.core_dependencies = [
-            "nagaagent_core",
             "fastapi",
             "openai",
             "requests",
-            "torch",
             "numpy",
             "pandas",
-            "matplotlib",
-            "markdown",
             "json5",
             "charset_normalizer",
-            "pyneo"
         ]
 
         # 重要可选依赖
@@ -192,11 +187,8 @@ class SystemChecker:
         missing_deps = []
 
         for dep in self.core_dependencies:
-            # 特殊处理某些包名
             module_name = dep
-            if dep == "nagaagent_core":
-                module_name = "nagaagent_core"
-            elif dep == "opencv_python":
+            if dep == "opencv_python":
                 module_name = "cv2"
             elif dep == "pydantic":
                 module_name = "pydantic"
@@ -548,76 +540,16 @@ class SystemChecker:
             print(f"   ❌ 创建虚拟环境异常: {e}")
             return False
     
-    def install_nagaagent_core(self) -> bool:
-        """安装nagaagent-core最新版本"""
-        try:
-            print("   📦 安装nagaagent-core...")
-            
-            # 确定pip命令
-            if platform.system() == "Windows":
-                pip_cmd = str(self.venv_path / "Scripts" / "pip.exe")
-            else:
-                pip_cmd = str(self.venv_path / "bin" / "pip")
-            
-            # 尝试使用镜像源安装
-            for mirror in self.pip_mirrors:
-                try:
-                    print(f"   🔄 尝试镜像源: {mirror}")
-                    install_cmd = [
-                        pip_cmd, "install", 
-                        "--upgrade", 
-                        "--index-url", mirror,
-                        "nagaagent-core>=1.0.6"
-                    ]
-                    
-                    result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=300)
-                    
-                    if result.returncode == 0:
-                        print(f"   ✅ nagaagent-core安装成功 (使用镜像: {mirror})")
-                        return True
-                    else:
-                        print(f"   ⚠️ 镜像源失败: {result.stderr[:100]}...")
-                        continue
-                        
-                except subprocess.TimeoutExpired:
-                    print(f"   ⚠️ 镜像源超时: {mirror}")
-                    continue
-                except Exception as e:
-                    print(f"   ⚠️ 镜像源异常: {e}")
-                    continue
-            
-            # 如果所有镜像源都失败，尝试默认源
-            print("   🔄 尝试默认源...")
-            install_cmd = [pip_cmd, "install", "--upgrade", "nagaagent-core>=1.0.6"]
-            result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=300)
-            
-            if result.returncode == 0:
-                print("   ✅ nagaagent-core安装成功 (使用默认源)")
-                return True
-            else:
-                print(f"   ❌ nagaagent-core安装失败: {result.stderr}")
-                return False
-                
-        except Exception as e:
-            print(f"   ❌ 安装nagaagent-core异常: {e}")
-            return False
-    
     def auto_setup_environment(self) -> bool:
         """自动配置环境（首次运行）"""
         print("🚀 开始自动环境配置...")
         print("=" * 50)
         
-        # 检查是否已经存在虚拟环境
         if self.venv_path.exists():
             print("   ✅ 虚拟环境已存在，跳过创建")
             return True
         
-        # 创建虚拟环境
         if not self.create_virtual_environment():
-            return False
-        
-        # 安装nagaagent-core
-        if not self.install_nagaagent_core():
             return False
         
         print("   ✅ 自动环境配置完成！")
@@ -680,17 +612,13 @@ class SystemChecker:
             print("   venv\\Scripts\\activate  # Windows")
             print("   source venv/bin/activate  # Linux/Mac")
             print("   # 安装依赖:")
-            print("   pip install nagaagent-core>=1.0.6")
+            print("   pip install -r requirements.txt")
             print()
 
         if not self.results.get("核心依赖", True):
             print("3. 安装核心依赖:")
-            print("   # 推荐使用nagaagent-core（包含所有依赖）:")
-            print("   pip install nagaagent-core>=1.0.6")
-            print("   # 或使用镜像源加速:")
-            print("   pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ nagaagent-core>=1.0.6")
-            print("   # 或使用传统方式:")
             print("   pip install -r requirements.txt")
+            print("   # 或使用镜像源: pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt")
             print()
 
         if not self.results.get("配置文件", True):

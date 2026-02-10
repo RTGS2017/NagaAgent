@@ -2,6 +2,16 @@
 import os
 import sys
 import subprocess
+# Windows 控制台 UTF-8，避免打印 emoji/中文 时 UnicodeEncodeError
+if sys.platform == "win32" and hasattr(sys.stdout, "buffer"):
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        else:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 if os.path.exists("_internal"):
     os.chdir("_internal")
 
@@ -42,13 +52,6 @@ if not hasattr(socket, 'EAI_ADDRFAMILY'):
     socket.EAI_SERVICE = -8
     socket.EAI_SOCKTYPE = -7
     socket.EAI_SYSTEM = -11
-
-# 第三方库导入
-# 优先使用仓库内的本地包，防止导入到系统已安装的旧版 nagaagent_core #
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))  # 统一入口 #
-LOCAL_PKG_DIR = os.path.join(REPO_ROOT, "nagaagent-core")  # 统一入口 #
-if LOCAL_PKG_DIR not in sys.path:
-    sys.path.insert(0, LOCAL_PKG_DIR)  # 优先使用本地包 #
 
 # 本地模块导入
 from system.system_checker import run_system_check, run_quick_check
@@ -308,129 +311,7 @@ class ServiceManager:
             import traceback
             print(f"   ❌ TTS服务器启动失败: {e}", flush=True)
             traceback.print_exc()
-    
-    def _start_naga_portal_auto_login(self):
-        """启动NagaPortal自动登录（异步）"""
-        try:
-            # 检查是否配置了NagaPortal
-            if not config.naga_portal.username or not config.naga_portal.password:
-                return  # 静默跳过，不输出日志
-            
-            # 在新线程中异步执行登录
-            def run_auto_login():
-                try:
-                    import sys
-                    import os
-                    # 添加项目根目录到Python路径
-                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    sys.path.insert(0, project_root)
-                    
-                    from mcpserver.agent_naga_portal.portal_login_manager import auto_login_naga_portal
-                    
-                    # 创建新的事件循环
-                    import asyncio
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                    try:
-                        # 执行自动登录
-                        result = loop.run_until_complete(auto_login_naga_portal())
-                        
-                        if result['success']:
-                            # 登录成功，显示状态
-                            print("✅ NagaPortal自动登录成功")
-                            self._show_naga_portal_status()
-                        else:
-                            # 登录失败，显示错误
-                            error_msg = result.get('message', '未知错误')
-                            print(f"❌ NagaPortal自动登录失败: {error_msg}")
-                            self._show_naga_portal_status()
-                    finally:
-                        loop.close()
-                        
-                except Exception as e:
-                    # 登录异常，显示错误
-                    print(f"❌ NagaPortal自动登录异常: {e}")
-                    self._show_naga_portal_status()
-            
-            # 启动后台线程
-            import threading
-            login_thread = threading.Thread(target=run_auto_login, daemon=True)
-            login_thread.start()
-            
-        except Exception as e:
-            # 启动异常，显示错误
-            print(f"❌ NagaPortal自动登录启动失败: {e}")
-            self._show_naga_portal_status()
 
-    def _show_naga_portal_status(self):
-        """显示NagaPortal状态（登录完成后调用）"""
-        try:
-            from mcpserver.agent_naga_portal.portal_login_manager import get_portal_login_manager
-            login_manager = get_portal_login_manager()
-            status = login_manager.get_status()
-            cookies = login_manager.get_cookies()
-            
-            print("🌐 NagaPortal状态:")
-            print(f"   地址: {config.naga_portal.portal_url}")
-            print(f"   用户: {config.naga_portal.username[:3]}***{config.naga_portal.username[-3:] if len(config.naga_portal.username) > 6 else '***'}")
-            
-            if cookies:
-                print(f"🍪 Cookie信息 ({len(cookies)}个):")
-                for name, value in cookies.items():
-                    print(f"   {name}: {value}")
-            else:
-                print("🍪 Cookie: 未获取到")
-            
-            user_id = status.get('user_id')
-            if user_id:
-                print(f"👤 用户ID: {user_id}")
-            else:
-                print("👤 用户ID: 未获取到")
-                
-            # 显示登录状态
-            if status.get('is_logged_in'):
-                print("✅ 登录状态: 已登录")
-            else:
-                print("❌ 登录状态: 未登录")
-                if status.get('login_error'):
-                    print(f"   错误: {status.get('login_error')}")
-                    
-        except Exception as e:
-            print(f"🍪 NagaPortal状态获取失败: {e}")
-    
-    # MQTT 已从启动流程中排除，不再启动
-    # def _start_mqtt_status_check(self):
-    #     """启动物联网通讯连接并显示状态（异步）"""
-    #     try:
-    #         if not config.mqtt.enabled:
-    #             return
-    #         def run_mqtt_connection():
-    #             try:
-    #                 import sys
-    #                 import os
-    #                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    #                 sys.path.insert(0, project_root)
-    #                 try:
-    #                     from mqtt_tool.device_switch import device_manager
-    #                     if hasattr(device_manager, 'connect'):
-    #                         success = device_manager.connect()
-    #                         if success:
-    #                             print("🔗 物联网通讯状态: 已连接")
-    #                         else:
-    #                             print("⚠️ 物联网通讯状态: 连接失败（将在使用时重试）")
-    #                     else:
-    #                         print("❌ 物联网通讯功能不可用")
-    #                 except Exception as e:
-    #                     print(f"⚠️ 物联网通讯连接失败: {e}")
-    #             except Exception as e:
-    #                 print(f"❌ 物联网通讯连接异常: {e}")
-    #         import threading
-    #         mqtt_thread = threading.Thread(target=run_mqtt_connection, daemon=True)
-    #         mqtt_thread.start()
-    #     except Exception as e:
-    #         print(f"❌ 物联网通讯连接启动失败: {e}")
-    
     
     def _init_voice_system(self):
         """初始化语音处理系统"""
@@ -459,52 +340,6 @@ class ServiceManager:
             logger.info("MCP服务系统由mcpserver独立管理")
         except Exception as e:
             logger.error(f"MCP服务系统初始化失败: {e}")
-    
-    
-    def show_naga_portal_status(self):
-        """显示NagaPortal配置状态（手动调用）"""
-        try:
-            if config.naga_portal.username and config.naga_portal.password:
-                print("🌐 NagaPortal: 已配置账户信息")
-                print(f"   地址: {config.naga_portal.portal_url}")
-                print(f"   用户: {config.naga_portal.username[:3]}***{config.naga_portal.username[-3:] if len(config.naga_portal.username) > 6 else '***'}")
-                
-                # 获取并显示Cookie信息
-                try:
-                    from mcpserver.agent_naga_portal.portal_login_manager import get_portal_login_manager
-                    login_manager = get_portal_login_manager()
-                    status = login_manager.get_status()
-                    cookies = login_manager.get_cookies()
-                    
-                    if cookies:
-                        print(f"🍪 Cookie信息 ({len(cookies)}个):")
-                        for name, value in cookies.items():
-                            # 显示完整的cookie名称和值
-                            print(f"   {name}: {value}")
-                    else:
-                        print("🍪 Cookie: 未获取到")
-                    
-                    user_id = status.get('user_id')
-                    if user_id:
-                        print(f"👤 用户ID: {user_id}")
-                    else:
-                        print("👤 用户ID: 未获取到")
-                        
-                    # 显示登录状态
-                    if status.get('is_logged_in'):
-                        print("✅ 登录状态: 已登录")
-                    else:
-                        print("❌ 登录状态: 未登录")
-                        if status.get('login_error'):
-                            print(f"   错误: {status.get('login_error')}")
-                        
-                except Exception as e:
-                    print(f"🍪 状态获取失败: {e}")
-            else:
-                print("🌐 NagaPortal: 未配置账户信息")
-                print("   如需使用NagaPortal功能，请在config.json中配置naga_portal.username和password")
-        except Exception as e:
-            print(f"🌐 NagaPortal: 配置检查失败 - {e}")
 
 # 工具函数
 def show_help():
@@ -616,12 +451,6 @@ def _lazy_init_services():
         # service_manager._init_mcp_services()
         service_manager._init_voice_system()
         service_manager._init_memory_system()
-        # service_manager._load_persistent_context()  # 删除重复加载，UI渲染时会自动加载
-        
-        # 初始化进度文件
-        #with open('./ui/styles/progress.txt', 'w') as f:
-            #f.write('0')
-        #何意味？注释了 by Null
         
         # 显示系统状态
         print("=" * 30)
@@ -637,14 +466,6 @@ def _lazy_init_services():
         
         # 启动服务（并行异步）
         service_manager.start_all_servers()
-        
-        # 启动NagaPortal自动登录
-        service_manager._start_naga_portal_auto_login()
-        print("⏳ NagaPortal正在后台自动登录...")
-        
-        # 启动物联网通讯连接（已禁用：不再使用 MQTT）
-        # service_manager._start_mqtt_status_check()
-        # print("⏳ 物联网通讯正在后台初始化连接...")
         
         show_help()
         

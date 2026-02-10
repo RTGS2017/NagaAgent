@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from .config import hot_reload_config, add_config_listener
-from nagaagent_core.vendors.charset_normalizer import from_path
-from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
+from charset_normalizer import from_path
+import json5  # 支持带注释的JSON解析
 
 class ConfigManager:
     """配置管理器 - 统一管理配置热更新

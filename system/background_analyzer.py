@@ -39,40 +39,7 @@ class ConversationAnalyzer:
             lines.append(f"{role}: {content}")
         conversation = "\n".join(lines)
 
-        # 获取可用的MCP工具信息，注入到意图识别中
         available_tools = ""
-        try:
-            from nagaagent_core.stable.mcp import get_registered_services, get_service_info
-
-            registered_services = get_registered_services()
-            services_info = {name: get_service_info(name) for name in registered_services}
-
-            # 构建工具信息摘要
-            tools_summary = []
-            for name, info in services_info.items():
-                if info:
-                    display_name = info.get("displayName", name)
-                    description = info.get("description", "")
-                    capabilities = info.get("capabilities", {})
-
-                    # 提取工具名称 - 从invocationCommands中提取
-                    tools = []
-                    invocation_commands = capabilities.get("invocationCommands", [])
-                    for cmd in invocation_commands:
-                        tool_name = cmd.get("command", "")
-                        if tool_name:
-                            tools.append(tool_name)
-
-                    if tools:
-                        tools_summary.append(f"- {display_name}: {description} (工具: {', '.join(tools)})")
-                    else:
-                        tools_summary.append(f"- {display_name}: {description}")
-
-            if tools_summary:
-                available_tools = "\n".join(tools_summary)
-        except Exception as e:
-            logger.debug(f"获取MCP工具信息失败: {e}")
-
         return get_prompt(
             "conversation_analyzer_prompt",
             conversation=conversation,
@@ -144,7 +111,7 @@ class ConversationAnalyzer:
 
         # 优先使用核心库解析器（如果可用）
         try:
-            from nagaagent_core.stable.parsing import parse_non_standard_json  # type: ignore
+            from system.parsing import parse_non_standard_json
 
             tool_calls = parse_non_standard_json(normalized_text)
             if tool_calls:
@@ -186,7 +153,7 @@ class ConversationAnalyzer:
 
         def _loads(s: str) -> Any:
             try:
-                from nagaagent_core.vendors import json5 as _json5  # type: ignore
+                import json5 as _json5
 
                 return _json5.loads(s)
             except Exception:

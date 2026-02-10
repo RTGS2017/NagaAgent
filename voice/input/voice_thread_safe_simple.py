@@ -5,7 +5,7 @@
 """
 
 try:
-    from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal
+    from PyQt5.QtCore import QObject, pyqtSignal
     HAS_QT = True
 except ImportError:
     QObject = object

@@ -1,4 +1,0 @@
-python-dotenv>=1.0.0
-websockets>=14.0  # 使用最新版本避免弃用警告 
-mcp>=1.8.1
-pydantic>=2.11.4

@@ -8,7 +8,7 @@
 """
 
 try:
-    from nagaagent_core.vendors.PyQt5.QtCore import QObject, pyqtSignal, QTimer
+    from PyQt5.QtCore import QObject, pyqtSignal, QTimer
     HAS_QT = True
 except ImportError:
     QObject = object

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from system.config import config
-from nagaagent_core.core import OpenAI, AsyncOpenAI
+from openai import OpenAI, AsyncOpenAI
 
 # 初始化OpenAI客户端
 client = OpenAI(

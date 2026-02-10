@@ -14,7 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from nagaagent_core.api import uvicorn
+import uvicorn
 
 async def start_api_server():
     """启动API服务器"""

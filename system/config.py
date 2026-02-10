@@ -10,8 +10,8 @@ from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
-from nagaagent_core.vendors.charset_normalizer import from_path
-from nagaagent_core.vendors import json5  # 支持带注释的JSON解析
+from charset_normalizer import from_path
+import json5  # 支持带注释的JSON解析
 
 # ========== 服务器端口配置 - 统一管理 ==========
 class ServerPortsConfig(BaseModel):

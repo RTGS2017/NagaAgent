@@ -26,7 +26,6 @@ datas = [
     ('voice', 'voice'),
     # ('mqtt_tool', 'mqtt_tool'),  # 已禁用
     ('skills', 'skills'),
-    ('nagaagent_core', 'nagaagent_core'),
 ]
 
 # 第三方包的数据文件
@@ -148,7 +147,7 @@ excludes = [
 
 a = Analysis(
     ['main.py'],
-    pathex=[PROJECT_ROOT, os.path.join(PROJECT_ROOT, 'nagaagent-core')],
+    pathex=[PROJECT_ROOT],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,

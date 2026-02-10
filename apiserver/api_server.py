@@ -26,9 +26,9 @@ logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 # 创建logger实例
 logger = logging.getLogger(__name__)
 
-from nagaagent_core.api import FastAPI, HTTPException, UploadFile, File, Form
-from nagaagent_core.api import CORSMiddleware
-from nagaagent_core.api import StreamingResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import shutil
 from pathlib import Path

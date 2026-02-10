@@ -43,6 +43,10 @@ watchfiles>=1.0.0
 edge-tts>=7.0.0
 sounddevice>=0.5.0
 
+# ---------- 知识图谱 GRAG / Neo4j（可选，启用 grag 时需要） ----------
+py2neo>=2021.2.3
+neo4j>=5.0.0
+
 # ---------- nagaagent_core / 兼容层 ----------
 Flask>=3.1.0
 gevent>=25.0.0

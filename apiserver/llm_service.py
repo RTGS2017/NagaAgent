@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import litellm
 from litellm import acompletion
-from nagaagent_core.api import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from system.config import config
 
 # 配置日志
