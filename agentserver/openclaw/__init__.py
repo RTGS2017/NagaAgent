@@ -40,6 +40,11 @@ from .config_manager import (
     get_openclaw_config_manager
 )
 
+from .embedded_runtime import (
+    EmbeddedRuntime,
+    get_embedded_runtime
+)
+
 __all__ = [
     # Client
     "OpenClawClient",
@@ -67,4 +72,7 @@ __all__ = [
     "OpenClawConfigManager",
     "ConfigUpdateResult",
     "get_openclaw_config_manager",
+    # Embedded Runtime
+    "EmbeddedRuntime",
+    "get_embedded_runtime",
 ]

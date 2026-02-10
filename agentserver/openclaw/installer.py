@@ -9,7 +9,6 @@ import os
 import asyncio
 import logging
 import subprocess
-import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
@@ -58,10 +57,16 @@ class OpenClawInstaller:
     OpenClaw 安装器
 
     负责检测、安装和初始化 OpenClaw
+    打包环境下通过 EmbeddedRuntime 获取路径和环境变量。
     """
 
     OPENCLAW_DIR = Path.home() / ".openclaw"
     OPENCLAW_CONFIG = OPENCLAW_DIR / "openclaw.json"
+
+    def _get_runtime(self):
+        """获取 EmbeddedRuntime 实例"""
+        from .embedded_runtime import get_embedded_runtime
+        return get_embedded_runtime()
 
     # 默认配置模板（使用免费的 GLM 模型）
     DEFAULT_CONFIG_TEMPLATE = {
@@ -112,18 +117,21 @@ class OpenClawInstaller:
         Returns:
             (安装状态, 版本号)
         """
+        runtime = self._get_runtime()
+
         # 1. 检查命令是否可用
-        openclaw_path = shutil.which("openclaw")
-        if not openclaw_path:
+        openclaw_exe = runtime.openclaw_path
+        if not openclaw_exe:
             return InstallStatus.NOT_INSTALLED, None
 
         # 2. 获取版本
         try:
             result = subprocess.run(
-                ["openclaw", "--version"],
+                [openclaw_exe, "--version"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                env=runtime.env,
             )
             if result.returncode == 0:
                 version = result.stdout.strip()
@@ -144,25 +152,13 @@ class OpenClawInstaller:
         Returns:
             (是否满足要求, 版本号)
         """
-        try:
-            result = subprocess.run(
-                ["node", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                version_str = result.stdout.strip().lstrip('v')
-                major_version = int(version_str.split('.')[0])
-                return major_version >= 22, version_str
-        except Exception as e:
-            logger.warning(f"检查 Node.js 版本失败: {e}")
-
-        return False, None
+        runtime = self._get_runtime()
+        return runtime.get_node_version()
 
     def check_npm_available(self) -> bool:
         """检查 npm 是否可用"""
-        return shutil.which("npm") is not None
+        runtime = self._get_runtime()
+        return runtime.npm_path is not None
 
     # ============ 安装方法 ============
 
@@ -216,21 +212,39 @@ class OpenClawInstaller:
         Args:
             retry_with_sharp_fix: 是否使用 SHARP_IGNORE_GLOBAL_LIBVIPS=1 环境变量重试
         """
+        runtime = self._get_runtime()
+
+        # 打包环境下 OpenClaw 已内嵌，无需 npm install
+        if runtime.is_packaged:
+            if runtime.openclaw_path:
+                return InstallResult(
+                    success=True,
+                    status=InstallStatus.INSTALLED,
+                    message="打包环境：OpenClaw 已内嵌",
+                )
+            else:
+                return InstallResult(
+                    success=False,
+                    status=InstallStatus.FAILED,
+                    message="打包环境：内嵌 OpenClaw 不可用",
+                )
+
         try:
             logger.info("通过 npm 安装 OpenClaw...")
 
-            # 构建环境变量（处理 macOS 上的 sharp 模块问题）
-            env = os.environ.copy()
+            # 构建环境变量
+            env = runtime.env
             if retry_with_sharp_fix:
                 env["SHARP_IGNORE_GLOBAL_LIBVIPS"] = "1"
                 logger.info("使用 SHARP_IGNORE_GLOBAL_LIBVIPS=1 重试安装...")
 
-            # 运行 npm install
+            npm_exe = runtime.npm_path or "npm"
+
             process = await asyncio.create_subprocess_exec(
-                "npm", "install", "-g", "openclaw@latest",
+                npm_exe, "install", "-g", "openclaw@latest",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=env
+                env=env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -352,8 +366,11 @@ class OpenClawInstaller:
             # 运行 onboard 命令（官方推荐的初始化方式）
             logger.info("运行 OpenClaw onboard...")
 
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             # 构建命令参数
-            cmd = ["openclaw", "onboard"]
+            cmd = [openclaw_exe, "onboard"]
             if not interactive:
                 cmd.append("--install-daemon")  # 非交互模式，自动安装守护进程
 
@@ -361,7 +378,8 @@ class OpenClawInstaller:
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.DEVNULL if not interactive else None
+                stdin=asyncio.subprocess.DEVNULL if not interactive else None,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -420,10 +438,14 @@ class OpenClawInstaller:
             )
 
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "gateway", "install",
+                openclaw_exe, "gateway", "install",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -472,12 +494,16 @@ class OpenClawInstaller:
             )
 
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             if background:
                 # 使用 gateway start 命令启动
                 process = await asyncio.create_subprocess_exec(
-                    "openclaw", "gateway", "start",
+                    openclaw_exe, "gateway", "start",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env=runtime.env,
                 )
 
                 stdout, stderr = await asyncio.wait_for(
@@ -509,9 +535,10 @@ class OpenClawInstaller:
             else:
                 # 前台运行（用于调试）
                 process = await asyncio.create_subprocess_exec(
-                    "openclaw", "gateway",
+                    openclaw_exe, "gateway",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env=runtime.env,
                 )
                 return InstallResult(
                     success=True,
@@ -529,10 +556,14 @@ class OpenClawInstaller:
     async def stop_gateway(self) -> InstallResult:
         """停止 Gateway"""
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "gateway", "stop",
+                openclaw_exe, "gateway", "stop",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -555,10 +586,14 @@ class OpenClawInstaller:
     async def restart_gateway(self) -> InstallResult:
         """重启 Gateway"""
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "gateway", "restart",
+                openclaw_exe, "gateway", "restart",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -596,10 +631,14 @@ class OpenClawInstaller:
     async def check_gateway_status(self) -> Dict[str, Any]:
         """检查 Gateway 状态"""
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "gateway", "status",
+                openclaw_exe, "gateway", "status",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -627,10 +666,14 @@ class OpenClawInstaller:
         使用 `openclaw doctor` 命令检查系统状态
         """
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "doctor",
+                openclaw_exe, "doctor",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -658,10 +701,14 @@ class OpenClawInstaller:
         使用 `openclaw status` 命令
         """
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "status",
+                openclaw_exe, "status",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -695,10 +742,14 @@ class OpenClawInstaller:
         try:
             logger.info(f"安装 Skill: {skill_slug}")
 
+            runtime = self._get_runtime()
+            clawhub_exe = runtime.clawhub_path or "clawhub"
+
             process = await asyncio.create_subprocess_exec(
-                "clawhub", "install", skill_slug,
+                clawhub_exe, "install", skill_slug,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -730,10 +781,14 @@ class OpenClawInstaller:
     async def list_skills(self) -> List[Dict[str, Any]]:
         """列出已安装的 Skills"""
         try:
+            runtime = self._get_runtime()
+            openclaw_exe = runtime.openclaw_path or "openclaw"
+
             process = await asyncio.create_subprocess_exec(
-                "openclaw", "skills", "list",
+                openclaw_exe, "skills", "list",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=runtime.env,
             )
 
             stdout, stderr = await asyncio.wait_for(

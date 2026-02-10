@@ -20,6 +20,7 @@ from agentserver.agent_computer_control import ComputerControlAgent
 from agentserver.task_scheduler import get_task_scheduler, TaskStep
 from agentserver.toolkit_manager import toolkit_manager
 from agentserver.openclaw import get_openclaw_client, set_openclaw_config
+from agentserver.openclaw.embedded_runtime import get_embedded_runtime
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -51,6 +52,31 @@ async def lifespan(app: FastAPI):
         # 初始化 OpenClaw 客户端 - 优先从检测器读取配置
         try:
             from agentserver.openclaw import detect_openclaw, OpenClawConfig as ClientOpenClawConfig
+
+            # 打包环境下自动启动内嵌 Gateway
+            embedded_runtime = get_embedded_runtime()
+            if embedded_runtime.is_packaged:
+                logger.info("打包环境：准备启动内嵌 OpenClaw Gateway")
+                # 首次运行时自动执行 onboard 初始化
+                await embedded_runtime.ensure_onboarded()
+                # 检测端口是否已被占用
+                import socket
+                port_in_use = False
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    port_in_use = sock.connect_ex(("127.0.0.1", 18789)) == 0
+                    sock.close()
+                except Exception:
+                    pass
+                if port_in_use:
+                    logger.info("端口 18789 已被占用，跳过内嵌 Gateway 启动")
+                else:
+                    gw_ok = await embedded_runtime.start_gateway()
+                    if gw_ok:
+                        logger.info("内嵌 OpenClaw Gateway 启动成功")
+                    else:
+                        logger.warning("内嵌 OpenClaw Gateway 启动失败")
 
             # 检测 OpenClaw 安装状态
             openclaw_status = detect_openclaw(check_connection=False)
@@ -100,6 +126,10 @@ async def lifespan(app: FastAPI):
 
     # shutdown
     try:
+        # 停止内嵌 Gateway 进程
+        embedded_runtime = get_embedded_runtime()
+        if embedded_runtime.gateway_running:
+            await embedded_runtime.stop_gateway()
         logger.info("NagaAgent电脑控制服务已关闭")
     except Exception as e:
         logger.error(f"服务关闭失败: {e}")

@@ -17,6 +17,10 @@ extraResources:
     to: backend
     filter:
       - '**/*'
+  - from: backend-dist/openclaw-runtime
+    to: openclaw-runtime
+    filter:
+      - '**/*'
 
 win:
   target:

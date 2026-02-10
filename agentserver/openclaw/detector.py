@@ -92,6 +92,14 @@ class OpenClawDetector:
                 except Exception as e:
                     logger.warning(f"读取 OpenClaw 配置失败: {e}")
 
+        # 打包环境下，即使 ~/.openclaw/ 不存在，只要内嵌运行时可用也标记为已安装
+        if not status.installed:
+            from .embedded_runtime import get_embedded_runtime
+            runtime = get_embedded_runtime()
+            if runtime.is_packaged and runtime.openclaw_path:
+                status.installed = True
+                logger.info("打包环境：内嵌运行时可用，标记 OpenClaw 为已安装")
+
         # 3. 检查 Gateway 连接（可选）
         if check_connection and status.gateway_url:
             status.gateway_reachable = self._check_gateway_connection(status.gateway_url)
