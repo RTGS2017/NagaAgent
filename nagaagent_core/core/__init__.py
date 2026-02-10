@@ -6,8 +6,13 @@
 """
 
 # 重新导出核心依赖的功能
-from mcp import ClientSession, StdioServerParameters  # 关键会话类型 #
-import mcp  # MCP模块 #
+try:
+    from mcp import ClientSession, StdioServerParameters  # 关键会话类型 #
+    import mcp  # MCP模块 #
+except ImportError:
+    mcp = None  # type: ignore[assignment]
+    ClientSession = None  # type: ignore[assignment,misc]
+    StdioServerParameters = None  # type: ignore[assignment,misc]
 from openai import OpenAI, AsyncOpenAI  # OpenAI客户端 #
 from dotenv import load_dotenv  # 环境变量加载 #
 import requests  # HTTP请求 #
