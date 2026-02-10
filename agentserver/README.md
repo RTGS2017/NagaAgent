@@ -11,47 +11,23 @@
 
 ### 核心组件
 
-#### 1. Agent Server (`agent_server.py`)
-- FastAPI服务，提供HTTP接口
-- 管理全局模块状态
-- 处理意图分析和任务规划请求
+当前调度仅使用以下三者，**不再使用** AgentManager / Task Planner。
 
-#### 2. Task Planner (`task_planner.py`)
-- 评估任务可执行性
-- 制定执行计划
-- 支持MCP和Agent两种执行方式
+- **Agent Server** (`agent_server.py`)：FastAPI，提供 `/schedule`、`/openclaw/*` 等接口，管理 analyzer / task_scheduler / openclaw_client。
+- **Task Scheduler** (`task_scheduler.py`)：任务与步骤记忆、会话关联、压缩记忆；仅被 `/schedule` 使用。
+- **OpenClaw** (`openclaw/`)：与 OpenClaw Gateway 通信，所有“执行电脑任务”通过 `openclaw_client.send_message()` 完成。
 
-#### 3. Task Scheduler (`task_scheduler.py`)
-- 负责任务执行调度
-- 管理任务生命周期
-- 支持并发任务执行
-  
-使用示例：
+**OpenClaw 调度流程**详见 [OPENCLAW_FLOW.md](./OPENCLAW_FLOW.md)。
+
+Task Scheduler 使用示例：
 
 ```python
-from agentserver.task_scheduler import get_task_scheduler
+from agentserver.task_scheduler import get_task_scheduler, TaskStep
 
 task_scheduler = get_task_scheduler()
-
-# 创建并行任务列表（示例）
-tasks = [
-    {"type": "processor", "params": {"query": "示例任务A"}},
-    {"type": "processor", "params": {"query": "示例任务B"}},
-]
-
-# 并行执行
-results = await task_scheduler.schedule_parallel_execution(tasks)
-
-# 查询统计
-total = len(task_scheduler.task_registry)
-running = len([t for t in task_scheduler.task_registry.values() if t.get("status") == "running"])
-queued = len([t for t in task_scheduler.task_registry.values() if t.get("status") == "queued"])
+task_id = await task_scheduler.create_task(task_id="...", purpose="...", session_id="...")
+await task_scheduler.add_task_step(task_id, TaskStep(step_id="...", task_id=task_id, purpose="...", content="...", output=""))
 ```
-
-#### 4. Task Deduper (`task_deduper.py`)
-- 基于LLM的任务重复检测
-- 防止重复执行相似任务
-- 支持相似度计算
 
 ## API接口
 
@@ -146,5 +122,4 @@ async def _call_agent_server_analyze(self, messages, session_id):
 
 ## 更新记录
 
-- 2025-09-30: 修复导入路径，将 `apiserver.task_scheduler` 更正为 `agentserver.task_scheduler`（影响 `core/agent_manager.py` 与 `core/multi_agent_coordinator.py`），避免导入解析失败。
-- 2025-10-06: 新增 `agentserver/task_scheduler.py` 轻量实现与用法示例，并在 `agentserver/agent_manager.py` 统一更正注释为“通过agentserver处理”。
+- 移除已废弃的 `agent_manager.py`（任务规划与执行由 task_scheduler + openclaw 直接完成）。详见 [OPENCLAW_FLOW.md](./OPENCLAW_FLOW.md)。

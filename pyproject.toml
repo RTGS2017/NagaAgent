@@ -3,58 +3,50 @@ name = "nagaagent"
 version = "4.0.0"
 description = "NagaAgent 4.0 - 智能对话助手，支持多MCP服务、流式语音交互、GRAG知识图谱记忆系统、RESTful API接口、控制台托盘功能"
 authors = [
-{name = "柏斯阔落", email = "1781393885@qq.com"},
+    {name = "柏斯阔落", email = "1781393885@qq.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "live2d-py<0.6",
-    # 先装个pyqt5避免奇葩依赖
-    "pyqt5>=5.15.11",
-    # 核心依赖 (已整合到nagaagent-core)
-    "nagaagent-core>=1.0.9",
-    "simpleaudio",
-    "pydub",
-    "onnxruntime>=1.23.2",
-    "sounddevice>=0.5.3",
-    "pyautogui>=0.9.54",
-    "librosa>=0.11.0",
-    "pystray>=0.19.5",
-    "paho-mqtt>=2.1.0",
-    "bilibili-api>=4.1.0",
-    "dashscope>=1.25.3",
-    "markdown>=3.10",
-    "pygame>=2.6.1",
-    #"py-key-value-aio[disk,memory,redis]>=0.3.0", # no not need you
-    "pyopengl>=3.1.10",
-    # LiteLLM 统一处理多模型 COT/reasoning_content
-    "litellm>=1.63.0",
-]
-
-# 可选依赖组
-[dependency-groups]
-#其余依赖组已经整合进入主依赖项
-dev = [
-"pytest>=7.0.0",
-"pytest-asyncio>=0.20.0",
-"black>=22.0.0",
-"ruff>=0.1.0",
-]
-build = [
-    "pyinstaller",
-    "python_docx>=1.2.0",
-    "fastmcp>=2.12.5",
-    "tensorboard>=2.20.0",
-    "expecttest>=0.3.0",
-    "onnx>=1.20.0",
-    "onnxscript>=0.5.6",
-    "twisted>=25.5.0",
-    "django>=5.2.9",
-    "tensorflow>=2.20.0",
-    "requests>=2.32.5",
-    "pyopengl-accelerate>=3.1.10",
-    "pyopengl>=3.1.10",
-    "urllib3>=2.6.2",
+    # ---------- 核心 / 配置 ----------
+    "charset-normalizer>=3.4.0",
+    "json5>=0.9.0",
+    "PyYAML>=6.0.2",
+    "pydantic>=2.11.0",
+    "requests>=2.32.0",
+    # ---------- Web 服务 ----------
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "starlette",
+    "sse-starlette>=2.3.0",
+    "httpx>=0.28.0",
+    "httpcore",
+    "websockets>=15.0",
+    # ---------- LLM / 对话 ----------
+    "openai>=2.8.0",
+    "litellm>=1.80.0",
+    "tiktoken>=0.11.0",
+    "langchain-openai>=1.1.0",
+    "langchain-community>=0.3.30",
+    # ---------- 异步 / 任务 ----------
+    "aiohttp>=3.12.0",
+    "anyio",
+    "APScheduler>=3.11.0",
+    # ---------- 系统 / 工具 ----------
+    "numpy>=2.2.0",
+    "pandas>=2.2.0",
+    "pillow>=11.0.0",
+    "psutil>=7.1.0",
+    "emoji>=2.14.0",
+    "cryptography>=46.0.0",
+    "setproctitle>=1.3.5",
+    "watchfiles>=1.0.0",
+    # ---------- 语音 / 音频 ----------
+    "edge-tts>=7.0.0",
+    "sounddevice>=0.5.0",
+    # ---------- nagaagent_core / 兼容层 ----------
+    "Flask>=3.1.0",
+    "gevent>=25.0.0",
 ]
 
 [build-system]
@@ -62,7 +54,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-include = ["apiserver","mcpserver","mqtt_tool", "agentserver", "summer_memory", "thinking", "ui", "voice" ]
+include = ["apiserver", "agentserver", "summer_memory", "thinking", "ui", "voice"]
 
 [tool.ruff]
 line-length = 120

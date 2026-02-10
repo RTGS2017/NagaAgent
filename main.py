@@ -134,7 +134,7 @@ class ServiceManager:
             return False
     
     def start_all_servers(self):
-        """并行启动所有服务：API(可选)、MCP、Agent、TTS - 优化版本"""
+        """并行启动所有服务：API(可选)、Agent、TTS（MCP/MQTT 已从启动流程中排除）"""
         print("🚀 正在并行启动所有服务...")
         print("=" * 50)
         threads = []
@@ -142,12 +142,12 @@ class ServiceManager:
         
         try:
             self._init_proxy_settings()
-            # 预检查所有端口，减少重复检查
+            # 预检查所有端口，减少重复检查（不含 MCP）
             from system.config import get_server_port
             port_checks = {
                 'api': config.api_server.enabled and config.api_server.auto_start and 
                       self.check_port_available(config.api_server.host, config.api_server.port),
-                'mcp': self.check_port_available("0.0.0.0", get_server_port("mcp_server")),
+                # 'mcp': 已禁用，不再在 main 启动流程中启动 MCP
                 'agent': self.check_port_available("0.0.0.0", get_server_port("agent_server")),
                 'tts': self.check_port_available("0.0.0.0", config.tts.port)
             }
@@ -161,14 +161,14 @@ class ServiceManager:
                 print(f"⚠️  API服务器: 端口 {config.api_server.port} 已被占用，跳过启动")
                 service_status['API'] = "端口占用"
 
-            # MCP服务器
-            if port_checks['mcp']:
-                mcp_thread = threading.Thread(target=self._start_mcp_server, daemon=True)
-                threads.append(("MCP", mcp_thread))
-                service_status['MCP'] = "准备启动"
-            else:
-                print(f"⚠️  MCP服务器: 端口 {get_server_port('mcp_server')} 已被占用，跳过启动")
-                service_status['MCP'] = "端口占用"
+            # MCP服务器（已禁用：不再在 main 启动流程中启动）
+            # if port_checks['mcp']:
+            #     mcp_thread = threading.Thread(target=self._start_mcp_server, daemon=True)
+            #     threads.append(("MCP", mcp_thread))
+            #     service_status['MCP'] = "准备启动"
+            # else:
+            #     print(f"⚠️  MCP服务器: 端口 {get_server_port('mcp_server')} 已被占用，跳过启动")
+            #     service_status['MCP'] = "端口占用"
 
             # Agent服务器
             if port_checks['agent']:
@@ -257,25 +257,25 @@ class ServiceManager:
         except Exception as e:
             print(f"   ❌ API服务器启动失败: {e}", flush=True)
     
-    def _start_mcp_server(self):
-        """内部MCP服务器启动方法"""
-        try:
-            import uvicorn
-            from mcpserver.mcp_server import app
-            from system.config import get_server_port
-            
-            uvicorn.run(
-                app,
-                host="0.0.0.0",
-                port=get_server_port("mcp_server"),
-                log_level="error",
-                access_log=False,
-                reload=False,
-                ws_ping_interval=None,  # 禁用WebSocket ping
-                ws_ping_timeout=None    # 禁用WebSocket ping超时
-            )
-        except Exception as e:
-            print(f"   ❌ MCP服务器启动失败: {e}")
+    # MCP 已从启动流程中排除，不再在 main 中启动
+    # def _start_mcp_server(self):
+    #     """内部MCP服务器启动方法"""
+    #     try:
+    #         import uvicorn
+    #         from mcpserver.mcp_server import app
+    #         from system.config import get_server_port
+    #         uvicorn.run(
+    #             app,
+    #             host="0.0.0.0",
+    #             port=get_server_port("mcp_server"),
+    #             log_level="error",
+    #             access_log=False,
+    #             reload=False,
+    #             ws_ping_interval=None,
+    #             ws_ping_timeout=None
+    #         )
+    #     except Exception as e:
+    #         print(f"   ❌ MCP服务器启动失败: {e}")
     
     def _start_agent_server(self):
         """内部Agent服务器启动方法"""
@@ -399,48 +399,37 @@ class ServiceManager:
         except Exception as e:
             print(f"🍪 NagaPortal状态获取失败: {e}")
     
-    def _start_mqtt_status_check(self):
-        """启动物联网通讯连接并显示状态（异步）"""
-        try:
-            # 检查是否配置了物联网通讯
-            if not config.mqtt.enabled:
-                return  # 静默跳过，不输出日志
-            
-            # 在新线程中异步执行物联网通讯连接
-            def run_mqtt_connection():
-                try:
-                    import sys
-                    import os
-                    # 添加项目根目录到Python路径
-                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    sys.path.insert(0, project_root)
-                    
-                    try:
-                        from mqtt_tool.device_switch import device_manager
-                        
-                        # 尝试连接物联网设备
-                        if hasattr(device_manager, 'connect'):
-                            success = device_manager.connect()
-                            if success:
-                                print("🔗 物联网通讯状态: 已连接")
-                            else:
-                                print("⚠️ 物联网通讯状态: 连接失败（将在使用时重试）")
-                        else:
-                            print("❌ 物联网通讯功能不可用")
-                            
-                    except Exception as e:
-                        print(f"⚠️ 物联网通讯连接失败: {e}")
-                        
-                except Exception as e:
-                    print(f"❌ 物联网通讯连接异常: {e}")
-            
-            # 启动后台线程
-            import threading
-            mqtt_thread = threading.Thread(target=run_mqtt_connection, daemon=True)
-            mqtt_thread.start()
-            
-        except Exception as e:
-            print(f"❌ 物联网通讯连接启动失败: {e}")
+    # MQTT 已从启动流程中排除，不再启动
+    # def _start_mqtt_status_check(self):
+    #     """启动物联网通讯连接并显示状态（异步）"""
+    #     try:
+    #         if not config.mqtt.enabled:
+    #             return
+    #         def run_mqtt_connection():
+    #             try:
+    #                 import sys
+    #                 import os
+    #                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    #                 sys.path.insert(0, project_root)
+    #                 try:
+    #                     from mqtt_tool.device_switch import device_manager
+    #                     if hasattr(device_manager, 'connect'):
+    #                         success = device_manager.connect()
+    #                         if success:
+    #                             print("🔗 物联网通讯状态: 已连接")
+    #                         else:
+    #                             print("⚠️ 物联网通讯状态: 连接失败（将在使用时重试）")
+    #                     else:
+    #                         print("❌ 物联网通讯功能不可用")
+    #                 except Exception as e:
+    #                     print(f"⚠️ 物联网通讯连接失败: {e}")
+    #             except Exception as e:
+    #                 print(f"❌ 物联网通讯连接异常: {e}")
+    #         import threading
+    #         mqtt_thread = threading.Thread(target=run_mqtt_connection, daemon=True)
+    #         mqtt_thread.start()
+    #     except Exception as e:
+    #         print(f"❌ 物联网通讯连接启动失败: {e}")
     
     
     def _init_voice_system(self):
@@ -623,8 +612,8 @@ def _lazy_init_services():
         # conversation_core已删除，相关功能已迁移到apiserver
         n = None
         
-        # 初始化各个系统（conversation_core已删除，直接初始化服务）
-        service_manager._init_mcp_services()
+        # 初始化各个系统（MCP 已从启动流程中排除，不再初始化）
+        # service_manager._init_mcp_services()
         service_manager._init_voice_system()
         service_manager._init_memory_system()
         # service_manager._load_persistent_context()  # 删除重复加载，UI渲染时会自动加载
@@ -653,9 +642,9 @@ def _lazy_init_services():
         service_manager._start_naga_portal_auto_login()
         print("⏳ NagaPortal正在后台自动登录...")
         
-        # 启动物联网通讯连接
-        service_manager._start_mqtt_status_check()
-        print("⏳ 物联网通讯正在后台初始化连接...")
+        # 启动物联网通讯连接（已禁用：不再使用 MQTT）
+        # service_manager._start_mqtt_status_check()
+        # print("⏳ 物联网通讯正在后台初始化连接...")
         
         show_help()
         

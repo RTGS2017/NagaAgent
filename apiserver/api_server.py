@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 from nagaagent_core.api import FastAPI, HTTPException, UploadFile, File, Form
 from nagaagent_core.api import CORSMiddleware
 from nagaagent_core.api import StreamingResponse
-from nagaagent_core.api import StaticFiles
 from pydantic import BaseModel
 import shutil
 from pathlib import Path
@@ -105,10 +104,6 @@ app.add_middleware(
 )
 
 # 挂载静态文件
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-
 # ============ 内部服务代理 ============
 
 
@@ -399,7 +394,6 @@ class ChatRequest(BaseModel):
     message: str
     stream: bool = False
     session_id: Optional[str] = None
-    use_self_game: bool = False
     disable_tts: bool = False  # V17: 支持禁用服务器端TTS
     return_audio: bool = False  # V19: 支持返回音频URL供客户端播放
     skip_intent_analysis: bool = False  # 新增：跳过意图分析
@@ -634,34 +628,6 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="消息内容不能为空")
 
     try:
-        # 分支: 启用博弈论流程（非流式，返回聚合文本）
-        if request.use_self_game:
-            # 配置项控制：失败时可跳过回退到普通对话 #
-            skip_on_error = getattr(getattr(config, "game", None), "skip_on_error", True)  # 兼容无配置情况 #
-            enabled = getattr(getattr(config, "game", None), "enabled", False)  # 控制总开关 #
-            if enabled:
-                try:
-                    # 延迟导入以避免启动时循环依赖 #
-                    from game.naga_game_system import NagaGameSystem  # 博弈系统入口 #
-                    from game.core.models.config import GameConfig  # 博弈系统配置 #
-
-                    # 创建系统并执行用户问题处理 #
-                    system = NagaGameSystem(GameConfig())
-                    system_response = await system.process_user_question(
-                        user_question=request.message, user_id=request.session_id or "api_user"
-                    )
-                    return ChatResponse(
-                        response=system_response.content, session_id=request.session_id, status="success"
-                    )
-                except Exception as e:
-                    print(
-                        f"[WARNING] 博弈论流程失败，将{'回退到普通对话' if skip_on_error else '返回错误'}: {e}"
-                    )  # 运行时警告 #
-                    if not skip_on_error:
-                        raise HTTPException(status_code=500, detail=f"博弈论流程失败: {str(e)}")
-                    # 否则继续走普通对话流程 #
-            # 若未启用或被配置跳过，则直接回退到普通对话分支 #
-
         # 获取或创建会话ID
         session_id = message_manager.create_session(request.session_id)
 
@@ -1373,7 +1339,6 @@ async def _trigger_chat_stream_no_intent(session_id: str, response_text: str):
             "message": response_text,  # 直接使用AI回复内容，不加标记
             "stream": True,
             "session_id": session_id,
-            "use_self_game": False,
             "disable_tts": False,
             "return_audio": False,
             "skip_intent_analysis": True,  # 关键：跳过意图分析
@@ -1450,7 +1415,6 @@ async def _send_ai_response_directly(session_id: str, response_text: str):
             "message": f"[工具结果] {response_text}",  # 添加标记让UI知道这是工具结果
             "stream": False,
             "session_id": session_id,
-            "use_self_game": False,
             "disable_tts": False,
             "return_audio": False,
             "skip_intent_analysis": True,
