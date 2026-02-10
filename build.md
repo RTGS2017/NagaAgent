@@ -1,4 +1,4 @@
-# OpenClaw 内嵌打包测试指南
+# Windows: OpenClaw 内嵌打包测试指南
 
 ## 概述
 
@@ -37,9 +37,9 @@ frontend/backend-dist/openclaw-runtime/
 ### 2. 编译后端
 
 ```bash
-uv sync
-uv pip install pyinstaller
-uv run pyinstaller naga-backend.spec
+uv sync --group build
+.\.venv\Scripts\activate
+uv run pyinstaller naga-backend.spec --clean --noconfirm
 xcopy /E /I dist\naga-backend frontend\backend-dist\naga-backend
 ```
 
