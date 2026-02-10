@@ -240,40 +240,7 @@ def copy_build_artifacts() -> None:
     log(f"  dist/entry.js: {OPENCLAW_DIR / 'dist' / 'entry.js'}")
 
 
-# ============ 步骤 6: 清理不必要文件 ============
-
-def cleanup() -> None:
-    """删除不必要的文件以减小体积"""
-    log("清理不必要文件 ...")
-    removed_size = 0
-
-    # Node.js 中不需要的目录
-    for name in ["include", "lib", "share"]:
-        d = NODE_DIR / name
-        if d.exists():
-            size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-            shutil.rmtree(d)
-            removed_size += size
-            log(f"  删除 node/{name}/ ({size / 1024 / 1024:.1f} MB)")
-
-    # 删除 Node.js 文档
-    for pattern in ["*.md", "LICENSE", "CHANGELOG*"]:
-        for f in NODE_DIR.glob(pattern):
-            if f.is_file():
-                removed_size += f.stat().st_size
-                f.unlink()
-
-    # 删除 openclaw 中的文档和测试
-    for pattern in ["**/README.md", "**/CHANGELOG*", "**/LICENSE"]:
-        for f in OPENCLAW_DIR.rglob(pattern.split("/")[-1]):
-            if f.is_file() and "node_modules" in str(f):
-                removed_size += f.stat().st_size
-                f.unlink()
-
-    log(f"  共清理 {removed_size / 1024 / 1024:.1f} MB")
-
-
-# ============ 步骤 7: 汇总 ============
+# ============ 步骤 6: 汇总 ============
 
 def print_summary() -> None:
     """打印最终目录结构和大小"""
@@ -299,7 +266,6 @@ def main() -> None:
     extract_node(zip_path)
     build_openclaw_from_submodule()
     copy_build_artifacts()
-    cleanup()
 
     log("")
     print_summary()
