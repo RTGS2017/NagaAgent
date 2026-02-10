@@ -37,6 +37,7 @@ datas = [
 datas += collect_data_files('tiktoken')
 datas += collect_data_files('tiktoken_ext')
 datas += collect_data_files('litellm')
+datas += collect_data_files('py2neo')
 
 # 排除不需要的大型库（环境有 910 个包，只需约 27 个核心包）
 ### 不不不千万不能排除 先全加上再说
