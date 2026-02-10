@@ -48,6 +48,7 @@ dependencies = [
     "Flask>=3.1.0",
     "gevent>=25.0.0",
     "py2neo>=2021.2.4",
+    "python-multipart>=0.0.22",
 ]
 
 [build-system]
@@ -63,6 +64,5 @@ line-length = 120
 [dependency-groups]
 build = [
     "pyinstaller>=6.18.0",
-    "python-multipart>=0.0.22",
 ]
 
