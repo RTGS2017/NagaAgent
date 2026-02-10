@@ -37,8 +37,9 @@ frontend/backend-dist/openclaw-runtime/
 ### 2. 编译后端
 
 ```bash
-pip install pyinstaller
-pyinstaller naga-backend.spec
+uv sync
+uv pip install pyinstaller
+uv run pyinstaller naga-backend.spec
 xcopy /E /I dist\naga-backend frontend\backend-dist\naga-backend
 ```
 
