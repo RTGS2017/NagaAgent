@@ -7,7 +7,12 @@ NagaAgent Headless Backend - PyInstaller Spec
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+#from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import (
+    collect_submodules, collect_data_files,
+    collect_dynamic_libs
+)
+
 
 block_cipher = None
 
@@ -75,6 +80,8 @@ hiddenimports = [
     'tiktoken_ext',
     'tiktoken_ext.openai_public',
 ]
+hiddenimports += collect_submodules('psutil')
+
 
 # 排除不需要的大型库（环境有 910 个包，只需约 27 个核心包）
 excludes = [
@@ -145,10 +152,12 @@ excludes = [
     'jieba',
 ]
 
+binaries = collect_dynamic_libs('psutil')
+
 a = Analysis(
     ['main.py'],
     pathex=[PROJECT_ROOT],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -170,7 +179,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,  # headless 模式需要控制台输出
 )
 
