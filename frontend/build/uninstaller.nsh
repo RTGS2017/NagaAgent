@@ -1,37 +1,6 @@
 ; OpenClaw 自动安装清理脚本
 ; 在卸载时检查是否是自动安装的 OpenClaw，如果是则清理相关文件
 
-; 定义卸载版本的 StrContains 函数
-Var UN_STR_HAYSTACK
-Var UN_STR_NEEDLE
-Var UN_STR_CONTAINS_VAR_1
-Var UN_STR_CONTAINS_VAR_2
-Var UN_STR_CONTAINS_VAR_3
-Var UN_STR_CONTAINS_VAR_4
-Var UN_STR_RETURN_VAR
-
-Function un.StrContains
-  Exch $UN_STR_NEEDLE
-  Exch 1
-  Exch $UN_STR_HAYSTACK
-  StrCpy $UN_STR_RETURN_VAR ""
-  StrCpy $UN_STR_CONTAINS_VAR_1 -1
-  StrLen $UN_STR_CONTAINS_VAR_2 $UN_STR_NEEDLE
-  StrLen $UN_STR_CONTAINS_VAR_4 $UN_STR_HAYSTACK
-  un_loop:
-    IntOp $UN_STR_CONTAINS_VAR_1 $UN_STR_CONTAINS_VAR_1 + 1
-    StrCpy $UN_STR_CONTAINS_VAR_3 $UN_STR_HAYSTACK $UN_STR_CONTAINS_VAR_2 $UN_STR_CONTAINS_VAR_1
-    StrCmp $UN_STR_CONTAINS_VAR_3 $UN_STR_NEEDLE un_found
-    StrCmp $UN_STR_CONTAINS_VAR_1 $UN_STR_CONTAINS_VAR_4 un_done
-    Goto un_loop
-  un_found:
-    StrCpy $UN_STR_RETURN_VAR $UN_STR_NEEDLE
-    Goto un_done
-  un_done:
-   Pop $UN_STR_NEEDLE
-   Exch $UN_STR_RETURN_VAR
-FunctionEnd
-
 !macro customUnInstall
   ; 检查 openclaw-runtime/.openclaw_install_state 文件
   IfFileExists "$INSTDIR\resources\openclaw-runtime\.openclaw_install_state" 0 SkipOpenClawCleanup
@@ -41,26 +10,26 @@ FunctionEnd
   FileOpen $0 "$INSTDIR\resources\openclaw-runtime\.openclaw_install_state" r
   IfErrors SkipOpenClawCleanup
 
-  ; 逐行读取文件，避免只读取第一行导致匹配失败
-  StrCpy $2 ""
+  ; 逐行读取文件，查找 auto_installed 标记
+  StrCpy $2 "0"
 
 ReadInstallStateLoop:
   ClearErrors
   FileRead $0 $1
   IfErrors ReadInstallStateDone
 
-  Push "$1"
-  Push '"auto_installed": true'
-  Call un.StrContains
-  Pop $2
+  ; 匹配 JSON 行前缀:   "auto_installed": true
+  StrCpy $3 $1 24
+  StrCmp $3 "  $\"auto_installed$\": true" 0 ReadInstallStateLoop
+  StrCpy $2 "1"
 
-  StrCmp $2 "" ReadInstallStateLoop
+  Goto ReadInstallStateDone
 
 ReadInstallStateDone:
   FileClose $0
 
   ; 检查是否包含 "auto_installed": true
-  StrCmp $2 "" SkipOpenClawCleanup 0
+  StrCmp $2 "1" 0 SkipOpenClawCleanup
 
   ; 执行清理
   DetailPrint "检测到自动安装的 OpenClaw，正在清理..."
