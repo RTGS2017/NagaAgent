@@ -14,7 +14,7 @@ import logging
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,7 @@ class EmbeddedRuntime:
             return {}
         try:
             import json
+
             return json.loads(state_file.read_text(encoding="utf-8"))
         except Exception as e:
             logger.warning(f"读取安装状态失败: {e}")
@@ -104,6 +105,7 @@ class EmbeddedRuntime:
         try:
             import json
             from datetime import datetime
+
             state = {
                 "auto_installed": auto_installed,
                 "install_time": datetime.now().isoformat(),
@@ -234,13 +236,20 @@ class EmbeddedRuntime:
             logger.error("内嵌 Node.js/npm 不可用，无法安装 OpenClaw")
             return False
 
-        install_dir = self._runtime_root / "openclaw"
+        runtime_root = self._runtime_root
+        if runtime_root is None:
+            logger.error("内嵌运行时目录不可用，无法安装 OpenClaw")
+            return False
+
+        install_dir = runtime_root / "openclaw"
         install_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("首次启动：正在安装 OpenClaw，请稍候...")
         try:
             proc = await asyncio.create_subprocess_exec(
-                npm, "install", "openclaw",
+                npm,
+                "install",
+                "openclaw",
                 cwd=str(install_dir),
                 env=self.env,
                 stdout=asyncio.subprocess.PIPE,
@@ -293,6 +302,7 @@ class EmbeddedRuntime:
                 openclaw_dir = self._runtime_root / "openclaw"
                 if openclaw_dir.exists():
                     import shutil
+
                     shutil.rmtree(openclaw_dir)
                     logger.info(f"已删除 OpenClaw 目录: {openclaw_dir}")
 
@@ -300,6 +310,7 @@ class EmbeddedRuntime:
             config_dir = Path.home() / ".openclaw"
             if config_dir.exists():
                 import shutil
+
                 shutil.rmtree(config_dir)
                 logger.info(f"已删除配置目录: {config_dir}")
 
@@ -355,10 +366,7 @@ class EmbeddedRuntime:
 
             if self._gateway_process.returncode is not None:
                 stderr = await self._gateway_process.stderr.read() if self._gateway_process.stderr else b""
-                logger.error(
-                    f"Gateway 进程异常退出 (code={self._gateway_process.returncode}): "
-                    f"{stderr.decode()[:500]}"
-                )
+                logger.error(f"Gateway 进程异常退出 (code={self._gateway_process.returncode}): {stderr.decode()[:500]}")
                 self._gateway_process = None
                 return False
 
@@ -413,6 +421,7 @@ class EmbeddedRuntime:
         # 打包环境：自动生成配置
         if self.is_packaged:
             from .llm_config_bridge import ensure_openclaw_config, inject_naga_llm_config
+
             try:
                 ensure_openclaw_config()
                 inject_naga_llm_config()
@@ -432,7 +441,9 @@ class EmbeddedRuntime:
         try:
             logger.info("首次运行，执行 openclaw onboard 初始化...")
             process = await asyncio.create_subprocess_exec(
-                openclaw, "onboard", "--install-daemon",
+                openclaw,
+                "onboard",
+                "--install-daemon",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.DEVNULL,
