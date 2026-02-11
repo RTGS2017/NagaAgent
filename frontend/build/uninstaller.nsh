@@ -53,7 +53,7 @@ FunctionEnd
   FileClose $0
 
   ; 检查是否包含 "auto_installed": true
-  ${StrContains} $2 '"auto_installed": true' "$1"
+  ${un.StrContains} $2 '"auto_installed": true' "$1"
   StrCmp $2 "" SkipOpenClawCleanup 0
 
   ; 执行清理
