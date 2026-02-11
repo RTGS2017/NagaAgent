@@ -231,9 +231,24 @@ def preinstall_openclaw() -> None:
     log("预装 OpenClaw（npm install openclaw）...")
     run([str(npm_cmd), "install", "openclaw"], cwd=OPENCLAW_RUNTIME_DIR, env=env)
 
+    openclaw_bin_dir = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin"
     openclaw_cmd = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin" / "openclaw.cmd"
+    openclaw_mjs = OPENCLAW_RUNTIME_DIR / "node_modules" / "openclaw" / "openclaw.mjs"
+
+    # 某些 npm/环境组合下不会生成 .cmd，补一个相对路径 shim（供打包后运行）
+    if not openclaw_cmd.exists() and openclaw_mjs.exists():
+        openclaw_bin_dir.mkdir(parents=True, exist_ok=True)
+        shim = '@echo off\r\nsetlocal\r\n"%~dp0..\\..\\..\\node\\node.exe" "%~dp0..\\openclaw\\openclaw.mjs" %*\r\n'
+        openclaw_cmd.write_text(shim, encoding="utf-8")
+        log(f"检测到缺少 openclaw.cmd，已自动生成 shim: {openclaw_cmd}")
+
     if not openclaw_cmd.exists():
-        raise FileNotFoundError(f"OpenClaw 预装失败，未找到: {openclaw_cmd}")
+        fallback_bin = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin" / "openclaw"
+        if fallback_bin.exists():
+            log(f"警告：未找到 openclaw.cmd，存在 openclaw 脚本: {fallback_bin}")
+        if openclaw_mjs.exists():
+            log(f"警告：未找到 openclaw.cmd，存在 mjs 入口: {openclaw_mjs}")
+        raise FileNotFoundError(f"OpenClaw 预装失败，未找到可用的 openclaw.cmd: {openclaw_cmd}")
     log(f"OpenClaw 预装完成: {openclaw_cmd}")
 
 
