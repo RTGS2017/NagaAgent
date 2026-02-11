@@ -1,6 +1,8 @@
 ; OpenClaw 自动安装清理脚本
 ; 在卸载时检查是否是自动安装的 OpenClaw，如果是则清理相关文件
 
+!include "StrContains.nsh"
+
 !macro customUnInstall
   ; 检查 openclaw-runtime/.openclaw_install_state 文件
   IfFileExists "$INSTDIR\resources\openclaw-runtime\.openclaw_install_state" 0 SkipOpenClawCleanup
