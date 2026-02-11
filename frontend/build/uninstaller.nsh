@@ -1,7 +1,43 @@
 ; OpenClaw 自动安装清理脚本
 ; 在卸载时检查是否是自动安装的 OpenClaw，如果是则清理相关文件
 
-!include "StrContains.nsh"
+; 定义卸载版本的 StrContains 函数
+Var UN_STR_HAYSTACK
+Var UN_STR_NEEDLE
+Var UN_STR_CONTAINS_VAR_1
+Var UN_STR_CONTAINS_VAR_2
+Var UN_STR_CONTAINS_VAR_3
+Var UN_STR_CONTAINS_VAR_4
+Var UN_STR_RETURN_VAR
+
+Function un.StrContains
+  Exch $UN_STR_NEEDLE
+  Exch 1
+  Exch $UN_STR_HAYSTACK
+  StrCpy $UN_STR_RETURN_VAR ""
+  StrCpy $UN_STR_CONTAINS_VAR_1 -1
+  StrLen $UN_STR_CONTAINS_VAR_2 $UN_STR_NEEDLE
+  StrLen $UN_STR_CONTAINS_VAR_4 $UN_STR_HAYSTACK
+  un_loop:
+    IntOp $UN_STR_CONTAINS_VAR_1 $UN_STR_CONTAINS_VAR_1 + 1
+    StrCpy $UN_STR_CONTAINS_VAR_3 $UN_STR_HAYSTACK $UN_STR_CONTAINS_VAR_2 $UN_STR_CONTAINS_VAR_1
+    StrCmp $UN_STR_CONTAINS_VAR_3 $UN_STR_NEEDLE un_found
+    StrCmp $UN_STR_CONTAINS_VAR_1 $UN_STR_CONTAINS_VAR_4 un_done
+    Goto un_loop
+  un_found:
+    StrCpy $UN_STR_RETURN_VAR $UN_STR_NEEDLE
+    Goto un_done
+  un_done:
+   Pop $UN_STR_NEEDLE
+   Exch $UN_STR_RETURN_VAR
+FunctionEnd
+
+!macro un.StrContains OUT NEEDLE HAYSTACK
+  Push `${HAYSTACK}`
+  Push `${NEEDLE}`
+  Call un.StrContains
+  Pop `${OUT}`
+!macroend
 
 !macro customUnInstall
   ; 检查 openclaw-runtime/.openclaw_install_state 文件
