@@ -18,7 +18,10 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['electron'],
+              // Keep native/electron-side deps as runtime externals.
+              // This avoids Rolldown trying to bundle `electron-updater` internals
+              // (e.g. its `lodash.isequal` import), which can fail on some installs.
+              external: ['electron', 'electron-updater', 'lodash.isequal'],
             },
           },
         },
