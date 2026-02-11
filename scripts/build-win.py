@@ -6,16 +6,16 @@ NagaAgent Windows 完整构建脚本
 流程：
   1. 环境检查（Python, Node.js, npm）
   2. 同步 Python 依赖 + build 组（pyinstaller）
-  3. 准备 OpenClaw 运行时（下载 Node.js 便携版）
+  3. 准备 OpenClaw 运行时（下载 Node.js 便携版 + 预装 OpenClaw）
   4. PyInstaller 编译 Python 后端
   5. Electron 前端构建 + 打包
   6. 输出汇总
 
-OpenClaw 本身不再在构建时安装，而是首次启动时通过内嵌 npm 自动安装。
+默认在构建阶段预装 OpenClaw，用户安装后首次启动可直接使用。
 
 用法:
   python scripts/build-win.py            # 完整构建
-  python scripts/build-win.py --skip-openclaw   # 跳过 Node.js 便携版准备
+  python scripts/build-win.py --skip-openclaw   # 跳过 OpenClaw 运行时准备
   python scripts/build-win.py --backend-only    # 仅编译后端
 """
 
@@ -25,6 +25,8 @@ import shutil
 import subprocess
 import argparse
 import time
+import zipfile
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -33,12 +35,19 @@ from typing import Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 BACKEND_DIST_DIR = FRONTEND_DIR / "backend-dist"
+RUNTIME_DIR = BACKEND_DIST_DIR / "openclaw-runtime"
+NODE_RUNTIME_DIR = RUNTIME_DIR / "node"
+OPENCLAW_RUNTIME_DIR = RUNTIME_DIR / "openclaw"
 SPEC_FILE = PROJECT_ROOT / "naga-backend.spec"
-PREPARE_SCRIPT = PROJECT_ROOT / "scripts" / "prepare_openclaw_runtime.py"
 
 # 最低版本要求
 MIN_NODE_MAJOR = 22
 MIN_PYTHON = (3, 11)
+
+# OpenClaw 运行时版本
+NODE_VERSION = "22.13.1"
+NODE_DIST_URL = f"https://nodejs.org/dist/v{NODE_VERSION}/node-v{NODE_VERSION}-win-x64.zip"
+CACHE_DIR = PROJECT_ROOT / ".cache"
 
 
 def log(msg: str) -> None:
@@ -98,6 +107,10 @@ def check_environment() -> bool:
     """检查构建所需的工具是否就绪"""
     ok = True
 
+    if os.name != "nt":
+        log("  当前系统不是 Windows  ✗  (build-win.py 仅支持 Windows 打包)")
+        return False
+
     # Python 版本
     py_ver = sys.version_info[:2]
     if py_ver >= MIN_PYTHON:
@@ -149,17 +162,88 @@ def sync_dependencies() -> None:
 # ============ Step 3: 准备 OpenClaw 运行时 ============
 
 
-def prepare_openclaw() -> None:
-    """调用 prepare_openclaw_runtime.py 下载 Node.js 便携版"""
-    if not PREPARE_SCRIPT.exists():
-        raise FileNotFoundError(f"准备脚本不存在: {PREPARE_SCRIPT}")
-    run([sys.executable, str(PREPARE_SCRIPT)], cwd=PROJECT_ROOT)
-    # 验证产物：只需要 node.exe，openclaw 首次启动时自动安装
-    runtime_dir = BACKEND_DIST_DIR / "openclaw-runtime"
-    node_exe = runtime_dir / "node" / "node.exe"
+def download_node_runtime() -> Path:
+    """下载 Node.js 便携版 zip，返回本地缓存路径"""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    zip_name = f"node-v{NODE_VERSION}-win-x64.zip"
+    zip_path = CACHE_DIR / zip_name
+
+    if zip_path.exists():
+        log(f"使用缓存 Node.js 包: {zip_path}")
+        return zip_path
+
+    log(f"下载 Node.js v{NODE_VERSION}: {NODE_DIST_URL}")
+    urllib.request.urlretrieve(NODE_DIST_URL, str(zip_path))
+    log(f"Node.js 下载完成: {zip_path} ({zip_path.stat().st_size / 1024 / 1024:.1f} MB)")
+    return zip_path
+
+
+def extract_node_runtime(zip_path: Path) -> None:
+    """解压 Node.js 到 openclaw-runtime/node"""
+    if NODE_RUNTIME_DIR.exists():
+        log(f"清理旧 Node.js 运行时: {NODE_RUNTIME_DIR}")
+        shutil.rmtree(NODE_RUNTIME_DIR)
+
+    NODE_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
+    log(f"解压 Node.js 到: {NODE_RUNTIME_DIR}")
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        prefix = f"node-v{NODE_VERSION}-win-x64/"
+        for member in zf.infolist():
+            if not member.filename.startswith(prefix):
+                continue
+            rel = member.filename[len(prefix) :]
+            if not rel:
+                continue
+            target = NODE_RUNTIME_DIR / rel
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member) as src, open(target, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+    node_exe = NODE_RUNTIME_DIR / "node.exe"
+    npm_cmd = NODE_RUNTIME_DIR / "npm.cmd"
     if not node_exe.exists():
-        raise FileNotFoundError(f"Node.js 便携版缺失: {node_exe}")
-    log("Node.js 便携版准备完成（OpenClaw 将在首次启动时自动安装）")
+        raise FileNotFoundError(f"解压后缺少 node.exe: {node_exe}")
+    if not npm_cmd.exists():
+        raise FileNotFoundError(f"解压后缺少 npm.cmd: {npm_cmd}")
+    log("Node.js 便携版解压完成")
+
+
+def preinstall_openclaw() -> None:
+    """在内嵌运行时目录中预装 OpenClaw"""
+    npm_cmd = NODE_RUNTIME_DIR / "npm.cmd"
+    if not npm_cmd.exists():
+        raise FileNotFoundError(f"npm.cmd 不存在: {npm_cmd}")
+
+    if OPENCLAW_RUNTIME_DIR.exists():
+        log(f"清理旧 OpenClaw 运行时: {OPENCLAW_RUNTIME_DIR}")
+        shutil.rmtree(OPENCLAW_RUNTIME_DIR)
+    OPENCLAW_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{NODE_RUNTIME_DIR}{os.pathsep}{env.get('PATH', '')}"
+    env["NPM_CONFIG_AUDIT"] = "false"
+    env["NPM_CONFIG_FUND"] = "false"
+
+    log("预装 OpenClaw（npm install openclaw）...")
+    run([str(npm_cmd), "install", "openclaw"], cwd=OPENCLAW_RUNTIME_DIR, env=env)
+
+    openclaw_cmd = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin" / "openclaw.cmd"
+    if not openclaw_cmd.exists():
+        raise FileNotFoundError(f"OpenClaw 预装失败，未找到: {openclaw_cmd}")
+    log(f"OpenClaw 预装完成: {openclaw_cmd}")
+
+
+def prepare_openclaw_runtime() -> None:
+    """准备 OpenClaw 运行时：Node.js 便携版 + OpenClaw 预装"""
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    zip_path = download_node_runtime()
+    extract_node_runtime(zip_path)
+    preinstall_openclaw()
+    log("OpenClaw 运行时准备完成（已预装，无需首次启动安装）")
 
 
 # ============ Step 4: PyInstaller 编译后端 ============
@@ -264,7 +348,11 @@ def print_summary() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NagaAgent Windows 构建脚本")
-    parser.add_argument("--skip-openclaw", action="store_true", help="跳过 OpenClaw 运行时准备")
+    parser.add_argument(
+        "--skip-openclaw",
+        action="store_true",
+        help="跳过 OpenClaw 运行时准备（Node 便携版 + OpenClaw 预装）",
+    )
     parser.add_argument("--backend-only", action="store_true", help="仅编译后端，不打包 Electron")
     parser.add_argument(
         "--debug",
@@ -303,8 +391,8 @@ def main() -> None:
     # Step 3: OpenClaw 运行时
     if not args.skip_openclaw:
         step += 1
-        log_step(step, total_steps, "准备 OpenClaw 运行时")
-        prepare_openclaw()
+        log_step(step, total_steps, "准备 OpenClaw 运行时（含预装）")
+        prepare_openclaw_runtime()
 
     # Step 4: 编译后端
     step += 1

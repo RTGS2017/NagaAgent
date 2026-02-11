@@ -20,7 +20,7 @@ from system.config import config, add_config_listener
 from system.background_analyzer import get_background_analyzer
 from agentserver.task_scheduler import get_task_scheduler, TaskStep
 from agentserver.openclaw import get_openclaw_client, set_openclaw_config
-from agentserver.openclaw.embedded_runtime import get_embedded_runtime
+from agentserver.openclaw.embedded_runtime import get_embedded_runtime, EmbeddedRuntime
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -59,7 +59,10 @@ async def _auto_install_openclaw() -> bool:
     try:
         logger.info("OpenClaw 未安装，正在执行 npm install -g openclaw，请稍候...")
         proc = await asyncio.create_subprocess_exec(
-            npm, "install", "-g", "openclaw",
+            npm,
+            "install",
+            "-g",
+            "openclaw",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -85,16 +88,22 @@ async def _auto_install_openclaw() -> bool:
         return False
 
 
+def _should_use_embedded_openclaw(runtime: EmbeddedRuntime) -> bool:
+    """是否应优先使用内嵌 OpenClaw（仅打包环境且用户本机未安装）"""
+    return runtime.is_packaged and runtime.openclaw_installed and not runtime.has_global_install
+
+
 def _on_config_changed() -> None:
     """配置变更监听器：自动更新 OpenClaw LLM 配置"""
     try:
         embedded_runtime = get_embedded_runtime()
 
-        # 只在打包环境且自动安装时更新配置
-        if embedded_runtime.is_packaged and embedded_runtime.is_auto_installed:
+        # 仅在使用内嵌 OpenClaw 时更新配置
+        if _should_use_embedded_openclaw(embedded_runtime):
             from agentserver.openclaw.llm_config_bridge import inject_naga_llm_config
+
             inject_naga_llm_config()
-            logger.info("配置变更：已自动更新 OpenClaw LLM 配置")
+            logger.info("配置变更：已更新内嵌 OpenClaw LLM 配置")
     except Exception as e:
         logger.warning(f"配置变更时更新 OpenClaw 配置失败: {e}")
 
@@ -122,23 +131,24 @@ async def lifespan(app: FastAPI):
             embedded_runtime = get_embedded_runtime()
             mode = embedded_runtime.runtime_mode
             logger.info(f"OpenClaw 运行时模式: {mode}")
+            has_global_openclaw: bool = False
+            has_embedded_openclaw: bool = False
 
             # === 打包环境 ===
             if embedded_runtime.is_packaged:
-                global_openclaw = shutil.which("openclaw")
-                if global_openclaw:
+                has_global_openclaw = shutil.which("openclaw") is not None
+                has_embedded_openclaw = embedded_runtime.openclaw_installed
+
+                if has_global_openclaw:
                     logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
                     # 记录使用系统已有（仅首次）
                     state_file = embedded_runtime._get_install_state_file()
                     if state_file and not state_file.exists():
                         embedded_runtime._write_install_state(auto_installed=False)
-                elif embedded_runtime.openclaw_installed:
-                    logger.info("打包环境：使用已安装的内嵌 OpenClaw")
+                elif has_embedded_openclaw:
+                    logger.info("打包环境：未检测到全局 OpenClaw，使用预装内嵌 OpenClaw")
                 else:
-                    logger.info("打包环境：首次启动，正在安装 OpenClaw...")
-                    installed = await embedded_runtime.install_openclaw()
-                    if not installed:
-                        logger.warning("打包环境：OpenClaw 安装失败")
+                    logger.warning("打包环境：未检测到全局 OpenClaw，且内嵌 OpenClaw 不可用")
 
             # === 开发环境 ===
             else:
@@ -149,19 +159,25 @@ async def lifespan(app: FastAPI):
                     installed = await _auto_install_openclaw()
                     if not installed:
                         logger.warning("OpenClaw 不可用：未全局安装，自动安装也失败")
+                has_global_openclaw = shutil.which("openclaw") is not None
 
             # === 统一：无配置文件则自动生成并启动 Gateway ===
-            openclaw_available = (
-                shutil.which("openclaw")
-                or (embedded_runtime.is_packaged and embedded_runtime.openclaw_installed)
-            )
+            openclaw_available = has_global_openclaw or has_embedded_openclaw
             if openclaw_available:
                 ensure_openclaw_config()
-                # 只在自动安装时更新 LLM 配置
-                if embedded_runtime.is_packaged and embedded_runtime.is_auto_installed:
+
+                # 使用预装内嵌 OpenClaw 时，自动注入 Naga LLM 配置
+                if _should_use_embedded_openclaw(embedded_runtime):
                     inject_naga_llm_config()
-                    logger.info("已自动更新 OpenClaw LLM 配置")
-                await _start_gateway_if_port_free(embedded_runtime)
+                    logger.info("已自动注入内嵌 OpenClaw 的 Naga LLM 配置")
+
+                if embedded_runtime.is_packaged:
+                    if _should_use_embedded_openclaw(embedded_runtime):
+                        await _start_gateway_if_port_free(embedded_runtime)
+                    elif has_global_openclaw:
+                        logger.info("打包环境：使用全局 OpenClaw，跳过内嵌 Gateway 启动")
+                else:
+                    await _start_gateway_if_port_free(embedded_runtime)
 
             # 检测最终状态并初始化客户端
             openclaw_status = detect_openclaw(check_connection=False)
@@ -243,7 +259,12 @@ async def _process_openclaw_task(instruction: str, session_id: Optional[str] = N
     """通过 OpenClaw 执行任务"""
     try:
         if not Modules.openclaw_client:
-            return {"success": False, "error": "OpenClaw 客户端未初始化", "task_type": "openclaw", "instruction": instruction}
+            return {
+                "success": False,
+                "error": "OpenClaw 客户端未初始化",
+                "task_type": "openclaw",
+                "instruction": instruction,
+            }
 
         logger.info(f"开始通过 OpenClaw 执行任务: {instruction}")
 
