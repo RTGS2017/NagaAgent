@@ -78,6 +78,47 @@ class EmbeddedRuntime:
             return False
         return self.openclaw_path is not None
 
+    def _get_install_state_file(self) -> Optional[Path]:
+        """获取安装状态缓存文件路径"""
+        if not self._runtime_root:
+            return None
+        return self._runtime_root / ".openclaw_install_state"
+
+    def _read_install_state(self) -> Dict[str, Any]:
+        """读取安装状态"""
+        state_file = self._get_install_state_file()
+        if not state_file or not state_file.exists():
+            return {}
+        try:
+            import json
+            return json.loads(state_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"读取安装状态失败: {e}")
+            return {}
+
+    def _write_install_state(self, auto_installed: bool) -> None:
+        """写入安装状态"""
+        state_file = self._get_install_state_file()
+        if not state_file:
+            return
+        try:
+            import json
+            from datetime import datetime
+            state = {
+                "auto_installed": auto_installed,
+                "install_time": datetime.now().isoformat(),
+            }
+            state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            logger.debug(f"已写入安装状态: auto_installed={auto_installed}")
+        except Exception as e:
+            logger.warning(f"写入安装状态失败: {e}")
+
+    @property
+    def is_auto_installed(self) -> bool:
+        """是否是自动安装的 OpenClaw"""
+        state = self._read_install_state()
+        return state.get("auto_installed", False)
+
     @property
     def has_global_install(self) -> bool:
         """检测 PATH 中是否有全局安装的 openclaw 命令"""
@@ -220,9 +261,60 @@ class EmbeddedRuntime:
         # 验证安装
         if self.openclaw_path:
             logger.info(f"OpenClaw 安装成功: {self.openclaw_path}")
+            self._write_install_state(auto_installed=True)
             return True
         logger.error("npm install 执行成功但 openclaw 未找到")
         return False
+
+    async def uninstall_openclaw(self) -> bool:
+        """
+        卸载 OpenClaw（仅当是自动安装时）
+
+        删除内容：
+        - openclaw-runtime/openclaw/ 目录
+        - ~/.openclaw/ 配置目录
+        - .openclaw_install_state 缓存文件
+
+        Returns:
+            是否执行了卸载
+        """
+        if not self.is_auto_installed:
+            logger.info("OpenClaw 不是自动安装的，跳过卸载")
+            return False
+
+        try:
+            # 1. 停止 Gateway
+            if self._gateway_process:
+                logger.info("停止 Gateway 进程...")
+                await self.stop_gateway()
+
+            # 2. 删除 openclaw 目录
+            if self._runtime_root:
+                openclaw_dir = self._runtime_root / "openclaw"
+                if openclaw_dir.exists():
+                    import shutil
+                    shutil.rmtree(openclaw_dir)
+                    logger.info(f"已删除 OpenClaw 目录: {openclaw_dir}")
+
+            # 3. 删除配置目录
+            config_dir = Path.home() / ".openclaw"
+            if config_dir.exists():
+                import shutil
+                shutil.rmtree(config_dir)
+                logger.info(f"已删除配置目录: {config_dir}")
+
+            # 4. 删除缓存文件
+            state_file = self._get_install_state_file()
+            if state_file and state_file.exists():
+                state_file.unlink()
+                logger.info("已删除安装状态缓存")
+
+            logger.info("OpenClaw 卸载完成")
+            return True
+
+        except Exception as e:
+            logger.error(f"卸载 OpenClaw 失败: {e}")
+            return False
 
     # ============ Gateway 进程管理 ============
 

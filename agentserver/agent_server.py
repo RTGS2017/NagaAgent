@@ -16,7 +16,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 
-from system.config import config
+from system.config import config, add_config_listener
 from system.background_analyzer import get_background_analyzer
 from agentserver.task_scheduler import get_task_scheduler, TaskStep
 from agentserver.openclaw import get_openclaw_client, set_openclaw_config
@@ -85,6 +85,20 @@ async def _auto_install_openclaw() -> bool:
         return False
 
 
+def _on_config_changed() -> None:
+    """配置变更监听器：自动更新 OpenClaw LLM 配置"""
+    try:
+        embedded_runtime = get_embedded_runtime()
+
+        # 只在打包环境且自动安装时更新配置
+        if embedded_runtime.is_packaged and embedded_runtime.is_auto_installed:
+            from agentserver.openclaw.llm_config_bridge import inject_naga_llm_config
+            inject_naga_llm_config()
+            logger.info("配置变更：已自动更新 OpenClaw LLM 配置")
+    except Exception as e:
+        logger.warning(f"配置变更时更新 OpenClaw 配置失败: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI应用生命周期"""
@@ -114,6 +128,10 @@ async def lifespan(app: FastAPI):
                 global_openclaw = shutil.which("openclaw")
                 if global_openclaw:
                     logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
+                    # 记录使用系统已有（仅首次）
+                    state_file = embedded_runtime._get_install_state_file()
+                    if state_file and not state_file.exists():
+                        embedded_runtime._write_install_state(auto_installed=False)
                 elif embedded_runtime.openclaw_installed:
                     logger.info("打包环境：使用已安装的内嵌 OpenClaw")
                 else:
@@ -139,7 +157,10 @@ async def lifespan(app: FastAPI):
             )
             if openclaw_available:
                 ensure_openclaw_config()
-                inject_naga_llm_config()
+                # 只在自动安装时更新 LLM 配置
+                if embedded_runtime.is_packaged and embedded_runtime.is_auto_installed:
+                    inject_naga_llm_config()
+                    logger.info("已自动更新 OpenClaw LLM 配置")
                 await _start_gateway_if_port_free(embedded_runtime)
 
             # 检测最终状态并初始化客户端
@@ -177,6 +198,10 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"OpenClaw客户端初始化失败（可选功能）: {e}")
             Modules.openclaw_client = None
+
+        # 注册配置变更监听器
+        add_config_listener(_on_config_changed)
+        logger.debug("已注册 OpenClaw 配置变更监听器")
 
         logger.info("NagaAgent服务初始化完成")
     except Exception as e:
