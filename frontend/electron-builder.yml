@@ -21,6 +21,8 @@ extraResources:
     to: openclaw-runtime
     filter:
       - '**/*'
+  - from: openclaw.LICENSE
+    to: openclaw-runtime/LICENSE
 
 win:
   target:
