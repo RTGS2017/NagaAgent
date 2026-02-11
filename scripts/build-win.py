@@ -67,6 +67,7 @@ def run(
         cmd,
         cwd=str(cwd) if cwd else None,
         env=env,
+        text=True,
         check=check,
     )
 
@@ -79,7 +80,9 @@ def get_cmd_version(cmd: str, args: list[str] | None = None) -> Optional[str]:
     try:
         result = subprocess.run(
             [resolved, *(args or ["--version"])],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -89,6 +92,7 @@ def get_cmd_version(cmd: str, args: list[str] | None = None) -> Optional[str]:
 
 
 # ============ Step 1: 环境检查 ============
+
 
 def check_environment() -> bool:
     """检查构建所需的工具是否就绪"""
@@ -135,6 +139,7 @@ def check_environment() -> bool:
 
 # ============ Step 2: 同步依赖 ============
 
+
 def sync_dependencies() -> None:
     """uv sync + build 依赖组"""
     run(["uv", "sync", "--group", "build"], cwd=PROJECT_ROOT)
@@ -142,6 +147,7 @@ def sync_dependencies() -> None:
 
 
 # ============ Step 3: 准备 OpenClaw 运行时 ============
+
 
 def prepare_openclaw() -> None:
     """调用 prepare_openclaw_runtime.py 下载 Node.js 便携版"""
@@ -158,6 +164,7 @@ def prepare_openclaw() -> None:
 
 # ============ Step 4: PyInstaller 编译后端 ============
 
+
 def build_backend() -> None:
     """用 PyInstaller 编译 Python 后端"""
     if not SPEC_FILE.exists():
@@ -168,10 +175,16 @@ def build_backend() -> None:
 
     run(
         [
-            "uv", "run", "pyinstaller", str(SPEC_FILE),
-            "--distpath", str(BACKEND_DIST_DIR),
-            "--workpath", str(work_dir),
-            "--clean", "-y",
+            "uv",
+            "run",
+            "pyinstaller",
+            str(SPEC_FILE),
+            "--distpath",
+            str(BACKEND_DIST_DIR),
+            "--workpath",
+            str(work_dir),
+            "--clean",
+            "-y",
         ],
         cwd=PROJECT_ROOT,
     )
@@ -185,8 +198,13 @@ def build_backend() -> None:
 
 # ============ Step 5: Electron 前端构建 + 打包 ============
 
-def build_frontend() -> None:
-    """构建 Vue 前端 + Electron 打包"""
+
+def build_frontend(debug: bool = False) -> None:
+    """构建 Vue 前端 + Electron 打包。
+
+    debug=True 时会注入 electron-builder metadata，
+    让安装后的 Electron 主进程以“调试控制台模式”启动后端。
+    """
     # 安装前端依赖
     node_modules = FRONTEND_DIR / "node_modules"
     if not node_modules.exists():
@@ -194,12 +212,26 @@ def build_frontend() -> None:
         run(["npm", "install"], cwd=FRONTEND_DIR)
 
     # 构建 + 打包（npm run dist:win = vue-tsc + vite build + electron-builder --win）
-    run(["npm", "run", "dist:win"], cwd=FRONTEND_DIR)
+    if debug:
+        log("调试构建模式：已启用后端日志终端（安装后会弹 cmd 实时输出）")
+        run(
+            [
+                "npm",
+                "run",
+                "dist:win",
+                "--",
+                "-c.extraMetadata.nagaDebugConsole=true",
+            ],
+            cwd=FRONTEND_DIR,
+        )
+    else:
+        run(["npm", "run", "dist:win"], cwd=FRONTEND_DIR)
 
     log("Electron 打包完成")
 
 
 # ============ Step 6: 汇总 ============
+
 
 def print_summary() -> None:
     """打印构建产物信息"""
@@ -229,10 +261,16 @@ def print_summary() -> None:
 
 # ============ 主入口 ============
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NagaAgent Windows 构建脚本")
     parser.add_argument("--skip-openclaw", action="store_true", help="跳过 OpenClaw 运行时准备")
     parser.add_argument("--backend-only", action="store_true", help="仅编译后端，不打包 Electron")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="调试打包：安装后启动时弹出后端日志终端（仅 Windows 生效）",
+    )
     return parser.parse_args()
 
 
@@ -276,8 +314,9 @@ def main() -> None:
     # Step 5: 前端打包
     if not args.backend_only:
         step += 1
-        log_step(step, total_steps, "Electron 前端打包")
-        build_frontend()
+        title = "Electron 前端打包（DEBUG）" if args.debug else "Electron 前端打包"
+        log_step(step, total_steps, title)
+        build_frontend(debug=args.debug)
 
     # 汇总
     print_summary()
