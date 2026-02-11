@@ -141,12 +141,15 @@ async def lifespan(app: FastAPI):
 
                 if has_global_openclaw:
                     logger.info("打包环境：检测到全局安装的 OpenClaw，优先使用")
-                    # 记录使用系统已有（仅首次）
+                    # 记录使用系统已有，避免卸载时误清理用户目录
                     state_file = embedded_runtime._get_install_state_file()
-                    if state_file and not state_file.exists():
+                    if state_file and (not state_file.exists() or embedded_runtime.is_auto_installed):
                         embedded_runtime._write_install_state(auto_installed=False)
                 elif has_embedded_openclaw:
                     logger.info("打包环境：未检测到全局 OpenClaw，使用预装内嵌 OpenClaw")
+                    # 记录为自动安装，保证卸载时可清理内嵌运行时相关目录
+                    if not embedded_runtime.is_auto_installed:
+                        embedded_runtime._write_install_state(auto_installed=True)
                 else:
                     logger.warning("打包环境：未检测到全局 OpenClaw，且内嵌 OpenClaw 不可用")
 

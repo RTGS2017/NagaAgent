@@ -10,6 +10,11 @@ Windows 安装包在构建阶段会预装 OpenClaw，用户安装后首次启动
 2. 如果用户本机未安装全局 `openclaw`，自动使用安装包内置的预装 OpenClaw。
 3. 使用内置 OpenClaw 时，会自动生成 `~/.openclaw/openclaw.json` 并注入 Naga LLM 配置。
 
+卸载行为：
+
+- 若运行时判定使用的是内嵌 OpenClaw，会写入安装状态，卸载程序会清理 `~/.openclaw`。
+- 若运行时使用的是用户全局 OpenClaw，不会触发该清理逻辑。
+
 ## 一键构建（推荐）
 
 在 Windows 环境执行：
