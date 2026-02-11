@@ -205,6 +205,7 @@ export const DEFAULT_CONFIG = {
 export const SYSTEM_PROMPT = ref('')
 
 let promptWatchStop: (() => void) | null = null
+const CONFIG_SYNC_DELAY_MS = 400
 
 function loadSystemPrompt() {
   API.getSystemPrompt().then((res) => {
@@ -245,6 +246,21 @@ function deepMerge<T extends Record<string, any>>(target: T, source: Record<stri
 }
 
 let configWatchStop: (() => void) | null = null
+let configSyncTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleConfigSync(config: Config) {
+  if (configSyncTimer) {
+    clearTimeout(configSyncTimer)
+  }
+
+  // 避免在防抖窗口内被后续响应对象引用污染
+  const payload: Config = JSON.parse(JSON.stringify(config))
+  configSyncTimer = setTimeout(() => {
+    API.setSystemConfig(payload).catch(() => {
+      // 后端暂不可用时忽略，连接逻辑会自动重试
+    })
+  }, CONFIG_SYNC_DELAY_MS)
+}
 
 function connectBackend() {
   API.systemConfig().then((res) => {
@@ -253,9 +269,12 @@ function connectBackend() {
     loadSystemPrompt()
     // Only set up sync watch once connected
     if (!configWatchStop) {
-      configWatchStop = watch(CONFIG, (config) => {
-        API.setSystemConfig(config)
-      })
+      configWatchStop = watch(CONFIG, (nextConfig) => {
+        if (!backendConnected.value) {
+          return
+        }
+        scheduleConfigSync(nextConfig)
+      }, { deep: true })
     }
   }).catch(() => {
     if (!backendConnected.value) {

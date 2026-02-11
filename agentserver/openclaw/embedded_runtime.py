@@ -12,6 +12,7 @@ import shutil
 import asyncio
 import logging
 import platform
+import socket
 import subprocess
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -297,6 +298,14 @@ class EmbeddedRuntime:
                 logger.info("停止 Gateway 进程...")
                 await self.stop_gateway()
 
+            # 1.1 停止可能由其他会话/进程启动的 Gateway
+            if self.has_gateway_process() or self.is_gateway_port_in_use():
+                logger.info("检测到 Gateway 仍在运行，尝试执行 openclaw gateway stop...")
+                await self._stop_gateway_via_cli()
+                await asyncio.sleep(1)
+                if self.has_gateway_process() or self.is_gateway_port_in_use():
+                    logger.warning("Gateway 可能仍在运行，将继续执行清理")
+
             # 2. 删除 openclaw 目录
             if self._runtime_root:
                 openclaw_dir = self._runtime_root / "openclaw"
@@ -328,6 +337,89 @@ class EmbeddedRuntime:
             return False
 
     # ============ Gateway 进程管理 ============
+
+    async def _stop_gateway_via_cli(self, max_retries: int = 3, retry_interval_seconds: float = 1.0) -> bool:
+        """通过 openclaw CLI 停止 Gateway（用于兜底，支持重试）。"""
+        openclaw: Optional[str] = self.openclaw_path
+        if not openclaw:
+            logger.warning("找不到 openclaw 可执行文件，无法执行 gateway stop")
+            return False
+
+        attempts: int = max(1, max_retries)
+        for attempt in range(1, attempts + 1):
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    openclaw,
+                    "gateway",
+                    "stop",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=self.env,
+                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=20)
+
+                if process.returncode == 0:
+                    logger.info(f"已通过 openclaw gateway stop 停止 Gateway（第 {attempt} 次）")
+                    return True
+
+                err_text = stderr.decode(errors="ignore") if stderr else ""
+                out_text = stdout.decode(errors="ignore") if stdout else ""
+                logger.warning(
+                    f"openclaw gateway stop 返回非0({process.returncode})，"
+                    f"第 {attempt}/{attempts} 次，stdout={out_text[:200]} stderr={err_text[:200]}"
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"openclaw gateway stop 执行超时（第 {attempt}/{attempts} 次）")
+            except Exception as e:
+                logger.warning(f"执行 openclaw gateway stop 失败（第 {attempt}/{attempts} 次）: {e}")
+
+            if attempt < attempts:
+                await asyncio.sleep(max(0.0, retry_interval_seconds))
+
+        return False
+
+    def has_gateway_process(self) -> bool:
+        """检测系统中是否存在 OpenClaw Gateway 相关进程。"""
+        try:
+            import psutil
+        except Exception as e:
+            logger.debug(f"psutil 不可用，跳过 Gateway 进程检测: {e}")
+            return False
+
+        current_pid: int = os.getpid()
+        for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
+            try:
+                pid: int = int(proc.info.get("pid") or 0)
+                if pid == current_pid:
+                    continue
+
+                name: str = str(proc.info.get("name") or "").lower()
+                raw_cmdline = proc.info.get("cmdline") or []
+                if isinstance(raw_cmdline, list):
+                    cmdline_text = " ".join(str(item) for item in raw_cmdline).lower()
+                else:
+                    cmdline_text = str(raw_cmdline).lower()
+
+                # openclaw gateway / node ... openclaw ... gateway
+                if "openclaw" in cmdline_text and "gateway" in cmdline_text:
+                    return True
+                if name.startswith("openclaw") and "gateway" in cmdline_text:
+                    return True
+                if name.startswith("node") and "openclaw" in cmdline_text and "gateway" in cmdline_text:
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+    def is_gateway_port_in_use(self, host: str = "127.0.0.1", port: int = 18789) -> bool:
+        """检测 Gateway 默认端口是否被占用。"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                return sock.connect_ex((host, port)) == 0
+        except Exception:
+            return False
 
     def _build_gateway_cmd(self) -> Optional[List[str]]:
         """构建启动 Gateway 的命令列表"""

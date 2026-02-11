@@ -8,7 +8,6 @@ NagaAgent独立服务 - 通过OpenClaw执行任务
 import asyncio
 import uuid
 import shutil
-import socket
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -26,18 +25,17 @@ from agentserver.openclaw.embedded_runtime import get_embedded_runtime, Embedded
 logger = logging.getLogger(__name__)
 
 
-async def _start_gateway_if_port_free(runtime) -> bool:
-    """检测端口是否被占用，未占用则启动 Gateway"""
-    port_in_use = False
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        port_in_use = sock.connect_ex(("127.0.0.1", 18789)) == 0
-        sock.close()
-    except Exception:
-        pass
+async def _start_gateway_if_port_free(runtime: EmbeddedRuntime) -> bool:
+    """有相关进程或端口占用则跳过，否则启动 Gateway。"""
+    if runtime.gateway_running:
+        logger.info("当前进程中的 OpenClaw Gateway 已在运行，跳过启动")
+        return False
 
-    if port_in_use:
+    if runtime.has_gateway_process():
+        logger.info("检测到已有 OpenClaw Gateway 相关进程，跳过启动")
+        return False
+
+    if runtime.is_gateway_port_in_use():
         logger.info("端口 18789 已被占用，跳过 Gateway 启动")
         return False
 
