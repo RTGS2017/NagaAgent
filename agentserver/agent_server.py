@@ -164,18 +164,21 @@ async def lifespan(app: FastAPI):
                         logger.warning("OpenClaw 不可用：未全局安装，自动安装也失败")
                 has_global_openclaw = shutil.which("openclaw") is not None
 
-            # === 统一：无配置文件则自动生成并启动 Gateway ===
+            # === 统一：按运行时来源处理配置与 Gateway ===
             openclaw_available = has_global_openclaw or has_embedded_openclaw
             if openclaw_available:
-                ensure_openclaw_config()
+                use_embedded_openclaw = _should_use_embedded_openclaw(embedded_runtime)
 
-                # 使用预装内嵌 OpenClaw 时，自动注入 Naga LLM 配置
-                if _should_use_embedded_openclaw(embedded_runtime):
+                # 仅在内嵌 OpenClaw 场景下自动写 ~/.openclaw 配置并注入 Naga LLM 配置
+                if use_embedded_openclaw:
+                    ensure_openclaw_config()
                     inject_naga_llm_config()
                     logger.info("已自动注入内嵌 OpenClaw 的 Naga LLM 配置")
+                elif has_global_openclaw:
+                    logger.info("检测到全局 OpenClaw：跳过 ~/.openclaw 自动写入")
 
                 if embedded_runtime.is_packaged:
-                    if _should_use_embedded_openclaw(embedded_runtime):
+                    if use_embedded_openclaw:
                         await _start_gateway_if_port_free(embedded_runtime)
                     elif has_global_openclaw:
                         logger.info("打包环境：使用全局 OpenClaw，跳过内嵌 Gateway 启动")
