@@ -227,9 +227,23 @@ def preinstall_openclaw() -> None:
     env["PATH"] = f"{NODE_RUNTIME_DIR}{os.pathsep}{env.get('PATH', '')}"
     env["NPM_CONFIG_AUDIT"] = "false"
     env["NPM_CONFIG_FUND"] = "false"
+    # 强制 project 本地安装，避免用户 npmrc 中 global=true/prefix 干扰
+    env["NPM_CONFIG_GLOBAL"] = "false"
 
     log("预装 OpenClaw（npm install openclaw）...")
-    run([str(npm_cmd), "install", "openclaw"], cwd=OPENCLAW_RUNTIME_DIR, env=env)
+    run(
+        [
+            str(npm_cmd),
+            "install",
+            "openclaw",
+            "--global=false",
+            "--location=project",
+            "--prefix",
+            str(OPENCLAW_RUNTIME_DIR),
+        ],
+        cwd=OPENCLAW_RUNTIME_DIR,
+        env=env,
+    )
 
     openclaw_bin_dir = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin"
     openclaw_cmd = OPENCLAW_RUNTIME_DIR / "node_modules" / ".bin" / "openclaw.cmd"
@@ -248,6 +262,15 @@ def preinstall_openclaw() -> None:
             log(f"警告：未找到 openclaw.cmd，存在 openclaw 脚本: {fallback_bin}")
         if openclaw_mjs.exists():
             log(f"警告：未找到 openclaw.cmd，存在 mjs 入口: {openclaw_mjs}")
+        node_modules_dir = OPENCLAW_RUNTIME_DIR / "node_modules"
+        pkg_json = OPENCLAW_RUNTIME_DIR / "package.json"
+        lock_file = OPENCLAW_RUNTIME_DIR / "package-lock.json"
+        log(f"诊断：package.json exists={pkg_json.exists()} path={pkg_json}")
+        log(f"诊断：package-lock.json exists={lock_file.exists()} path={lock_file}")
+        log(f"诊断：node_modules exists={node_modules_dir.exists()} path={node_modules_dir}")
+        if node_modules_dir.exists():
+            top_level = [p.name for p in node_modules_dir.iterdir()][:20]
+            log(f"诊断：node_modules 顶层(前20)={top_level}")
         raise FileNotFoundError(f"OpenClaw 预装失败，未找到可用的 openclaw.cmd: {openclaw_cmd}")
     log(f"OpenClaw 预装完成: {openclaw_cmd}")
 
