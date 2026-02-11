@@ -32,13 +32,6 @@ Function un.StrContains
    Exch $UN_STR_RETURN_VAR
 FunctionEnd
 
-!macro un.StrContains OUT NEEDLE HAYSTACK
-  Push `${HAYSTACK}`
-  Push `${NEEDLE}`
-  Call un.StrContains
-  Pop `${OUT}`
-!macroend
-
 !macro customUnInstall
   ; 检查 openclaw-runtime/.openclaw_install_state 文件
   IfFileExists "$INSTDIR\resources\openclaw-runtime\.openclaw_install_state" 0 SkipOpenClawCleanup
@@ -48,12 +41,25 @@ FunctionEnd
   FileOpen $0 "$INSTDIR\resources\openclaw-runtime\.openclaw_install_state" r
   IfErrors SkipOpenClawCleanup
 
-  ; 读取文件内容到 $1
+  ; 逐行读取文件，避免只读取第一行导致匹配失败
+  StrCpy $2 ""
+
+ReadInstallStateLoop:
+  ClearErrors
   FileRead $0 $1
+  IfErrors ReadInstallStateDone
+
+  Push "$1"
+  Push '"auto_installed": true'
+  Call un.StrContains
+  Pop $2
+
+  StrCmp $2 "" ReadInstallStateLoop
+
+ReadInstallStateDone:
   FileClose $0
 
   ; 检查是否包含 "auto_installed": true
-  ${un.StrContains} $2 '"auto_installed": true' "$1"
   StrCmp $2 "" SkipOpenClawCleanup 0
 
   ; 执行清理
