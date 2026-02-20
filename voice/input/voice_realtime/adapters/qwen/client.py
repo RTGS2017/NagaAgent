@@ -9,6 +9,8 @@
 import base64
 import time
 import logging
+import threading
+import websocket
 from typing import Optional, Callable, Dict, Any
 from dashscope.audio.qwen_omni import (
     OmniRealtimeConversation,
@@ -27,6 +29,61 @@ logging.basicConfig(
     format='[%(asctime)s] %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class PatchedOmniRealtimeConversation(OmniRealtimeConversation):
+    """
+    Subclass of OmniRealtimeConversation to override the connect method
+    with a customizable timeout, avoiding direct modification of site-packages.
+    """
+    def _cleanup_connection_resources(self, join_timeout: float = 1.0) -> None:
+        """
+        Best-effort teardown for timeout/failed connect path.
+        """
+        ws = getattr(self, "ws", None)
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception as exc:
+                logger.warning(f"failed to close websocket during timeout cleanup: {exc}")
+
+        thread = getattr(self, "thread", None)
+        if thread is not None and thread.is_alive():
+            try:
+                thread.join(timeout=join_timeout)
+            except Exception as exc:
+                logger.warning(f"failed to join websocket thread during timeout cleanup: {exc}")
+
+        self.ws = None
+        self.thread = None
+
+    def connect(self, timeout: int = 15) -> None:
+        """
+        connect to server, create session and return default session configuration
+        """
+        self.ws = websocket.WebSocketApp(
+            self.url,
+            header=self._get_websocket_header(),
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+        )
+        self.thread = threading.Thread(target=self.ws.run_forever)
+        self.thread.daemon = True
+        self.thread.start()
+        start_time = time.time()
+        while (
+            not (self.ws.sock and self.ws.sock.connected)
+            and (time.time() - start_time) < timeout
+        ):
+            time.sleep(0.1)  # 短暂休眠，避免密集轮询
+        if not (self.ws.sock and self.ws.sock.connected):
+            self._cleanup_connection_resources()
+            raise TimeoutError(
+                f"websocket connection could not established within {timeout}s. "
+                "Please check your network connection, firewall settings, or server status."
+            )
+        self.callback.on_open()
 
 
 class QwenVoiceClientRefactored:
@@ -547,14 +604,14 @@ class QwenVoiceClientRefactored:
         callback = CallbackWrapper(self)
 
         # 创建会话
-        self.conversation = OmniRealtimeConversation(
+        self.conversation = PatchedOmniRealtimeConversation(
             model=self.model,
             callback=callback,
             url="wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
         )
 
         # 连接
-        self.conversation.connect()
+        self.conversation.connect(timeout=15)
 
         # 获取系统提示词（如果启用）
         instructions = None
