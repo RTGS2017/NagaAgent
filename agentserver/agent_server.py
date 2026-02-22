@@ -140,6 +140,7 @@ async def lifespan(app: FastAPI):
                 inject_naga_llm_config,
                 ensure_hooks_allow_request_session_key,
                 ensure_gateway_local_mode,
+                ensure_hooks_path,
             )
 
             embedded_runtime = get_embedded_runtime()
@@ -208,6 +209,8 @@ async def lifespan(app: FastAPI):
                     ensure_gateway_local_mode(auto_create=False)
                 # 兼容 OpenClaw 2026.2.17+：确保 hooks 允许外部 sessionKey
                 ensure_hooks_allow_request_session_key(auto_create=False)
+                # 确保 hooks.path 显式设置，避免 Gateway 不注册 hooks 路由（405）
+                ensure_hooks_path(auto_create=False)
 
                 # 仅在内嵌 OpenClaw 场景下自动写 ~/.openclaw 配置并注入 Naga LLM 配置
                 if use_embedded_openclaw:

@@ -558,10 +558,12 @@ class EmbeddedRuntime:
                 from .llm_config_bridge import (
                     ensure_hooks_allow_request_session_key,
                     ensure_gateway_local_mode,
+                    ensure_hooks_path,
                 )
 
                 ensure_hooks_allow_request_session_key(auto_create=False)
                 ensure_gateway_local_mode(auto_create=False)
+                ensure_hooks_path(auto_create=False)
             except Exception as e:
                 logger.warning(f"配置兼容补丁执行失败（可忽略）: {e}")
             self._onboarded = True
