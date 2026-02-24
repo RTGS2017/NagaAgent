@@ -39,10 +39,14 @@ export function useParallax(opts: ParallaxOptions = {}) {
 
   const transform = computed(() => {
     const parts: string[] = []
-    if (perspective) parts.push(`perspective(${perspective}px)`)
-    if (rotateX) parts.push(`rotateX(${rx.value}deg)`)
-    if (rotateY) parts.push(`rotateY(${ry.value}deg)`)
-    if (translateX || translateY) parts.push(`translate(${tx.value}px, ${ty.value}px)`)
+    if (perspective)
+      parts.push(`perspective(${perspective}px)`)
+    if (rotateX)
+      parts.push(`rotateX(${rx.value}deg)`)
+    if (rotateY)
+      parts.push(`rotateY(${ry.value}deg)`)
+    if (translateX || translateY)
+      parts.push(`translate(${tx.value}px, ${ty.value}px)`)
     return parts.join(' ')
   })
 

@@ -1,6 +1,6 @@
 [project]
 name = "nagaagent"
-version = "5.0.0"
+version = "5.1.0"
 description = "NagaAgent 5.0 - 智能对话助手，支持多MCP服务、流式语音交互、GRAG知识图谱记忆系统、RESTful API接口、控制台托盘功能"
 authors = [
     {name = "柏斯阔落", email = "1781393885@qq.com"},

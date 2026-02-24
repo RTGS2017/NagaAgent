@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { Button, Checkbox, InputText } from 'primevue'
 import { useStorage } from '@vueuse/core'
+import { Button, Checkbox, InputText } from 'primevue'
 import { useToast } from 'primevue/usetoast'
 import { ref, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { backendConnected } from '@/utils/config'
 import UserAgreement from './UserAgreement.vue'
 
-const toast = useToast()
-
 const props = defineProps<{ visible: boolean }>()
+
 const emit = defineEmits<{ success: [], skip: [] }>()
+
+const toast = useToast()
 
 const { login, register, sendVerification, getCaptcha } = useAuth()
 

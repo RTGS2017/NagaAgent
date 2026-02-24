@@ -5,8 +5,10 @@ NagaBusiness 认证模块
 refresh_token 由后端全权管理，前端仅持有 access_token
 """
 
+import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +30,9 @@ _TOKEN_FILE = Path(__file__).parent.parent / "logs" / ".auth_session"
 _access_token: Optional[str] = None
 _refresh_token: Optional[str] = None
 _user_info: Optional[dict] = None
+_refresh_lock = asyncio.Lock()
+_last_refresh_at: float = 0.0          # 上次 refresh 成功的 monotonic 时间戳
+_REFRESH_GRACE_PERIOD: float = 10.0    # 刷新后的保护窗口（秒），防止旧 token 覆盖
 
 
 # ── refresh_token 持久化 ─────────────────────────
@@ -158,30 +163,33 @@ async def refresh(refresh_token_override: Optional[str] = None) -> dict:
     """使用 refresh_token 刷新 access_token
     优先使用传入的 token，否则使用后端持久化的 token
     采用兼容模式：在 body 中传 refresh_token（非浏览器客户端）
+    使用 asyncio.Lock 防止并发刷新导致 token 轮换冲突
     """
-    global _access_token, _refresh_token
-    token = refresh_token_override or _refresh_token
-    source = "override" if refresh_token_override else ("file" if _refresh_token else "none")
-    if not token:
-        logger.error(f"refresh 失败: 无可用 refresh_token (stored={_refresh_token is not None}, file={_TOKEN_FILE.exists()})")
-        raise ValueError("无可用的 refresh_token，请重新登录")
+    global _access_token, _refresh_token, _last_refresh_at
+    async with _refresh_lock:
+        token = refresh_token_override or _refresh_token
+        source = "override" if refresh_token_override else ("file" if _refresh_token else "none")
+        if not token:
+            logger.error(f"refresh 失败: 无可用 refresh_token (stored={_refresh_token is not None}, file={_TOKEN_FILE.exists()})")
+            raise ValueError("无可用的 refresh_token，请重新登录")
 
-    logger.info(f"尝试刷新 token (source={source}, token_prefix={token[:20]}...)")
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(f"{BUSINESS_URL}/api/auth/refresh", json={"refresh_token": token})
-        resp.raise_for_status()
-        data = resp.json()
+        logger.info(f"尝试刷新 token (source={source}, token_prefix={token[:20]}...)")
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(f"{BUSINESS_URL}/api/auth/refresh", json={"refresh_token": token})
+            resp.raise_for_status()
+            data = resp.json()
 
-    _access_token = data.get("access_token") or data.get("accessToken")
-    logger.info(f"token 刷新成功, new_access_token_prefix={_access_token[:20] if _access_token else 'None'}...")
+        _access_token = data.get("access_token") or data.get("accessToken")
+        _last_refresh_at = time.monotonic()
+        logger.info(f"token 刷新成功, new_access_token_prefix={_access_token[:20] if _access_token else 'None'}...")
 
-    # 提取新的 refresh_token（Token 轮换：旧 token 立即作废）
-    new_rt = _extract_refresh_token(resp)
-    if new_rt:
-        _refresh_token = new_rt
-        _save_refresh_token()
+        # 提取新的 refresh_token（Token 轮换：旧 token 立即作废）
+        new_rt = _extract_refresh_token(resp)
+        if new_rt:
+            _refresh_token = new_rt
+            _save_refresh_token()
 
-    return {"access_token": _access_token}
+        return {"access_token": _access_token}
 
 
 def logout():
@@ -202,10 +210,18 @@ def has_refresh_token() -> bool:
 
 
 def restore_token(token: str):
-    """从前端传入的 token 同步到服务端认证状态（每次请求都同步，确保使用最新 token）"""
+    """从前端传入的 token 同步到服务端认证状态
+    刷新保护窗口内跳过同步，防止前端旧轮询请求覆盖后端刚刷新的新 token
+    """
     global _access_token
-    if token:
-        _access_token = token
+    if not token:
+        return
+    # 刷新保护窗口：刚刷新完的 token 不能被前端旧请求覆盖
+    if _last_refresh_at and (time.monotonic() - _last_refresh_at < _REFRESH_GRACE_PERIOD):
+        if token != _access_token:
+            logger.debug("restore_token 跳过：处于刷新保护窗口内，忽略旧 token")
+            return
+    _access_token = token
 
 
 def get_access_token() -> Optional[str]:

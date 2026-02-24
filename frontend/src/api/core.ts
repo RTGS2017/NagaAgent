@@ -103,6 +103,19 @@ export class CoreApiClient extends ApiClient {
     return this.instance.post('/system/prompt', { content })
   }
 
+  getActiveCharacter(): Promise<{
+    status: 'success'
+    character: {
+      name: string
+      aiName: string
+      userName: string
+      live2dModelUrl: string
+      promptFile: string
+    }
+  }> {
+    return this.instance.get('/system/character')
+  }
+
   chat(message: string, options?: {
     sessionId?: string
     useSelfGame?: boolean
@@ -303,7 +316,9 @@ export class CoreApiClient extends ApiClient {
       config?: Record<string, any>
     }>
   }> {
-    return this.instance.get('/mcp/services')
+    return this.instance.get('/mcp/services', {
+      params: { _t: Date.now() },
+    })
   }
 
   importMcpConfig(name: string, config: Record<string, any>): Promise<{

@@ -2,9 +2,9 @@ import { computed, ref, watch } from 'vue'
 import { ACCESS_TOKEN } from '@/api'
 import { getAffinity, getCredits } from '@/api/business'
 import coreApi from '@/api/core'
-import { CONFIG, backendConnected } from '@/utils/config'
+import { backendConnected, CONFIG } from '@/utils/config'
 
-export const nagaUser = ref<{ username: string, sub?: string, points?: number, affinity?: number } | null>(null)
+export const nagaUser = ref<{ username: string, sub?: string, points?: number, affinity?: number, affinityLevel?: number } | null>(null)
 export const isNagaLoggedIn = computed(() => !!nagaUser.value)
 export const sessionRestored = ref(false)
 
@@ -29,18 +29,24 @@ function syncGameEnabled(loggedIn: boolean) {
 }
 
 /**
- * 拉取积分 + 好感度，更新 nagaUser
+ * 拉取积分 + 熟悉度，更新 nagaUser
  */
 async function fetchUserStats() {
-  if (!ACCESS_TOKEN.value || !nagaUser.value) return
+  if (!ACCESS_TOKEN.value || !nagaUser.value)
+    return
   try {
     const [credits, affinity] = await Promise.all([
       getCredits().catch(() => null),
       getAffinity().catch(() => null),
     ])
-    if (!nagaUser.value) return
-    if (credits) nagaUser.value.points = credits.available
-    if (affinity) nagaUser.value.affinity = affinity.totalExp
+    if (!nagaUser.value)
+      return
+    if (credits)
+      nagaUser.value.points = Number.parseFloat(credits.creditsAvailable) || 0
+    if (affinity) {
+      nagaUser.value.affinity = Number.parseFloat(affinity.affinityPoints) || 0
+      nagaUser.value.affinityLevel = affinity.level ?? 0
+    }
   }
   catch { /* 静默失败，不影响主流程 */ }
 }

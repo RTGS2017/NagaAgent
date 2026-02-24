@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import re
+import time as _time
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from system.config import get_config, get_server_port
@@ -178,7 +179,10 @@ async def _execute_mcp_call(call: Dict[str, Any]) -> Dict[str, Any]:
         from mcpserver.mcp_manager import get_mcp_manager
 
         manager = get_mcp_manager()
+        t0 = _time.monotonic()
         result = await manager.unified_call(service_name, call)
+        elapsed = _time.monotonic() - t0
+        logger.info(f"[AgenticLoop] MCP调用完成: {service_name}/{tool_name} 耗时 {elapsed:.2f}s")
         return {
             "tool_call": call,
             "result": result,
@@ -412,8 +416,10 @@ async def run_agentic_loop(
 
     consecutive_failures = 0  # 连续全部失败的轮次计数
     needs_summary = False  # 是否需要进行最终总结轮
+    t_loop_start = _time.monotonic()
 
     for round_num in range(1, max_rounds + 1):
+        t_round_start = _time.monotonic()
         # 0. 上下文压缩：每轮开始前检查 token 是否超限
         #    round 1 压缩历史对话，round 2+ 压缩上一轮工具结果膨胀的上下文
         try:
@@ -433,6 +439,7 @@ async def run_agentic_loop(
         # 2. 流式调用LLM，累积完整输出
         complete_text = ""
         complete_reasoning = ""
+        t_llm_start = _time.monotonic()
 
         async for chunk in llm_service.stream_chat_with_context(messages, get_config().api.temperature,
                                                                  model_override=model_override):
@@ -455,6 +462,11 @@ async def run_agentic_loop(
             yield chunk
 
         # 3. 从完整输出中解析工具调用
+        t_llm_elapsed = _time.monotonic() - t_llm_start
+        logger.info(
+            f"[AgenticLoop] Round {round_num} LLM流式输出完成: {t_llm_elapsed:.2f}s, "
+            f"content={len(complete_text)}字, reasoning={len(complete_reasoning)}字"
+        )
         logger.debug(
             f"[AgenticLoop] Round {round_num} complete_text ({len(complete_text)} chars): {complete_text[:300]!r}"
         )
@@ -475,7 +487,10 @@ async def run_agentic_loop(
 
         # 5. 如果没有可执行的工具调用，循环结束
         if not actionable_calls:
-            logger.info(f"[AgenticLoop] Round {round_num}: 无工具调用，循环结束")
+            t_round_elapsed = _time.monotonic() - t_round_start
+            t_total_elapsed = _time.monotonic() - t_loop_start
+            logger.info(f"[AgenticLoop] Round {round_num}: 无工具调用，循环结束 "
+                        f"(本轮 {t_round_elapsed:.2f}s, 总计 {t_total_elapsed:.2f}s)")
             # 发送本轮结束信号
             yield _format_sse_event("round_end", {"round": round_num, "has_more": False})
             break
@@ -496,7 +511,11 @@ async def run_agentic_loop(
         yield _format_sse_event("tool_calls", {"calls": call_descriptions})
 
         # 7. 并行执行工具调用
+        t_tool_start = _time.monotonic()
         results = await execute_tool_calls(actionable_calls, session_id)
+        t_tool_elapsed = _time.monotonic() - t_tool_start
+        logger.info(f"[AgenticLoop] Round {round_num}: 工具执行完成 {t_tool_elapsed:.2f}s "
+                    f"({len(results)} 个工具)")
 
         # 7a. 检测连续失败：本轮所有工具是否全部失败
         all_failed = all(r.get("status") == "error" for r in results)
@@ -539,7 +558,11 @@ async def run_agentic_loop(
         # 发送本轮结束信号
         yield _format_sse_event("round_end", {"round": round_num, "has_more": True})
 
-        logger.info(f"[AgenticLoop] Round {round_num}: 工具结果已注入，继续下一轮")
+        t_round_elapsed = _time.monotonic() - t_round_start
+        t_total_elapsed = _time.monotonic() - t_loop_start
+        logger.info(f"[AgenticLoop] Round {round_num}: 本轮完成 {t_round_elapsed:.2f}s "
+                    f"(LLM={t_llm_elapsed:.2f}s + 工具={t_tool_elapsed:.2f}s), "
+                    f"总计 {t_total_elapsed:.2f}s，继续下一轮")
 
     else:
         # max_rounds 用尽

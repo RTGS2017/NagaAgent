@@ -116,8 +116,8 @@ npm run dist:win
 
 ```
 frontend/release/
-  Naga Agent Setup 5.0.0.exe    # NSIS 安装包
-  Naga Agent Setup 5.0.0.exe.blockmap
+  Naga Agent Setup 5.1.0.exe    # NSIS 安装包
+  Naga Agent Setup 5.1.0.exe.blockmap
 ```
 
 ## 产物结构

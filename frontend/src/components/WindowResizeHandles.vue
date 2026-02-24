@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -17,7 +17,8 @@ const startY = ref(0)
 const startBounds = ref<{ x: number, y: number, width: number, height: number } | null>(null)
 
 async function getBounds() {
-  if (!window.electronAPI?.getBounds) return null
+  if (!window.electronAPI?.getBounds)
+    return null
   return await window.electronAPI.getBounds()
 }
 
@@ -26,11 +27,13 @@ function setBounds(bounds: { x?: number, y?: number, width?: number, height?: nu
 }
 
 async function onResizeStart(edge: ResizeEdge, e: MouseEvent) {
-  if (!edge || !window.electronAPI || resizing.value) return
+  if (!edge || !window.electronAPI || resizing.value)
+    return
   e.preventDefault()
   e.stopPropagation()
   const bounds = await getBounds()
-  if (!bounds) return
+  if (!bounds)
+    return
   resizing.value = edge
   startX.value = e.screenX
   startY.value = e.screenY
@@ -39,7 +42,8 @@ async function onResizeStart(edge: ResizeEdge, e: MouseEvent) {
 
 function onMouseMove(e: MouseEvent) {
   const edge = resizing.value
-  if (!edge || !startBounds.value) return
+  if (!edge || !startBounds.value)
+    return
 
   const dx = e.screenX - startX.value
   const dy = e.screenY - startY.value
@@ -142,7 +146,7 @@ onBeforeUnmount(() => {
 
 /* 顶边 - 需在标题栏下方留出空间，避免与拖拽冲突 */
 .handle-n {
-  top: v-bind('props.titleBarHeight + "px"');
+  top: v-bind('`${props.titleBarHeight}px`');
   left: 12px;
   right: 12px;
   height: 6px;
@@ -174,7 +178,7 @@ onBeforeUnmount(() => {
 }
 
 .handle-ne {
-  top: v-bind('props.titleBarHeight + "px"');
+  top: v-bind('`${props.titleBarHeight}px`');
   right: 0;
   width: 12px;
   height: 12px;

@@ -1,0 +1,21 @@
+{
+  "name": "screen_vision",
+  "displayName": "屏幕视觉服务",
+  "version": "0.1.0",
+  "description": "截取当前屏幕并使用视觉模型分析内容，可回答「屏幕上有什么」「帮我看看屏幕」等请求。",
+  "author": "NagaAgent",
+  "agentType": "mcp",
+  "entryPoint": {
+    "module": "mcpserver.agent_screen_vision.agent_screen_vision",
+    "class": "ScreenVisionAgent"
+  },
+  "capabilities": {
+    "invocationCommands": [
+      {
+        "command": "look_screen",
+        "description": "截取当前屏幕并用视觉模型描述/分析屏幕内容。query 为用户的具体问题，如「屏幕上有什么」「这个界面怎么操作」。",
+        "example": "{\"tool_name\":\"look_screen\",\"query\":\"帮我看看屏幕上有什么\"}"
+      }
+    ]
+  }
+}

@@ -21,6 +21,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(SPECPATH))
 
 # 需要打包的数据文件（mcpserver / mqtt_tool 已禁用，不再打包）
 datas = [
+    ('pyproject.toml', '.'),
     ('system/prompts', 'system/prompts'),
     ('config.json', '.'),
     # ('mcpserver', 'mcpserver'),  # 已禁用

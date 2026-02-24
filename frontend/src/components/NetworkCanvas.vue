@@ -41,8 +41,10 @@ function tick(ctx: CanvasRenderingContext2D) {
     p.y += p.vy
 
     // 边界反弹
-    if (p.x < 0 || p.x > w) p.vx *= -1
-    if (p.y < 0 || p.y > h) p.vy *= -1
+    if (p.x < 0 || p.x > w)
+      p.vx *= -1
+    if (p.y < 0 || p.y > h)
+      p.vy *= -1
     p.x = Math.max(0, Math.min(w, p.x))
     p.y = Math.max(0, Math.min(h, p.y))
   }
@@ -80,7 +82,8 @@ function tick(ctx: CanvasRenderingContext2D) {
 
 function handleResize() {
   const cvs = canvasRef.value
-  if (!cvs) return
+  if (!cvs)
+    return
   canvasW = window.innerWidth
   canvasH = window.innerHeight
   cvs.width = canvasW
@@ -90,9 +93,11 @@ function handleResize() {
 
 onMounted(() => {
   const cvs = canvasRef.value
-  if (!cvs) return
+  if (!cvs)
+    return
   const ctx = cvs.getContext('2d')
-  if (!ctx) return
+  if (!ctx)
+    return
 
   handleResize()
   window.addEventListener('resize', handleResize)
@@ -101,7 +106,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (rafId) cancelAnimationFrame(rafId)
+  if (rafId)
+    cancelAnimationFrame(rafId)
   window.removeEventListener('resize', handleResize)
 })
 </script>

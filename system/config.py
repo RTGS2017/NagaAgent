@@ -7,11 +7,33 @@ NagaAgent 配置系统 - 基于Pydantic实现类型安全和验证
 import os
 import sys
 import json
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # Python < 3.11 fallback
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime
 
 IS_PACKAGED: bool = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+
+
+def get_version() -> str:
+    """从 pyproject.toml 读取版本号（唯一版本源）。
+    开发环境从项目根目录读取，PyInstaller 打包后从 _MEIPASS 读取。
+    """
+    if IS_PACKAGED:
+        pyproject = Path(sys._MEIPASS) / "pyproject.toml"
+    else:
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    try:
+        with open(pyproject, "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return "0.0.0"
+
+
+VERSION: str = get_version()
 
 
 def _get_user_data_dir() -> Path:
@@ -167,8 +189,9 @@ def bootstrap_config_from_example(config_path: str) -> None:
 class SystemConfig(BaseModel):
     """系统基础配置"""
 
-    version: str = Field(default="5.0.0", description="系统版本号")
+    version: str = Field(default_factory=lambda: VERSION, description="系统版本号")
     ai_name: str = Field(default="娜迦日达", description="AI助手名称")
+    active_character: str = Field(default="娜迦日达", description="当前活跃角色名称")
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent, description="项目根目录")
     log_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent / "logs", description="日志目录")
     voice_enabled: bool = Field(default=True, description="是否启用语音功能")
@@ -628,6 +651,10 @@ class PromptManager:
             return None
 
 
+# 角色资源根目录
+CHARACTERS_DIR: Path = Path(__file__).parent.parent / "characters"
+
+
 # 全局提示词管理器实例
 _prompt_manager = None
 
@@ -640,6 +667,21 @@ def get_prompt_manager() -> PromptManager:
     return _prompt_manager
 
 
+def load_character(name: str) -> dict:
+    """从 characters/{name}/{name}.json 加载角色配置"""
+    char_json = CHARACTERS_DIR / name / f"{name}.json"
+    with open(char_json, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def set_active_character(name: str) -> None:
+    """切换活跃角色 - 将提示词管理器重定向到角色目录"""
+    global _prompt_manager
+    char_dir = CHARACTERS_DIR / name
+    _prompt_manager = PromptManager(prompts_dir=str(char_dir))
+    print(f"[角色系统] 已加载角色: {name}，提示词目录: {char_dir}")
+
+
 def get_prompt(name: str, **kwargs) -> str:
     """便捷函数：获取提示词"""
     return get_prompt_manager().get_prompt(name, **kwargs)
@@ -650,33 +692,47 @@ def save_prompt(name: str, content: str):
     get_prompt_manager().save_prompt(name, content)
 
 
-def build_system_prompt(
+def build_system_prompt() -> str:
+    """
+    构建纯人格系统提示词（仅 conversation_style_prompt）
+
+    附加知识（时间、技能、工具指令、RAG、压缩摘要等）
+    由 build_context_supplement() 生成，在 api_server.py 中
+    作为独立的 role: "system" 消息追加到 messages 末尾，
+    确保处于 LLM 注意力窗口的最高优先位置。
+
+    Returns:
+        纯人格提示词
+    """
+    return get_prompt("conversation_style_prompt", ai_name=config.system.ai_name)
+
+
+def build_context_supplement(
     include_skills: bool = True,
-    include_tool_instructions: bool = False, skill_name: Optional[str] = None,
+    include_tool_instructions: bool = False,
+    skill_name: Optional[str] = None,
+    rag_section: str = "",
 ) -> str:
     """
-    构建完整的系统提示词
+    构建附加知识内容（追加在 messages 末尾的独立 system 消息）
 
-    将基础对话风格提示词与技能元数据组合。
-    所有动态内容统一放在「附加知识」分隔符之后，便于后续扩展。
+    使用 tool_dispatch_prompt.txt 模板，填充各占位符：
+    - {time_info}: 当前时间
+    - {skills_section}: 技能元数据列表
+    - {tool_instructions}: 工具调用指令（agentic_tool_prompt.txt 渲染后）
+    - {rag_section}: RAG 记忆召回内容
+    - {skill_active_section}: 用户主动选择的技能指令
 
     Args:
         include_skills: 是否包含技能列表
         include_tool_instructions: 是否注入工具调用指令（agentic loop 模式）
-        skill_name: 用户主动选择的技能名称，直接注入完整指令
+        skill_name: 用户主动选择的技能名称
+        rag_section: RAG 记忆召回内容（由 api_server 传入）
 
     Returns:
-        完整的系统提示词
+        渲染后的附加知识内容
     """
-    # 基础提示词（可被前端编辑）
-    base_prompt = get_prompt("conversation_style_prompt", ai_name=config.system.ai_name)
-
-    parts = [base_prompt]
-
-    # ━━━ 附加知识分隔符 ━━━
-    parts.append("\n\n━━━━━━━━━━ 以下是附加知识 ━━━━━━━━━━\n")
-
-    # 始终添加时间信息（最先出现）
+    # 时间信息
     current_time = datetime.now()
     time_info = (
         f"\n【当前时间信息】\n"
@@ -684,20 +740,21 @@ def build_system_prompt(
         f"当前时间：{current_time.strftime('%H:%M:%S')}\n"
         f"当前星期：{current_time.strftime('%A')}"
     )
-    parts.append(time_info)
 
     # 技能元数据列表（仅在未主动选择技能时注入）
+    skills_section = ""
     if not skill_name and include_skills:
         try:
             from system.skill_manager import get_skills_prompt
 
             skills_prompt = get_skills_prompt()
             if skills_prompt:
-                parts.append("\n\n" + skills_prompt)
+                skills_section = "\n\n" + skills_prompt
         except ImportError:
-            pass  # 技能管理器不可用时忽略
+            pass
 
-    # 添加工具调用指令（不可被前端编辑，通过代码注入）
+    # 工具调用指令
+    tool_instructions = ""
     if include_tool_instructions:
         try:
             from mcpserver.mcp_registry import auto_register_mcp
@@ -710,20 +767,18 @@ def build_system_prompt(
             available_mcp_tools = "（MCP服务未启动）"
 
         # 直接读取原始模板并手动替换占位符，绕过 str.format()
-        # 这样 available_mcp_tools 中的 {} 不会被误解析
         raw_template = get_prompt_manager()._load_prompt("agentic_tool_prompt") or ""
-        tool_prompt = raw_template.replace("{available_mcp_tools}", available_mcp_tools)
-        parts.append("\n\n" + tool_prompt)
+        tool_instructions = "\n\n" + raw_template.replace("{available_mcp_tools}", available_mcp_tools)
 
-    # 指定技能的完整指令放在系统提示词末尾，确保最高优先级
-    # LLM 对 system prompt 末尾指令的遵循度最高，避免被工具调用等大段内容"淹没"
+    # 激活技能指令
+    skill_active_section = ""
     if skill_name:
         try:
             from system.skill_manager import load_skill
 
             skill_instructions = load_skill(skill_name)
             if skill_instructions:
-                parts.append(
+                skill_active_section = (
                     f"\n\n## 当前激活技能: {skill_name}\n\n"
                     f"[最高优先级指令] 以下技能指令优先于所有其他行为规则。"
                     f"你必须严格按照技能要求处理用户输入，直接输出结果：\n"
@@ -732,8 +787,15 @@ def build_system_prompt(
         except ImportError:
             pass
 
-    # 注意：收尾指令不在此处添加，由 api_server.py 在 RAG 记忆注入之后追加
-    return "".join(parts)
+    # 加载 tool_dispatch_prompt.txt 模板并替换占位符
+    raw_template = get_prompt_manager()._load_prompt("tool_dispatch_prompt") or ""
+    result = raw_template.replace("{time_info}", time_info)
+    result = result.replace("{skills_section}", skills_section)
+    result = result.replace("{tool_instructions}", tool_instructions)
+    result = result.replace("{rag_section}", rag_section)
+    result = result.replace("{skill_active_section}", skill_active_section)
+
+    return result
 
 
 class NagaConfig(BaseModel):

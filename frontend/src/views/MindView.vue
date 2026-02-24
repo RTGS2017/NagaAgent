@@ -91,9 +91,21 @@ const SURFACE_H = 200
 const WEIGHT_MAX = 10
 
 const COLORS = [
-  '#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8',
-  '#4dd0e1', '#aed581', '#ff8a65', '#f06292', '#9575cd',
-  '#26c6da', '#dce775', '#ffa726', '#ef5350', '#ab47bc',
+  '#4fc3f7',
+  '#81c784',
+  '#ffb74d',
+  '#e57373',
+  '#ba68c8',
+  '#4dd0e1',
+  '#aed581',
+  '#ff8a65',
+  '#f06292',
+  '#9575cd',
+  '#26c6da',
+  '#dce775',
+  '#ffa726',
+  '#ef5350',
+  '#ab47bc',
 ]
 
 // ── Refs ──
@@ -185,45 +197,113 @@ function proj(x: number, y: number, z: number) {
 // ── Particle system ──
 function initParticles() {
   particles = []
-  for (let i = 0; i < 40; i++)
-    particles.push({ x: (Math.random() - 0.5) * 500, y: Math.random() * SURFACE_H * 0.2, z: (Math.random() - 0.5) * 500, vx: (Math.random() - 0.5) * 0.08, vy: 0.01 + Math.random() * 0.03, vz: (Math.random() - 0.5) * 0.08, size: 0.4 + Math.random() * 0.6, alpha: 0.08 + Math.random() * 0.12, hue: 200 + Math.random() * 20, layer: 0 })
+  for (let i = 0; i < 40; i++) {
+    particles.push({
+      x: (Math.random() - 0.5) * 500,
+      y: Math.random() * SURFACE_H * 0.2,
+      z: (Math.random() - 0.5) * 500,
+      vx: (Math.random() - 0.5) * 0.08,
+      vy: 0.01 + Math.random() * 0.03,
+      vz: (Math.random() - 0.5) * 0.08,
+      size: 0.4 + Math.random() * 0.6,
+      alpha: 0.08 + Math.random() * 0.12,
+      hue: 200 + Math.random() * 20,
+      layer: 0,
+    })
+  }
   for (let i = 0; i < 60; i++) {
     const big = Math.random() < 0.08
-    particles.push({ x: (Math.random() - 0.5) * 500, y: SURFACE_H * 0.1 + Math.random() * SURFACE_H * 0.8, z: (Math.random() - 0.5) * 500, vx: (Math.random() - 0.5) * 0.12, vy: big ? 0.3 + Math.random() * 0.3 : 0.06 + Math.random() * 0.18, vz: (Math.random() - 0.5) * 0.12, size: big ? 1.8 + Math.random() * 1.5 : 0.5 + Math.random() * 1.2, alpha: big ? 0.35 + Math.random() * 0.2 : 0.12 + Math.random() * 0.25, hue: 190 + Math.random() * 40, layer: 1 })
+    particles.push({
+      x: (Math.random() - 0.5) * 500,
+      y: SURFACE_H * 0.1 + Math.random() * SURFACE_H * 0.8,
+      z: (Math.random() - 0.5) * 500,
+      vx: (Math.random() - 0.5) * 0.12,
+      vy: big ? 0.3 + Math.random() * 0.3 : 0.06 + Math.random() * 0.18,
+      vz: (Math.random() - 0.5) * 0.12,
+      size: big ? 1.8 + Math.random() * 1.5 : 0.5 + Math.random() * 1.2,
+      alpha: big ? 0.35 + Math.random() * 0.2 : 0.12 + Math.random() * 0.25,
+      hue: 190 + Math.random() * 40,
+      layer: 1,
+    })
   }
-  for (let i = 0; i < 25; i++)
-    particles.push({ x: (Math.random() - 0.5) * 400, y: SURFACE_H * 0.75 + Math.random() * SURFACE_H * 0.3, z: (Math.random() - 0.5) * 400, vx: (Math.random() - 0.5) * 0.06, vy: 0.03 + Math.random() * 0.08, vz: (Math.random() - 0.5) * 0.06, size: 1 + Math.random() * 2, alpha: 0.2 + Math.random() * 0.3, hue: 185 + Math.random() * 30, layer: 2 })
+  for (let i = 0; i < 25; i++) {
+    particles.push({
+      x: (Math.random() - 0.5) * 400,
+      y: SURFACE_H * 0.75 + Math.random() * SURFACE_H * 0.3,
+      z: (Math.random() - 0.5) * 400,
+      vx: (Math.random() - 0.5) * 0.06,
+      vy: 0.03 + Math.random() * 0.08,
+      vz: (Math.random() - 0.5) * 0.06,
+      size: 1 + Math.random() * 2,
+      alpha: 0.2 + Math.random() * 0.3,
+      hue: 185 + Math.random() * 30,
+      layer: 2,
+    })
+  }
 }
 
 function simParticles() {
   const surfY = SURFACE_H * cfg.hScale
   for (const p of particles) {
-    p.x += p.vx; p.y += p.vy; p.z += p.vz
-    if (p.layer === 0) { if (p.y > surfY * 0.25) { p.y = 0; p.x = (Math.random() - 0.5) * 500; p.z = (Math.random() - 0.5) * 500 } }
-    else if (p.layer === 1) { if (p.y > surfY + 15) { p.y = surfY * 0.05; p.x = (Math.random() - 0.5) * 500; p.z = (Math.random() - 0.5) * 500 } }
-    else { if (p.y > surfY + 30) { p.y = surfY * 0.7; p.x = (Math.random() - 0.5) * 400; p.z = (Math.random() - 0.5) * 400 } }
-    if (p.x > 260) p.x = -260; if (p.x < -260) p.x = 260
-    if (p.z > 260) p.z = -260; if (p.z < -260) p.z = 260
+    p.x += p.vx
+    p.y += p.vy
+    p.z += p.vz
+    if (p.layer === 0) {
+      if (p.y > surfY * 0.25) {
+        p.y = 0
+        p.x = (Math.random() - 0.5) * 500
+        p.z = (Math.random() - 0.5) * 500
+      }
+    }
+    else if (p.layer === 1) {
+      if (p.y > surfY + 15) {
+        p.y = surfY * 0.05
+        p.x = (Math.random() - 0.5) * 500
+        p.z = (Math.random() - 0.5) * 500
+      }
+    }
+    else {
+      if (p.y > surfY + 30) {
+        p.y = surfY * 0.7
+        p.x = (Math.random() - 0.5) * 400
+        p.z = (Math.random() - 0.5) * 400
+      }
+    }
+    if (p.x > 260)
+      p.x = -260
+    if (p.x < -260)
+      p.x = 260
+    if (p.z > 260)
+      p.z = -260
+    if (p.z < -260)
+      p.z = 260
   }
 }
 
 function drawParticles() {
-  if (!cx) return
+  if (!cx)
+    return
   for (const p of particles) {
     const pp = proj(p.x, p.y, p.z)
-    if (pp.d < 50) continue
+    if (pp.d < 50)
+      continue
     const fog = Math.min(1, Math.max(0.05, 250 / pp.d))
     const sz = Math.max(0.4, p.size * pp.s)
     const brightMul = p.layer === 2 ? 1.6 : 1
     cx.globalAlpha = p.alpha * fog * brightMul
     cx.fillStyle = `hsl(${p.hue},60%,${p.layer === 2 ? '78' : '65'}%)`
-    cx.beginPath(); cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2); cx.fill()
+    cx.beginPath()
+    cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2)
+    cx.fill()
     if (sz > 0.8) {
       const gr = sz * (p.layer === 2 ? 4 : 2.5)
       const gg = cx.createRadialGradient(pp.sx, pp.sy, 0, pp.sx, pp.sy, gr)
       gg.addColorStop(0, `hsla(${p.hue},70%,75%,${p.alpha * fog * 0.3 * brightMul})`)
       gg.addColorStop(1, 'transparent')
-      cx.beginPath(); cx.arc(pp.sx, pp.sy, gr, 0, Math.PI * 2); cx.fillStyle = gg; cx.fill()
+      cx.beginPath()
+      cx.arc(pp.sx, pp.sy, gr, 0, Math.PI * 2)
+      cx.fillStyle = gg
+      cx.fill()
     }
   }
   cx.globalAlpha = 1
@@ -232,12 +312,22 @@ function drawParticles() {
 // ── God Rays ──
 function initRays() {
   rays = []
-  for (let i = 0; i < 3; i++)
-    rays.push({ x: (Math.random() - 0.5) * 200, z: (Math.random() - 0.5) * 200, radius: 18 + Math.random() * 22, phase: Math.random() * Math.PI * 2, freq: 0.12 + Math.random() * 0.08, swayAmp: 25 + Math.random() * 15, alpha: 0.018 + Math.random() * 0.012 })
+  for (let i = 0; i < 3; i++) {
+    rays.push({
+      x: (Math.random() - 0.5) * 200,
+      z: (Math.random() - 0.5) * 200,
+      radius: 18 + Math.random() * 22,
+      phase: Math.random() * Math.PI * 2,
+      freq: 0.12 + Math.random() * 0.08,
+      swayAmp: 25 + Math.random() * 15,
+      alpha: 0.018 + Math.random() * 0.012,
+    })
+  }
 }
 
 function drawRays() {
-  if (!cx) return
+  if (!cx)
+    return
   const now = (performance.now() - t0) * 0.001
   const surfY = SURFACE_H * cfg.hScale
   const slices = 14
@@ -251,15 +341,18 @@ function drawRays() {
       const y = surfY * (1 - t)
       const rad = r.radius * (1 - t * 0.3) * (1 + Math.sin(now * 0.5 + s) * 0.08)
       const pp = proj(bx, y, r.z)
-      if (pp.d < 40) continue
+      if (pp.d < 40)
+        continue
       const screenR = Math.max(2, rad * pp.s)
       const intensity = r.alpha * (1 - t * 0.85)
       const gg = cx.createRadialGradient(pp.sx, pp.sy, 0, pp.sx, pp.sy, screenR)
       gg.addColorStop(0, `rgba(100,180,255,${intensity})`)
       gg.addColorStop(0.4, `rgba(70,150,240,${intensity * 0.5})`)
       gg.addColorStop(1, 'rgba(50,120,200,0)')
-      cx.beginPath(); cx.arc(pp.sx, pp.sy, screenR, 0, Math.PI * 2)
-      cx.fillStyle = gg; cx.fill()
+      cx.beginPath()
+      cx.arc(pp.sx, pp.sy, screenR, 0, Math.PI * 2)
+      cx.fillStyle = gg
+      cx.fill()
     }
   }
   cx.globalCompositeOperation = prev
@@ -275,30 +368,42 @@ function initFlow() {
 }
 
 function simFlow() {
-  for (const f of flowParts) { f.t += f.speed; if (f.t > 1) f.t -= 1 }
+  for (const f of flowParts) {
+    f.t += f.speed
+    if (f.t > 1)
+      f.t -= 1
+  }
 }
 
 function drawFlow() {
-  if (!cx) return
+  if (!cx)
+    return
   const now = (performance.now() - t0) * 0.001
   for (const f of flowParts) {
-    const s = f.link.src; const tg = f.link.tgt
+    const s = f.link.src
+    const tg = f.link.tgt
     const fx = s.px + (tg.px - s.px) * f.t
     const fy = s.py + (tg.py - s.py) * f.t
     const fz = s.pz + (tg.pz - s.pz) * f.t
     const pp = proj(fx, fy, fz)
-    if (pp.d < 50) continue
+    if (pp.d < 50)
+      continue
     const fog = Math.min(1, Math.max(0.1, 250 / pp.d))
     const sz = Math.max(0.4, f.size * pp.s)
     const flicker = 0.7 + 0.3 * Math.sin(now * 6 + f.t * 20)
     cx.globalAlpha = 0.5 * fog * flicker
     cx.fillStyle = 'rgba(255,210,100,1)'
-    cx.beginPath(); cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2); cx.fill()
+    cx.beginPath()
+    cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2)
+    cx.fill()
     const gg = cx.createRadialGradient(pp.sx, pp.sy, 0, pp.sx, pp.sy, sz * 3)
     gg.addColorStop(0, `rgba(255,200,80,${0.35 * fog * flicker})`)
     gg.addColorStop(0.5, `rgba(255,170,50,${0.1 * fog * flicker})`)
     gg.addColorStop(1, 'transparent')
-    cx.beginPath(); cx.arc(pp.sx, pp.sy, sz * 3, 0, Math.PI * 2); cx.fillStyle = gg; cx.fill()
+    cx.beginPath()
+    cx.arc(pp.sx, pp.sy, sz * 3, 0, Math.PI * 2)
+    cx.fillStyle = gg
+    cx.fill()
   }
   cx.globalAlpha = 1
 }
@@ -306,18 +411,32 @@ function drawFlow() {
 // ── Plankton ──
 function spawnPlankton(): Plankton {
   return {
-    x: (Math.random() - 0.5) * 350, y: SURFACE_H * 0.1 + Math.random() * SURFACE_H * 0.8, z: (Math.random() - 0.5) * 350,
-    pa: Math.random() * Math.PI * 2, pf1: 0.4 + Math.random() * 0.5, pf2: 0.7 + Math.random() * 0.6,
-    pa2: Math.random() * Math.PI * 2, pf3: 0.3 + Math.random() * 0.3,
-    amp1: 0.5 + Math.random() * 0.6, amp2: 0.3 + Math.random() * 0.4, amp3: 0.2 + Math.random() * 0.3,
-    size: 0.4 + Math.random() * 0.5, hue: 160 + Math.random() * 50,
-    life: 0, maxLife: 300 + Math.floor(Math.random() * 400), trail: [],
+    x: (Math.random() - 0.5) * 350,
+    y: SURFACE_H * 0.1 + Math.random() * SURFACE_H * 0.8,
+    z: (Math.random() - 0.5) * 350,
+    pa: Math.random() * Math.PI * 2,
+    pf1: 0.4 + Math.random() * 0.5,
+    pf2: 0.7 + Math.random() * 0.6,
+    pa2: Math.random() * Math.PI * 2,
+    pf3: 0.3 + Math.random() * 0.3,
+    amp1: 0.5 + Math.random() * 0.6,
+    amp2: 0.3 + Math.random() * 0.4,
+    amp3: 0.2 + Math.random() * 0.3,
+    size: 0.4 + Math.random() * 0.5,
+    hue: 160 + Math.random() * 50,
+    life: 0,
+    maxLife: 300 + Math.floor(Math.random() * 400),
+    trail: [],
   }
 }
 
 function initPlankton() {
   plankton = []
-  for (let i = 0; i < 10; i++) { const p = spawnPlankton(); p.life = Math.floor(Math.random() * p.maxLife); plankton.push(p) }
+  for (let i = 0; i < 10; i++) {
+    const p = spawnPlankton()
+    p.life = Math.floor(Math.random() * p.maxLife)
+    plankton.push(p)
+  }
 }
 
 function simPlankton() {
@@ -326,49 +445,75 @@ function simPlankton() {
   for (let i = 0; i < plankton.length; i++) {
     const p = plankton[i]!
     p.life++
-    if (p.life > p.maxLife) { plankton[i] = spawnPlankton(); continue }
+    if (p.life > p.maxLife) {
+      plankton[i] = spawnPlankton()
+      continue
+    }
     p.x += Math.sin(now * p.pf1 + p.pa) * p.amp1 * 0.12 + Math.cos(now * p.pf3 + p.pa2) * p.amp3 * 0.06
     p.y += Math.sin(now * p.pf2 + p.pa + 1) * p.amp2 * 0.05
     p.z += Math.cos(now * p.pf1 + p.pa + 2) * p.amp1 * 0.10 + Math.sin(now * p.pf3 + p.pa2 + 1) * p.amp3 * 0.05
-    if (p.y < FLOOR_Y + 5) p.y = FLOOR_Y + 5; if (p.y > surfY - 5) p.y = surfY - 5
-    if (p.x > 180) p.x = -180; if (p.x < -180) p.x = 180
-    if (p.z > 180) p.z = -180; if (p.z < -180) p.z = 180
+    if (p.y < FLOOR_Y + 5)
+      p.y = FLOOR_Y + 5
+    if (p.y > surfY - 5)
+      p.y = surfY - 5
+    if (p.x > 180)
+      p.x = -180
+    if (p.x < -180)
+      p.x = 180
+    if (p.z > 180)
+      p.z = -180
+    if (p.z < -180)
+      p.z = 180
     p.trail.push({ x: p.x, y: p.y, z: p.z })
-    if (p.trail.length > 35) p.trail.shift()
+    if (p.trail.length > 35)
+      p.trail.shift()
   }
 }
 
 function drawPlankton() {
-  if (!cx) return
+  if (!cx)
+    return
   for (const p of plankton) {
     const lifeRatio = p.life / p.maxLife
     let fade = 1
-    if (lifeRatio < 0.15) fade = lifeRatio / 0.15
-    else if (lifeRatio > 0.8) fade = 1 - (lifeRatio - 0.8) / 0.2
-    if (fade < 0.01) continue
+    if (lifeRatio < 0.15)
+      fade = lifeRatio / 0.15
+    else if (lifeRatio > 0.8)
+      fade = 1 - (lifeRatio - 0.8) / 0.2
+    if (fade < 0.01)
+      continue
     for (let i = 0; i < p.trail.length - 1; i++) {
       const t = p.trail[i]!
       const pp = proj(t.x, t.y, t.z)
-      if (pp.d < 50) continue
+      if (pp.d < 50)
+        continue
       const fog = Math.min(1, Math.max(0.05, 250 / pp.d))
       const a = (i / p.trail.length) * 0.18 * fog * fade
       const sz = Math.max(0.2, p.size * 0.4 * pp.s)
       cx.globalAlpha = a
       cx.fillStyle = `hsl(${p.hue},80%,70%)`
-      cx.beginPath(); cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2); cx.fill()
+      cx.beginPath()
+      cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2)
+      cx.fill()
     }
     const pp = proj(p.x, p.y, p.z)
-    if (pp.d < 50) continue
+    if (pp.d < 50)
+      continue
     const fog = Math.min(1, Math.max(0.1, 250 / pp.d))
     const sz = Math.max(0.3, p.size * pp.s)
     cx.globalAlpha = 0.5 * fog * fade
     cx.fillStyle = `hsl(${p.hue},80%,72%)`
-    cx.beginPath(); cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2); cx.fill()
+    cx.beginPath()
+    cx.arc(pp.sx, pp.sy, sz, 0, Math.PI * 2)
+    cx.fill()
     if (sz > 0.4) {
       const gg = cx.createRadialGradient(pp.sx, pp.sy, 0, pp.sx, pp.sy, sz * 3)
       gg.addColorStop(0, `hsla(${p.hue},90%,75%,${0.2 * fog * fade})`)
       gg.addColorStop(1, 'transparent')
-      cx.beginPath(); cx.arc(pp.sx, pp.sy, sz * 3, 0, Math.PI * 2); cx.fillStyle = gg; cx.fill()
+      cx.beginPath()
+      cx.arc(pp.sx, pp.sy, sz * 3, 0, Math.PI * 2)
+      cx.fillStyle = gg
+      cx.fill()
     }
   }
   cx.globalAlpha = 1
@@ -382,7 +527,8 @@ function initPositions() {
     n.px = Math.cos(a) * R * (0.4 + Math.random() * 0.6)
     n.pz = Math.sin(a) * R * (0.4 + Math.random() * 0.6)
     n.py = Math.min(n.weight, WEIGHT_MAX) / WEIGHT_MAX * SURFACE_H * cfg.hScale
-    n.vx = 0; n.vz = 0
+    n.vx = 0
+    n.vz = 0
     n.swayA = Math.random() * Math.PI * 2
     n.swayF = 0.3 + Math.random() * 0.4
     n.swayAmp = 1.5 + Math.random() * 2
@@ -397,13 +543,17 @@ function simulate() {
   const fric = 0.88
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
-      let dx = nodes[j]!.px - nodes[i]!.px
-      let dz = nodes[j]!.pz - nodes[i]!.pz
-      let d2 = dx * dx + dz * dz; if (d2 < 4) d2 = 4
+      const dx = nodes[j]!.px - nodes[i]!.px
+      const dz = nodes[j]!.pz - nodes[i]!.pz
+      let d2 = dx * dx + dz * dz
+      if (d2 < 4)
+        d2 = 4
       const d = Math.sqrt(d2)
       const f = cfg.spread * alpha / d2
-      nodes[i]!.vx -= dx / d * f; nodes[i]!.vz -= dz / d * f
-      nodes[j]!.vx += dx / d * f; nodes[j]!.vz += dz / d * f
+      nodes[i]!.vx -= dx / d * f
+      nodes[i]!.vz -= dz / d * f
+      nodes[j]!.vx += dx / d * f
+      nodes[j]!.vz += dz / d * f
     }
   }
   for (const l of links) {
@@ -411,15 +561,26 @@ function simulate() {
     const dz = l.tgt.pz - l.src.pz
     const d = Math.sqrt(dx * dx + dz * dz) || 1
     const f = (d - 80) * 0.004 * alpha
-    l.src.vx += dx / d * f; l.src.vz += dz / d * f
-    l.tgt.vx -= dx / d * f; l.tgt.vz -= dz / d * f
+    l.src.vx += dx / d * f
+    l.src.vz += dz / d * f
+    l.tgt.vx -= dx / d * f
+    l.tgt.vz -= dz / d * f
   }
-  for (const n of nodes) { n.vx -= n.px * 0.0003; n.vz -= n.pz * 0.0003 }
+  for (const n of nodes) {
+    n.vx -= n.px * 0.0003
+    n.vz -= n.pz * 0.0003
+  }
   const now = (performance.now() - t0) * 0.001
   for (const n of nodes) {
-    if (n === dragging) { n.vx = 0; n.vz = 0; continue }
-    n.vx *= fric; n.vz *= fric
-    n.px += n.vx; n.pz += n.vz
+    if (n === dragging) {
+      n.vx = 0
+      n.vz = 0
+      continue
+    }
+    n.vx *= fric
+    n.vz *= fric
+    n.px += n.vx
+    n.pz += n.vz
     const baseY = Math.min(n.weight, WEIGHT_MAX) / WEIGHT_MAX * SURFACE_H * cfg.hScale
     const sway = Math.sin(now * n.swayF + n.swayA) * n.swayAmp * cfg.sway
     n.py += (baseY + sway - n.py) * 0.06
@@ -430,44 +591,73 @@ function simulate() {
 
 // ── Drawing ──
 function drawFloor() {
-  if (!cx) return
-  const gridN = 10; const gridS = 30; const half = gridN * gridS
-  cx.strokeStyle = 'rgba(30,60,120,0.18)'; cx.lineWidth = 0.7
+  if (!cx)
+    return
+  const gridN = 10
+  const gridS = 30
+  const half = gridN * gridS
+  cx.strokeStyle = 'rgba(30,60,120,0.18)'
+  cx.lineWidth = 0.7
   for (let i = -gridN; i <= gridN; i++) {
-    const p1 = proj(i * gridS, FLOOR_Y, -half); const p2 = proj(i * gridS, FLOOR_Y, half)
-    const p3 = proj(-half, FLOOR_Y, i * gridS); const p4 = proj(half, FLOOR_Y, i * gridS)
-    cx.beginPath(); cx.moveTo(p1.sx, p1.sy); cx.lineTo(p2.sx, p2.sy); cx.stroke()
-    cx.beginPath(); cx.moveTo(p3.sx, p3.sy); cx.lineTo(p4.sx, p4.sy); cx.stroke()
+    const p1 = proj(i * gridS, FLOOR_Y, -half)
+    const p2 = proj(i * gridS, FLOOR_Y, half)
+    const p3 = proj(-half, FLOOR_Y, i * gridS)
+    const p4 = proj(half, FLOOR_Y, i * gridS)
+    cx.beginPath()
+    cx.moveTo(p1.sx, p1.sy)
+    cx.lineTo(p2.sx, p2.sy)
+    cx.stroke()
+    cx.beginPath()
+    cx.moveTo(p3.sx, p3.sy)
+    cx.lineTo(p4.sx, p4.sy)
+    cx.stroke()
   }
 }
 
 function drawSurface() {
-  if (!cx) return
-  const surfY = SURFACE_H * cfg.hScale; const half = 300
+  if (!cx)
+    return
+  const surfY = SURFACE_H * cfg.hScale
+  const half = 300
   const corners = [[-half, surfY, -half], [half, surfY, -half], [half, surfY, half], [-half, surfY, half]] as const
   const pc = corners.map(c => proj(c[0], c[1], c[2]))
-  cx.beginPath(); cx.moveTo(pc[0]!.sx, pc[0]!.sy)
-  for (let i = 1; i < 4; i++) cx.lineTo(pc[i]!.sx, pc[i]!.sy)
+  cx.beginPath()
+  cx.moveTo(pc[0]!.sx, pc[0]!.sy)
+  for (let i = 1; i < 4; i++)
+    cx.lineTo(pc[i]!.sx, pc[i]!.sy)
   cx.closePath()
-  cx.fillStyle = 'rgba(20,80,180,0.06)'; cx.fill()
-  cx.strokeStyle = 'rgba(40,100,200,0.15)'; cx.lineWidth = 1; cx.stroke()
-  cx.strokeStyle = 'rgba(50,120,220,0.08)'; cx.lineWidth = 0.5
+  cx.fillStyle = 'rgba(20,80,180,0.06)'
+  cx.fill()
+  cx.strokeStyle = 'rgba(40,100,200,0.15)'
+  cx.lineWidth = 1
+  cx.stroke()
+  cx.strokeStyle = 'rgba(50,120,220,0.08)'
+  cx.lineWidth = 0.5
   const now = (performance.now() - t0) * 0.0005
   for (let i = 0; i < 6; i++) {
     const off = (i / 6 - 0.5) * half * 1.8
     const p1 = proj(-half, surfY, off + Math.sin(now + i) * 10)
     const p2 = proj(half, surfY, off + Math.sin(now + i + 2) * 10)
-    cx.beginPath(); cx.moveTo(p1.sx, p1.sy); cx.lineTo(p2.sx, p2.sy); cx.stroke()
+    cx.beginPath()
+    cx.moveTo(p1.sx, p1.sy)
+    cx.lineTo(p2.sx, p2.sy)
+    cx.stroke()
   }
 }
 
 function drawCompass() {
-  if (!cx) return
-  const ox = W - 70; const oy = H - 70; const len = 40
-  const ct = Math.cos(camT); const st = Math.sin(camT)
-  const cp = Math.cos(camP); const sp = Math.sin(camP)
+  if (!cx)
+    return
+  const ox = W - 70
+  const oy = H - 70
+  const len = 40
+  const ct = Math.cos(camT)
+  const st = Math.sin(camT)
+  const cp = Math.cos(camP)
+  const sp = Math.sin(camP)
   function projAxis(x: number, y: number, z: number) {
-    const rx = ct * x + st * z; const ry2 = cp * y - sp * (-st * x + ct * z)
+    const rx = ct * x + st * z
+    const ry2 = cp * y - sp * (-st * x + ct * z)
     return { sx: ox + rx * len, sy: oy - ry2 * len }
   }
   const axes = [
@@ -475,59 +665,93 @@ function drawCompass() {
     { x: 0, y: 1, z: 0, label: 'Y', color: '#55cc55' },
     { x: 0, y: 0, z: 1, label: 'Z', color: '#5577ee' },
   ]
-  cx.beginPath(); cx.arc(ox, oy, 52, 0, Math.PI * 2)
-  cx.fillStyle = 'rgba(6,12,24,0.7)'; cx.fill()
-  cx.strokeStyle = 'rgba(50,90,160,0.3)'; cx.lineWidth = 1; cx.stroke()
+  cx.beginPath()
+  cx.arc(ox, oy, 52, 0, Math.PI * 2)
+  cx.fillStyle = 'rgba(6,12,24,0.7)'
+  cx.fill()
+  cx.strokeStyle = 'rgba(50,90,160,0.3)'
+  cx.lineWidth = 1
+  cx.stroke()
   for (const a of axes) {
     const p = projAxis(a.x, a.y, a.z)
-    cx.beginPath(); cx.moveTo(ox, oy); cx.lineTo(p.sx, p.sy)
-    cx.strokeStyle = a.color; cx.lineWidth = 2; cx.stroke()
+    cx.beginPath()
+    cx.moveTo(ox, oy)
+    cx.lineTo(p.sx, p.sy)
+    cx.strokeStyle = a.color
+    cx.lineWidth = 2
+    cx.stroke()
     const ang = Math.atan2(p.sy - oy, p.sx - ox)
-    cx.beginPath(); cx.moveTo(p.sx, p.sy)
+    cx.beginPath()
+    cx.moveTo(p.sx, p.sy)
     cx.lineTo(p.sx - Math.cos(ang - 0.4) * 8, p.sy - Math.sin(ang - 0.4) * 8)
     cx.lineTo(p.sx - Math.cos(ang + 0.4) * 8, p.sy - Math.sin(ang + 0.4) * 8)
-    cx.closePath(); cx.fillStyle = a.color; cx.fill()
-    const lx = p.sx + Math.cos(ang) * 12; const ly = p.sy + Math.sin(ang) * 12
-    cx.font = 'bold 9px sans-serif'; cx.fillStyle = a.color
-    cx.textAlign = 'center'; cx.textBaseline = 'middle'
+    cx.closePath()
+    cx.fillStyle = a.color
+    cx.fill()
+    const lx = p.sx + Math.cos(ang) * 12
+    const ly = p.sy + Math.sin(ang) * 12
+    cx.font = 'bold 9px sans-serif'
+    cx.fillStyle = a.color
+    cx.textAlign = 'center'
+    cx.textBaseline = 'middle'
     cx.fillText(a.label, lx, ly)
   }
 }
 
 function drawNodeGlow(sx: number, sy: number, r: number, col: string, fog: number, isHov: boolean) {
-  if (!cx) return
+  if (!cx)
+    return
   if (r > 2) {
     const gr = r * 4
     const gg = cx.createRadialGradient(sx, sy, r * 0.3, sx, sy, gr)
-    gg.addColorStop(0, col + '40'); gg.addColorStop(0.3, col + '18')
-    gg.addColorStop(0.7, col + '08'); gg.addColorStop(1, 'transparent')
-    cx.beginPath(); cx.arc(sx, sy, gr, 0, Math.PI * 2); cx.fillStyle = gg; cx.fill()
+    gg.addColorStop(0, `${col}40`)
+    gg.addColorStop(0.3, `${col}18`)
+    gg.addColorStop(0.7, `${col}08`)
+    gg.addColorStop(1, 'transparent')
+    cx.beginPath()
+    cx.arc(sx, sy, gr, 0, Math.PI * 2)
+    cx.fillStyle = gg
+    cx.fill()
   }
-  cx.beginPath(); cx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2)
+  cx.beginPath()
+  cx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2)
   cx.globalAlpha = Math.max(0.3, fog)
-  cx.fillStyle = isHov ? '#fff' : col; cx.fill()
+  cx.fillStyle = isHov ? '#fff' : col
+  cx.fill()
   if (r > 3) {
-    const hx = sx - r * 0.28; const hy = sy - r * 0.28; const hr = r * 0.38
+    const hx = sx - r * 0.28
+    const hy = sy - r * 0.28
+    const hr = r * 0.38
     const ig = cx.createRadialGradient(hx, hy, 0, hx, hy, hr)
     ig.addColorStop(0, `rgba(255,255,255,${isHov ? 0.6 : 0.3 * fog})`)
     ig.addColorStop(1, 'transparent')
-    cx.beginPath(); cx.arc(hx, hy, hr, 0, Math.PI * 2); cx.fillStyle = ig; cx.fill()
+    cx.beginPath()
+    cx.arc(hx, hy, hr, 0, Math.PI * 2)
+    cx.fillStyle = ig
+    cx.fill()
   }
   cx.globalAlpha = 1
 }
 
 function draw() {
-  if (!cx) return
+  if (!cx)
+    return
   const bg = cx.createLinearGradient(0, 0, 0, H)
-  bg.addColorStop(0, '#0a1525'); bg.addColorStop(0.3, '#06101c')
-  bg.addColorStop(0.7, '#040a14'); bg.addColorStop(1, '#020608')
-  cx.fillStyle = bg; cx.fillRect(0, 0, W, H)
+  bg.addColorStop(0, '#0a1525')
+  bg.addColorStop(0.3, '#06101c')
+  bg.addColorStop(0.7, '#040a14')
+  bg.addColorStop(1, '#020608')
+  cx.fillStyle = bg
+  cx.fillRect(0, 0, W, H)
 
   drawFloor()
   drawSurface()
-  if (cfg.raysOn) drawRays()
-  if (cfg.particlesOn) drawParticles()
-  if (cfg.planktonOn) drawPlankton()
+  if (cfg.raysOn)
+    drawRays()
+  if (cfg.particlesOn)
+    drawParticles()
+  if (cfg.planktonOn)
+    drawPlankton()
 
   // Sort items far→near
   const items: Array<{ t: 'L', p1: ReturnType<typeof proj>, p2: ReturnType<typeof proj>, l: SeaLink, d: number } | { t: 'N', p: ReturnType<typeof proj>, n: SeaNode, d: number }> = []
@@ -546,25 +770,34 @@ function draw() {
     if (it.t === 'L') {
       const { p1, p2, l } = it
       const fog = Math.min(1, Math.max(0.05, 300 / ((p1.d + p2.d) / 2)))
-      cx.beginPath(); cx.moveTo(p1.sx, p1.sy); cx.lineTo(p2.sx, p2.sy)
+      cx.beginPath()
+      cx.moveTo(p1.sx, p1.sy)
+      cx.lineTo(p2.sx, p2.sy)
       cx.strokeStyle = `rgba(60,100,180,${fog * 0.35})`
-      cx.lineWidth = Math.max(0.3, 1.2 * Math.min(p1.s, p2.s)); cx.stroke()
+      cx.lineWidth = Math.max(0.3, 1.2 * Math.min(p1.s, p2.s))
+      cx.stroke()
       // Arrow
       const ang = Math.atan2(p2.sy - p1.sy, p2.sx - p1.sx)
       const tr = cfg.nodeSize * p2.s + 2
-      const ax = p2.sx - Math.cos(ang) * tr; const ay = p2.sy - Math.sin(ang) * tr
+      const ax = p2.sx - Math.cos(ang) * tr
+      const ay = p2.sy - Math.sin(ang) * tr
       const az = Math.max(2, 4 * p2.s)
-      cx.beginPath(); cx.moveTo(ax, ay)
+      cx.beginPath()
+      cx.moveTo(ax, ay)
       cx.lineTo(ax - Math.cos(ang - 0.35) * az, ay - Math.sin(ang - 0.35) * az)
       cx.lineTo(ax - Math.cos(ang + 0.35) * az, ay - Math.sin(ang + 0.35) * az)
-      cx.closePath(); cx.fillStyle = `rgba(60,100,180,${fog * 0.45})`; cx.fill()
+      cx.closePath()
+      cx.fillStyle = `rgba(60,100,180,${fog * 0.45})`
+      cx.fill()
       // Edge label
       if (cfg.fontSize > 0 && Math.min(p1.s, p2.s) > 0.6) {
-        const mx = (p1.sx + p2.sx) / 2; const my = (p1.sy + p2.sy) / 2
+        const mx = (p1.sx + p2.sx) / 2
+        const my = (p1.sy + p2.sy) / 2
         const ef = Math.max(5, cfg.fontSize * Math.min(p1.s, p2.s) * 0.9)
-        cx.font = ef + 'px sans-serif'
+        cx.font = `${ef}px sans-serif`
         cx.fillStyle = `rgba(80,130,200,${fog * 0.35})`
-        cx.textAlign = 'center'; cx.textBaseline = 'middle'
+        cx.textAlign = 'center'
+        cx.textBaseline = 'middle'
         cx.fillText(l.relation, mx, my)
       }
     }
@@ -573,32 +806,43 @@ function draw() {
       const r = cfg.nodeSize * p.s
       const col = tc(n.type)
       const fog = Math.min(1, Math.max(0.15, 350 / p.d))
-      const isH = n === hovered; const isS = n === selected
+      const isH = n === hovered
+      const isS = n === selected
 
       // Vertical tether
       const pfloor = proj(n.px, FLOOR_Y, n.pz)
-      cx.beginPath(); cx.moveTo(p.sx, p.sy); cx.lineTo(pfloor.sx, pfloor.sy)
+      cx.beginPath()
+      cx.moveTo(p.sx, p.sy)
+      cx.lineTo(pfloor.sx, pfloor.sy)
       cx.strokeStyle = `rgba(60,100,180,${fog * 0.08})`
-      cx.lineWidth = 0.5; cx.setLineDash([2, 4]); cx.stroke(); cx.setLineDash([])
+      cx.lineWidth = 0.5
+      cx.setLineDash([2, 4])
+      cx.stroke()
+      cx.setLineDash([])
 
       drawNodeGlow(p.sx, p.sy, r, col, fog, isH || isS)
 
       if (isS) {
-        cx.beginPath(); cx.arc(p.sx, p.sy, r + 3 * p.s, 0, Math.PI * 2)
-        cx.strokeStyle = col + '88'; cx.lineWidth = 1.2; cx.stroke()
+        cx.beginPath()
+        cx.arc(p.sx, p.sy, r + 3 * p.s, 0, Math.PI * 2)
+        cx.strokeStyle = `${col}88`
+        cx.lineWidth = 1.2
+        cx.stroke()
       }
 
       if (cfg.fontSize > 0 && r > 2) {
         const lf = Math.max(6, cfg.fontSize * p.s * 0.95)
-        cx.font = 'bold ' + lf + 'px sans-serif'
+        cx.font = `bold ${lf}px sans-serif`
         cx.fillStyle = `rgba(190,210,255,${fog * 0.8})`
-        cx.textAlign = 'center'; cx.textBaseline = 'top'
+        cx.textAlign = 'center'
+        cx.textBaseline = 'top'
         cx.fillText(n.id, p.sx, p.sy + r + 2)
       }
     }
   }
 
-  if (cfg.flowOn) drawFlow()
+  if (cfg.flowOn)
+    drawFlow()
 
   // Hover tooltip
   if (hovered) {
@@ -607,11 +851,18 @@ function draw() {
     const txt = `${hovered.id} [${hovered.type}] w=${hovered.weight}`
     cx.font = '11px sans-serif'
     const tw = cx.measureText(txt).width
-    const bx = hp.sx - tw / 2 - 7; const by = hp.sy - hr - 26
+    const bx = hp.sx - tw / 2 - 7
+    const by = hp.sy - hr - 26
     cx.fillStyle = 'rgba(4,8,16,0.92)'
-    cx.strokeStyle = 'rgba(50,90,160,0.5)'; cx.lineWidth = 1
-    cx.beginPath(); cx.roundRect(bx, by, tw + 14, 22, 4); cx.fill(); cx.stroke()
-    cx.fillStyle = '#aaccee'; cx.textAlign = 'center'; cx.textBaseline = 'middle'
+    cx.strokeStyle = 'rgba(50,90,160,0.5)'
+    cx.lineWidth = 1
+    cx.beginPath()
+    cx.roundRect(bx, by, tw + 14, 22, 4)
+    cx.fill()
+    cx.stroke()
+    cx.fillStyle = '#aaccee'
+    cx.textAlign = 'center'
+    cx.textBaseline = 'middle'
     cx.fillText(txt, hp.sx, by + 11)
   }
 
@@ -620,9 +871,12 @@ function draw() {
 
 function loop() {
   simulate()
-  if (cfg.particlesOn) simParticles()
-  if (cfg.flowOn) simFlow()
-  if (cfg.planktonOn) simPlankton()
+  if (cfg.particlesOn)
+    simParticles()
+  if (cfg.flowOn)
+    simFlow()
+  if (cfg.planktonOn)
+    simPlankton()
   draw()
   animId = requestAnimationFrame(loop)
 }
@@ -635,17 +889,28 @@ function findNode(sx: number, sy: number): SeaNode | null {
     const p = proj(n.px, n.py, n.pz)
     const r = cfg.nodeSize * p.s + 5
     const d2 = (p.sx - sx) ** 2 + (p.sy - sy) ** 2
-    if (d2 < r * r && d2 < bestD) { best = n; bestD = d2 }
+    if (d2 < r * r && d2 < bestD) {
+      best = n
+      bestD = d2
+    }
   }
   return best
 }
 
 function selectNode(n: SeaNode) {
   selected = n
-  let outC = 0; let inC = 0; const rels: string[] = []
+  let outC = 0
+  let inC = 0
+  const rels: string[] = []
   for (const l of links) {
-    if (l.src === n) { outC++; rels.push(`${n.id} → ${l.relation} → ${l.tgt.id}`) }
-    if (l.tgt === n) { inC++; rels.push(`${l.src.id} → ${l.relation} → ${n.id}`) }
+    if (l.src === n) {
+      outC++
+      rels.push(`${n.id} → ${l.relation} → ${l.tgt.id}`)
+    }
+    if (l.tgt === n) {
+      inC++
+      rels.push(`${l.src.id} → ${l.relation} → ${n.id}`)
+    }
   }
   infoNode.value = { id: n.id, type: n.type, weight: n.weight, outCount: outC, inCount: inC, relations: rels }
   showInfo.value = true
@@ -687,9 +952,20 @@ function buildSeaData(quints: Quintuple[]) {
     const degree = degreeMap.get(id) || 1
     const weight = Math.round((degree / maxDegree) * WEIGHT_MAX * 10) / 10
     const n: SeaNode = {
-      id, type: info.type, weight: Math.max(0.3, weight),
-      px: 0, py: 0, pz: 0, vx: 0, vz: 0,
-      swayA: 0, swayF: 0, swayAmp: 0, swayAx: 0, swayFx: 0, swayAmpX: 0,
+      id,
+      type: info.type,
+      weight: Math.max(0.3, weight),
+      px: 0,
+      py: 0,
+      pz: 0,
+      vx: 0,
+      vz: 0,
+      swayA: 0,
+      swayF: 0,
+      swayAmp: 0,
+      swayAx: 0,
+      swayFx: 0,
+      swayAmpX: 0,
     }
     nodes.push(n)
     nm.set(id, n)
@@ -724,7 +1000,8 @@ async function loadData() {
       buildSeaData(quints)
     }
     else {
-      nodes = []; links = []
+      nodes = []
+      links = []
     }
     quintupleCount.value = quints.length
   }
@@ -750,7 +1027,8 @@ async function search() {
       buildSeaData(quints)
     }
     else {
-      nodes = []; links = []
+      nodes = []
+      links = []
     }
     quintupleCount.value = quints.length
   }
@@ -765,16 +1043,18 @@ async function search() {
 // ── Canvas setup ──
 function resize() {
   const cv = canvasRef.value
-  if (!cv) return
+  if (!cv)
+    return
   const container = cv.parentElement
-  if (!container) return
+  if (!container)
+    return
   dpr = devicePixelRatio || 1
   W = container.clientWidth
   H = container.clientHeight
   cv.width = W * dpr
   cv.height = H * dpr
-  cv.style.width = W + 'px'
-  cv.style.height = H + 'px'
+  cv.style.width = `${W}px`
+  cv.style.height = `${H}px`
   cx = cv.getContext('2d')
   if (cx)
     cx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -782,7 +1062,8 @@ function resize() {
 
 function setupEvents() {
   const cv = canvasRef.value
-  if (!cv) return
+  if (!cv)
+    return
 
   cv.addEventListener('contextmenu', e => e.preventDefault())
 
@@ -790,16 +1071,28 @@ function setupEvents() {
     e.preventDefault()
     const n = findNode(e.clientX - cv.getBoundingClientRect().left, e.clientY - cv.getBoundingClientRect().top)
     if (e.button === 1 || (e.button === 0 && e.shiftKey) || e.button === 2) {
-      panning = true; rsx = e.clientX; rsy = e.clientY; panOX = panX; panOY = panY
+      panning = true
+      rsx = e.clientX
+      rsy = e.clientY
+      panOX = panX
+      panOY = panY
       cv.style.cursor = 'move'
     }
     else if (n) {
-      dragging = n; dragMoved = false; prevMX = e.clientX; prevMY = e.clientY
+      dragging = n
+      dragMoved = false
+      prevMX = e.clientX
+      prevMY = e.clientY
       cv.style.cursor = 'grabbing'
     }
     else {
-      rotating = true; rsx = e.clientX; rsy = e.clientY; rst = camT; rsp = camP
-      selected = null; showInfo.value = false
+      rotating = true
+      rsx = e.clientX
+      rsy = e.clientY
+      rst = camT
+      rsp = camP
+      selected = null
+      showInfo.value = false
       cv.style.cursor = 'grabbing'
     }
   })
@@ -809,14 +1102,19 @@ function setupEvents() {
     if (dragging) {
       const dp = proj(dragging.px, dragging.py, dragging.pz)
       const scale = dp.d / 700
-      const dx = e.clientX - prevMX; const dy = e.clientY - prevMY
-      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true
-      const ct = Math.cos(camT); const st = Math.sin(camT)
-      const cp = Math.cos(camP); const sp = Math.sin(camP)
+      const dx = e.clientX - prevMX
+      const dy = e.clientY - prevMY
+      if (Math.abs(dx) + Math.abs(dy) > 2)
+        dragMoved = true
+      const ct = Math.cos(camT)
+      const st = Math.sin(camT)
+      const cp = Math.cos(camP)
+      const sp = Math.sin(camP)
       dragging.px += dx * scale * ct - dy * scale * sp * st
       dragging.pz += dx * scale * st + dy * scale * sp * ct
       dragging.py -= dy * scale * cp
-      prevMX = e.clientX; prevMY = e.clientY
+      prevMX = e.clientX
+      prevMY = e.clientY
     }
     else if (panning) {
       panX = panOX + (e.clientX - rsx)
@@ -833,12 +1131,21 @@ function setupEvents() {
   })
 
   cv.addEventListener('mouseup', () => {
-    if (dragging) { if (!dragMoved) selectNode(dragging); dragging = null }
-    rotating = false; panning = false; cv.style.cursor = 'grab'
+    if (dragging) {
+      if (!dragMoved)
+        selectNode(dragging)
+      dragging = null
+    }
+    rotating = false
+    panning = false
+    cv.style.cursor = 'grab'
   })
 
   cv.addEventListener('mouseleave', () => {
-    rotating = false; panning = false; dragging = null; hovered = null
+    rotating = false
+    panning = false
+    dragging = null
+    hovered = null
   })
 
   cv.addEventListener('wheel', (e) => {
@@ -855,8 +1162,19 @@ function setupEvents() {
       const rect = cv.getBoundingClientRect()
       const t0 = e.touches[0]!
       const n = findNode(t0.clientX - rect.left, t0.clientY - rect.top)
-      if (n) { dragging = n; dragMoved = false; prevMX = t0.clientX; prevMY = t0.clientY }
-      else { rotating = true; rsx = t0.clientX; rsy = t0.clientY; rst = camT; rsp = camP }
+      if (n) {
+        dragging = n
+        dragMoved = false
+        prevMX = t0.clientX
+        prevMY = t0.clientY
+      }
+      else {
+        rotating = true
+        rsx = t0.clientX
+        rsy = t0.clientY
+        rst = camT
+        rsp = camP
+      }
     }
     else if (e.touches.length === 2) {
       const dx = e.touches[1]!.clientX - e.touches[0]!.clientX
@@ -864,7 +1182,11 @@ function setupEvents() {
       td = Math.sqrt(dx * dx + dy * dy)
     }
     else if (e.touches.length === 3) {
-      tpan = true; rsx = e.touches[0]!.clientX; rsy = e.touches[0]!.clientY; panOX = panX; panOY = panY
+      tpan = true
+      rsx = e.touches[0]!.clientX
+      rsy = e.touches[0]!.clientY
+      panOX = panX
+      panOY = panY
     }
   }, { passive: true })
 
@@ -874,14 +1196,19 @@ function setupEvents() {
       const t0 = e.touches[0]!
       const dp = proj(dragging.px, dragging.py, dragging.pz)
       const scale = dp.d / 700
-      const dx = t0.clientX - prevMX; const dy = t0.clientY - prevMY
-      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true
-      const ct = Math.cos(camT); const st = Math.sin(camT)
-      const cp = Math.cos(camP); const sp = Math.sin(camP)
+      const dx = t0.clientX - prevMX
+      const dy = t0.clientY - prevMY
+      if (Math.abs(dx) + Math.abs(dy) > 2)
+        dragMoved = true
+      const ct = Math.cos(camT)
+      const st = Math.sin(camT)
+      const cp = Math.cos(camP)
+      const sp = Math.sin(camP)
       dragging.px += dx * scale * ct - dy * scale * sp * st
       dragging.pz += dx * scale * st + dy * scale * sp * ct
       dragging.py -= dy * scale * cp
-      prevMX = t0.clientX; prevMY = t0.clientY
+      prevMX = t0.clientX
+      prevMY = t0.clientY
     }
     else if (e.touches.length === 1 && rotating) {
       camT = rst - (e.touches[0]!.clientX - rsx) * 0.005
@@ -891,7 +1218,9 @@ function setupEvents() {
       const dx = e.touches[1]!.clientX - e.touches[0]!.clientX
       const dy = e.touches[1]!.clientY - e.touches[0]!.clientY
       const nd = Math.sqrt(dx * dx + dy * dy)
-      camD *= td / nd; camD = Math.max(80, Math.min(3000, camD)); td = nd
+      camD *= td / nd
+      camD = Math.max(80, Math.min(3000, camD))
+      td = nd
     }
     else if (e.touches.length === 3 && tpan) {
       panX = panOX + (e.touches[0]!.clientX - rsx)
@@ -900,8 +1229,11 @@ function setupEvents() {
   }, { passive: false })
 
   cv.addEventListener('touchend', () => {
-    if (dragging && !dragMoved) selectNode(dragging)
-    rotating = false; dragging = null; tpan = false
+    if (dragging && !dragMoved)
+      selectNode(dragging)
+    rotating = false
+    dragging = null
+    tpan = false
   })
 }
 
@@ -926,14 +1258,17 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (animId) cancelAnimationFrame(animId)
-  if (resizeObserver) resizeObserver.disconnect()
+  if (animId)
+    cancelAnimationFrame(animId)
+  if (resizeObserver)
+    resizeObserver.disconnect()
 })
 
 // Restart animation when data changes
 watch(loading, (isLoading) => {
   if (!isLoading && !errorMsg.value && nodes.length > 0) {
-    if (animId) cancelAnimationFrame(animId)
+    if (animId)
+      cancelAnimationFrame(animId)
     animId = requestAnimationFrame(loop)
   }
 })

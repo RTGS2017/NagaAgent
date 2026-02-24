@@ -240,6 +240,37 @@ class ScreenshotProvider:
         return mime_type
 
 
+def compress_screenshot_data_url(
+    data_url: str,
+    max_width: int = 1280,
+    quality: int = 80,
+) -> str:
+    """将截图 data_url 缩放到 max_width 并转为 JPEG，大幅减小体积。
+
+    典型场景：2560x1440 PNG (~8MB) → 1280x720 JPEG q80 (~200KB)，缩小 30-40 倍。
+    """
+    import io
+
+    from PIL import Image
+
+    _header, b64data = data_url.split(",", 1)
+    img_bytes = base64.b64decode(b64data)
+    img = Image.open(io.BytesIO(img_bytes))
+
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_size = (max_width, int(img.height * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
+
+
 _provider: ScreenshotProvider | None = None
 
 

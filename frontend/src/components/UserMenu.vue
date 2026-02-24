@@ -3,9 +3,9 @@ import { useToast } from 'primevue/usetoast'
 import { computed, inject, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { checkIn, getAffinity, getCheckInStatus, getCredits } from '@/api/business'
-import { isNagaLoggedIn, nagaUser, useAuth } from '@/composables/useAuth'
-import pointsIcon from '@/assets/icons/points.svg'
 import affinityIcon from '@/assets/icons/affinity.svg'
+import pointsIcon from '@/assets/icons/points.svg'
+import { isNagaLoggedIn, nagaUser, useAuth } from '@/composables/useAuth'
 
 const toast = useToast()
 const router = useRouter()
@@ -31,14 +31,23 @@ watch(isNagaLoggedIn, async (loggedIn) => {
 }, { immediate: true })
 
 async function handleCheckIn() {
-  if (checkedInToday.value || checkingIn.value) return
+  if (checkedInToday.value || checkingIn.value)
+    return
   checkingIn.value = true
   try {
     const res = await checkIn()
+    if (res.alreadyCheckedIn) {
+      checkedInToday.value = true
+      toast.add({ severity: 'info', summary: '今日已签到', detail: '明天再来吧', life: 3000 })
+      return
+    }
     checkedInToday.value = true
-    const detail = res.reward?.bonus
-      ? `好感度 +${res.reward.exp}，${res.reward.bonus}`
-      : `好感度 +${res.reward?.exp ?? 0}`
+    const earned = Number.parseFloat(res.affinityEarned) || 0
+    const credits = res.creditsEarned ?? 0
+    let detail = `熟悉度 +${earned}，积分 +${credits}`
+    if (res.bonusCredits > 0) {
+      detail += `（含连签奖励 +${res.bonusCredits}）`
+    }
     toast.add({ severity: 'success', summary: '签到成功', detail, life: 3000 })
     refreshUserStats()
   }
@@ -58,27 +67,43 @@ const popupLoading = ref(false)
 // 积分详情
 const creditsDetail = ref<{ available: number, total: number, used: number } | null>(null)
 
-// 好感度详情
+// 熟悉度详情
 const affinityDetail = ref<{
   level: number
-  currentExp: number
-  nextLevelExp: number
-  totalExp: number
-  title: string
-  consecutiveDays: number
+  affinityPoints: number
+  pointsNeeded: number
+  progressPct: number
+  streakDays: number
+  recoveryMode: boolean
+  nextLevel: number
 } | null>(null)
 
 async function openStatPopup(type: 'points' | 'affinity') {
   statPopup.value = type
   popupLoading.value = true
-  if (type === 'points') creditsDetail.value = null
+  if (type === 'points')
+    creditsDetail.value = null
   else affinityDetail.value = null
   try {
     if (type === 'points') {
-      creditsDetail.value = await getCredits()
+      const data = await getCredits()
+      creditsDetail.value = {
+        available: Number.parseFloat(data.creditsAvailable) || 0,
+        total: Number.parseFloat(data.creditsTotal) || 0,
+        used: Number.parseFloat(data.creditsUsed) || 0,
+      }
     }
     else {
-      affinityDetail.value = await getAffinity()
+      const data = await getAffinity()
+      affinityDetail.value = {
+        level: data.level ?? 0,
+        affinityPoints: Number.parseFloat(data.affinityPoints) || 0,
+        pointsNeeded: Number.parseFloat(data.pointsNeeded ?? '0') || 0,
+        progressPct: data.progressPct ?? 0,
+        streakDays: data.streakDays ?? 0,
+        recoveryMode: data.recoveryMode ?? false,
+        nextLevel: data.nextLevel ?? 0,
+      }
     }
   }
   catch { /* 静默，显示已有数据 */ }
@@ -92,8 +117,9 @@ function closeStatPopup() {
 }
 
 const affinityProgress = computed(() => {
-  if (!affinityDetail.value || !affinityDetail.value.nextLevelExp) return 0
-  return Math.min(100, Math.round((affinityDetail.value.currentExp / affinityDetail.value.nextLevelExp) * 100))
+  if (!affinityDetail.value)
+    return 0
+  return Math.min(100, Math.round(affinityDetail.value.progressPct))
 })
 
 function toggleMenu() {
@@ -153,15 +179,15 @@ const displayName = computed(() => {
       <!-- 积分 -->
       <button class="stat-item" @click="openStatPopup('points')">
         <img :src="pointsIcon" class="stat-icon" alt="积分">
-        <span class="stat-value">{{ nagaUser?.points ?? '--' }}</span>
+        <span class="stat-value">{{ nagaUser?.points != null && !isNaN(nagaUser.points) ? nagaUser.points : '--' }}</span>
         <span class="stat-tooltip">积分</span>
       </button>
 
-      <!-- 好感度 -->
+      <!-- 熟悉度 -->
       <button class="stat-item" @click="openStatPopup('affinity')">
-        <img :src="affinityIcon" class="stat-icon" alt="好感度">
-        <span class="stat-value">{{ nagaUser?.affinity ?? '--' }}</span>
-        <span class="stat-tooltip">好感度</span>
+        <img :src="affinityIcon" class="stat-icon" alt="熟悉度">
+        <span class="stat-value">{{ nagaUser?.affinityLevel != null ? `Lv.${nagaUser.affinityLevel}` : '--' }}</span>
+        <span class="stat-tooltip">熟悉度</span>
       </button>
     </template>
 
@@ -194,7 +220,7 @@ const displayName = computed(() => {
     </Transition>
   </div>
 
-  <!-- 积分/好感度 弹窗 -->
+  <!-- 积分/熟悉度 弹窗 -->
   <Teleport to="body">
     <Transition name="popup-fade">
       <div v-if="statPopup" class="stat-popup-overlay" @click.self="closeStatPopup">
@@ -205,7 +231,7 @@ const displayName = computed(() => {
           <div class="stat-popup-header">
             <img v-if="statPopup === 'points'" :src="pointsIcon" class="stat-popup-icon">
             <img v-else :src="affinityIcon" class="stat-popup-icon">
-            <h3 class="stat-popup-title">{{ statPopup === 'points' ? '积分' : '好感度' }}</h3>
+            <h3 class="stat-popup-title">{{ statPopup === 'points' ? '积分' : '熟悉度' }}</h3>
           </div>
 
           <!-- 积分详情 -->
@@ -224,25 +250,29 @@ const displayName = computed(() => {
             </div>
           </template>
 
-          <!-- 好感度详情 -->
+          <!-- 熟悉度详情 -->
           <template v-else>
             <div class="stat-popup-value">
-              <span v-if="affinityDetail">{{ affinityDetail.title }} Lv.{{ affinityDetail.level }}</span>
-              <span v-else>{{ nagaUser?.affinity ?? '--' }}</span>
+              <span v-if="affinityDetail">Lv.{{ affinityDetail.level }}</span>
+              <span v-else>{{ nagaUser?.affinityLevel != null ? `Lv.${nagaUser.affinityLevel}` : '--' }}</span>
             </div>
             <div class="stat-popup-desc">
               <template v-if="affinityDetail">
                 <div class="affinity-progress-wrap">
                   <div class="affinity-progress-bar">
-                    <div class="affinity-progress-fill" :style="{ width: affinityProgress + '%' }" />
+                    <div class="affinity-progress-fill" :style="{ width: `${affinityProgress}%` }" />
                   </div>
-                  <span class="affinity-progress-text">{{ affinityDetail.currentExp }} / {{ affinityDetail.nextLevelExp }}</span>
+                  <span class="affinity-progress-text">{{ affinityDetail.affinityPoints }} / {{ affinityDetail.pointsNeeded }}</span>
                 </div>
                 <div class="stat-detail-grid" style="margin-top: 12px;">
-                  <span class="stat-detail-label">累计好感</span>
-                  <span class="stat-detail-val">{{ affinityDetail.totalExp }}</span>
+                  <span class="stat-detail-label">下一等级</span>
+                  <span class="stat-detail-val">Lv.{{ affinityDetail.nextLevel }}</span>
                   <span class="stat-detail-label">连续签到</span>
-                  <span class="stat-detail-val">{{ affinityDetail.consecutiveDays }} 天</span>
+                  <span class="stat-detail-val">{{ affinityDetail.streakDays }} 天</span>
+                  <template v-if="affinityDetail.recoveryMode">
+                    <span class="stat-detail-label">状态</span>
+                    <span class="stat-detail-val" style="color: #e8a33d;">恢复中</span>
+                  </template>
                 </div>
               </template>
               <p v-else-if="popupLoading" class="stat-loading">加载中...</p>
@@ -298,7 +328,7 @@ const displayName = computed(() => {
   cursor: wait;
 }
 
-/* ── 积分 / 好感度 ── */
+/* ── 积分 / 熟悉度 ── */
 .stat-item {
   position: relative;
   display: flex;
@@ -594,7 +624,7 @@ const displayName = computed(() => {
   font-size: 0.8rem;
 }
 
-/* 好感度进度条 */
+/* 熟悉度进度条 */
 .affinity-progress-wrap {
   display: flex;
   align-items: center;

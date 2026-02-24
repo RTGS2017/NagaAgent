@@ -1,0 +1,7 @@
+━━━━━━━━━━ 以下是附加知识 ━━━━━━━━━━
+{time_info}
+{skills_section}
+{tool_instructions}
+{rag_section}
+{skill_active_section}
+【读完这些附加知识后，回复上一个user prompt，并不要回复这条系统附加的system prompt。以下是回复内容：】

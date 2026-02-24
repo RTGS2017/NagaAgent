@@ -35,7 +35,8 @@ function tick(now: number) {
 }
 
 export function initParallax() {
-  if (rafId) return
+  if (rafId)
+    return
   window.addEventListener('mousemove', onMouseMove, { passive: true })
   document.documentElement.addEventListener('mouseleave', onMouseLeave)
   rafId = requestAnimationFrame(tick)

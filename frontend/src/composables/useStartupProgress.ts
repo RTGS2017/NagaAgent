@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue'
+import API from '@/api/core'
 import { backendConnected } from '@/utils/config'
 import { preloadAllViews } from '@/utils/viewPreloader'
-import API from '@/api/core'
 
 /** 将 promise 限制在 ms 毫秒内完成，超时则 resolve(undefined) 而非 reject */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | undefined> {
@@ -85,7 +85,8 @@ export function useStartupProgress() {
 
   // 轮询后端健康检查，确保不会卡在 50%
   function startHealthPolling() {
-    if (healthPollTimer) return
+    if (healthPollTimer)
+      return
     let pollCount = 0
     console.log('[Startup] 开始轮询后端健康状态...')
     healthPollTimer = setInterval(async () => {
@@ -118,7 +119,8 @@ export function useStartupProgress() {
 
   async function runPostConnect() {
     // 幂等守卫：防止 watcher + 健康轮询重复触发
-    if (postConnectStarted) return
+    if (postConnectStarted)
+      return
     postConnectStarted = true
 
     // 全局安全超时：无论什么原因，15 秒后强制完成启动
@@ -197,14 +199,16 @@ export function useStartupProgress() {
 
     // 监听后端连接（由 config.ts connectBackend 或健康轮询触发）
     const stopWatch = watch(backendConnected, (connected) => {
-      if (!connected) return
+      if (!connected)
+        return
       stopWatch()
       runPostConnect()
     })
   }
 
   function cleanup() {
-    if (rafId) cancelAnimationFrame(rafId)
+    if (rafId)
+      cancelAnimationFrame(rafId)
     unsubProgress?.()
     stopHealthPolling()
   }

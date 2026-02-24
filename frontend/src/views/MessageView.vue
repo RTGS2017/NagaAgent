@@ -1,14 +1,14 @@
 <script lang="ts">
 import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { ACCESS_TOKEN, authExpired } from '@/api'
 import API from '@/api/core'
-import { authExpired } from '@/api'
 import BoxContainer from '@/components/BoxContainer.vue'
 import MessageItem from '@/components/MessageItem.vue'
 import { startToolPolling, stopToolPolling, toolMessage } from '@/composables/useToolStatus'
 import { CONFIG } from '@/utils/config'
 import { live2dState, setEmotion } from '@/utils/live2dController'
-import { CURRENT_SESSION_ID, IS_TEMPORARY_SESSION, formatRelativeTime, loadCurrentSession, MESSAGES, newSession, switchSession } from '@/utils/session'
+import { CURRENT_SESSION_ID, formatRelativeTime, IS_TEMPORARY_SESSION, loadCurrentSession, MESSAGES, newSession, switchSession } from '@/utils/session'
 import { isPlaying, speak } from '@/utils/tts'
 
 export function chatStream(content: string, options?: { skill?: string, images?: string[] }) {
@@ -36,9 +36,11 @@ export function chatStream(content: string, options?: { skill?: string, images?:
     function parseEmotionFromText(text: string): 'normal' | 'positive' | 'negative' | 'surprise' {
       if (text.includes('【正面情感】')) {
         return 'positive'
-      } else if (text.includes('【负面情感】')) {
+      }
+      else if (text.includes('【负面情感】')) {
         return 'negative'
-      } else if (text.includes('【惊讶情感】')) {
+      }
+      else if (text.includes('【惊讶情感】')) {
         return 'surprise'
       }
       return 'normal'
@@ -100,8 +102,14 @@ export function chatStream(content: string, options?: { skill?: string, images?:
         // 新一轮开始，更新 content 起始位置
         roundContentStart = message.content.length
       }
+      else if (chunk.type === 'token_refreshed') {
+        // 后端刷新了 token，同步到前端（防止后续轮询请求用旧 token 覆盖）
+        if (chunk.text) {
+          ACCESS_TOKEN.value = chunk.text
+        }
+      }
       else if (chunk.type === 'auth_expired') {
-        // LLM 认证失败，触发重新登录
+        // 后端 LLM 认证失败且刷新也失败，触发重新登录
         authExpired.value = true
         message.content += chunk.text || '登录已过期，请重新登录'
       }
@@ -109,12 +117,17 @@ export function chatStream(content: string, options?: { skill?: string, images?:
         // 上下文压缩进度提示（覆盖式显示，compress_end 后非阻塞延迟清空）
         message.content = `> ${chunk.text}\n\n`
         if (chunk.type === 'compress_end') {
-          compressTimer = setTimeout(() => { message.content = '' }, 1200)
+          compressTimer = setTimeout(() => {
+            message.content = ''
+          }, 1200)
         }
       }
       else if (chunk.type === 'compress_info') {
         // 运行时压缩完成，在当前 assistant 消息前插入 info 标记
-        if (compressTimer) { clearTimeout(compressTimer); compressTimer = undefined }
+        if (compressTimer) {
+          clearTimeout(compressTimer)
+          compressTimer = undefined
+        }
         message.content = ''
         const idx = MESSAGES.value.indexOf(message)
         if (idx > 0) {
@@ -177,7 +190,8 @@ onUnmounted(() => {
 })
 useEventListener('token', scrollToBottom)
 onKeyStroke('Enter', (e) => {
-  if (e.isComposing) return
+  if (e.isComposing)
+    return
   sendMessage()
 })
 
@@ -339,8 +353,6 @@ function stopVoiceInput() {
   }
   isRecording.value = false
 }
-
-
 </script>
 
 <template>
@@ -429,7 +441,7 @@ function stopVoiceInput() {
         >
         <button
           class="input-icon-btn shrink-0"
-          :class="{ 'recording': isRecording }"
+          :class="{ recording: isRecording }"
           :title="isRecording ? '停止录音' : '语音输入'"
           @click="toggleVoiceInput"
         >

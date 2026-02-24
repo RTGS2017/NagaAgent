@@ -12,7 +12,7 @@ export const audioSettings = useStorage('naga-audio-settings', {
 })
 
 // ─── 静态资源文件列表（构建时收集） ─────────────────────
-const AUDIO_EXTENSIONS = /\.(mp3|m4a|ogg|wav|flac|aac|webm)$/i
+const AUDIO_EXTENSIONS = /\.(?:mp3|m4a|ogg|wav|flac|aac|webm)$/i
 const startVoiceGlob = import.meta.glob('/public/voices/start/**/*.*', { query: '?url', import: 'default' })
 const effectGlob = import.meta.glob('/public/voices/effect/*.*', { query: '?url', import: 'default' })
 
@@ -23,12 +23,15 @@ function parseStartVoices() {
     // key: /public/voices/start/Default/音频3.mp3
     const rel = key.replace('/public/voices/start/', '')
     const slashIdx = rel.indexOf('/')
-    if (slashIdx === -1) continue
+    if (slashIdx === -1)
+      continue
     const folder = rel.substring(0, slashIdx)
     const file = rel.substring(slashIdx + 1)
     // 过滤非音频文件（.DS_Store 等）
-    if (!AUDIO_EXTENSIONS.test(file)) continue
-    if (!map[folder]) map[folder] = []
+    if (!AUDIO_EXTENSIONS.test(file))
+      continue
+    if (!map[folder])
+      map[folder] = []
     map[folder].push(file)
   }
   return map
@@ -39,7 +42,8 @@ function parseEffectFiles() {
   for (const key of Object.keys(effectGlob)) {
     // key: /public/voices/effect/做出选择.ogg
     const file = key.replace('/public/voices/effect/', '')
-    if (!AUDIO_EXTENSIONS.test(file)) continue
+    if (!AUDIO_EXTENSIONS.test(file))
+      continue
     files.push(file)
   }
   return files
@@ -51,13 +55,20 @@ export const effectFileOptions = parseEffectFiles()
 
 // ─── BGM 播放器（单例） ──────────────────────────────
 // 当音律坊注册为委托时，BGM 由音律坊统一播放，避免重复
-type BgmDelegate = { playFile: (file: string) => void; pause: () => void }
+interface BgmDelegate { playFile: (file: string) => void, pause: () => void }
 let bgmDelegate: BgmDelegate | null = null
 let bgmAudio: HTMLAudioElement | null = null
 let bgmCurrentFile = ''
 
 export function registerBgmDelegate(d: BgmDelegate) {
   bgmDelegate = d
+  // 委托注册后停掉兜底 BGM，避免与音乐盒双轨叠加
+  if (bgmAudio) {
+    bgmAudio.pause()
+    bgmAudio.src = ''
+    bgmAudio = null
+    bgmCurrentFile = ''
+  }
 }
 
 export function unregisterBgmDelegate() {
@@ -74,7 +85,8 @@ function fadeTo(audio: HTMLAudioElement, targetVolume: number, duration = 800): 
       audio.volume = startVolume + (targetVolume - startVolume) * progress
       if (progress < 1) {
         requestAnimationFrame(step)
-      } else {
+      }
+      else {
         resolve()
       }
     }
@@ -83,12 +95,14 @@ function fadeTo(audio: HTMLAudioElement, targetVolume: number, duration = 800): 
 }
 
 export async function playBgm(file: string) {
-  if (!audioSettings.value.bgmEnabled) return
+  if (!audioSettings.value.bgmEnabled)
+    return
   if (bgmDelegate) {
     bgmDelegate.playFile(file)
     return
   }
-  if (bgmAudio && bgmCurrentFile === file) return
+  if (bgmAudio && bgmCurrentFile === file)
+    return
 
   // 淡出旧 BGM（无委托时的兜底逻辑）
   if (bgmAudio) {
@@ -107,7 +121,8 @@ export async function playBgm(file: string) {
   try {
     await audio.play()
     await fadeTo(audio, audioSettings.value.bgmVolume, 800)
-  } catch {
+  }
+  catch {
     // autoplay policy blocked — ignore
   }
 }
@@ -117,10 +132,12 @@ export function stopBgm() {
     bgmDelegate.pause()
     return
   }
-  if (!bgmAudio) return
+  if (!bgmAudio)
+    return
   fadeTo(bgmAudio, 0, 600).then(() => {
     bgmAudio?.pause()
-    if (bgmAudio) bgmAudio.src = ''
+    if (bgmAudio)
+      bgmAudio.src = ''
     bgmAudio = null
     bgmCurrentFile = ''
   })
@@ -146,7 +163,8 @@ export function playWakeVoice() {
 
 // ─── 点击音效 ──────────────────────────────────────
 export function playClickEffect() {
-  if (!audioSettings.value.effectEnabled) return
+  if (!audioSettings.value.effectEnabled)
+    return
   const file = audioSettings.value.clickEffect
   const audio = new Audio(`/voices/effect/${encodeURIComponent(file)}`)
   audio.volume = audioSettings.value.effectVolume
@@ -157,13 +175,15 @@ export function playClickEffect() {
 
 // ─── 响应设置变化 ──────────────────────────────────
 watch(() => audioSettings.value.bgmVolume, (vol) => {
-  if (bgmAudio) bgmAudio.volume = vol
+  if (bgmAudio)
+    bgmAudio.volume = vol
 })
 
 watch(() => audioSettings.value.bgmEnabled, (enabled) => {
   if (!enabled) {
     stopBgm()
-  } else if (bgmCurrentFile === '' ) {
+  }
+  else if (bgmCurrentFile === '') {
     playBgm('8.日常的小曲.mp3')
   }
 })

@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   dismiss: []
-  'title-done': []
+  titleDone: []
 }>()
 
 // ─── 标题阶段 ───────────────────────────────
@@ -32,7 +32,7 @@ function onTitleAnimEnd() {
 function onOverlayAfterLeave() {
   // 黑色遮罩完全淡出 → 标题阶段结束，清理粒子
   stopParticles()
-  emit('title-done')
+  emit('titleDone')
 }
 
 // ─── 标题粒子效果（从下往上飘） ──────────────────
@@ -47,16 +47,18 @@ interface Particle {
   size: number
   alpha: number
   maxAlpha: number
-  life: number    // 剩余帧
+  life: number // 剩余帧
   maxLife: number
 }
 
 function initParticles() {
   const canvas = particleCanvas.value
-  if (!canvas) return
+  if (!canvas)
+    return
 
   const ctx = canvas.getContext('2d')!
-  if (!ctx) return
+  if (!ctx)
+    return
 
   const dpr = window.devicePixelRatio || 1
   canvas.width = canvas.clientWidth * dpr
@@ -73,7 +75,7 @@ function initParticles() {
       x: Math.random() * w,
       y: h + Math.random() * 20, // 从底部稍下方生成
       vy: -(0.3 + Math.random() * 0.8), // 上升速度
-      vx: (Math.random() - 0.5) * 0.3,  // 微小水平漂移
+      vx: (Math.random() - 0.5) * 0.3, // 微小水平漂移
       size: 1 + Math.random() * 2.5,
       alpha: 0,
       maxAlpha: 0.2 + Math.random() * 0.5,
@@ -176,8 +178,10 @@ const displayProgress = computed(() => Math.min(100, Math.round(props.progress))
     <!-- 底部进度区域 -->
     <div class="absolute bottom-12 left-1/2 -translate-x-1/2 w-60% flex flex-col items-center gap-2">
       <!-- 阶段文字 + 百分比 -->
-      <div class="flex justify-between w-full px-1 text-xs tracking-widest"
-           style="color: rgba(212, 175, 55, 0.7); font-family: 'Segoe UI', sans-serif;">
+      <div
+        class="flex justify-between w-full px-1 text-xs tracking-widest"
+        style="color: rgba(212, 175, 55, 0.7); font-family: 'Segoe UI', sans-serif;"
+      >
         <span>{{ phase }}</span>
         <span>{{ displayProgress }}%</span>
       </div>

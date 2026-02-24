@@ -17,7 +17,7 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .config import hot_reload_config, add_config_listener, detect_file_encoding, get_config_path
+from .config import hot_reload_config, add_config_listener, detect_file_encoding, get_config_path, VERSION
 import json5  # 支持带注释的JSON解析
 
 class ConfigManager:
@@ -261,7 +261,7 @@ class ConfigManager:
             return data
         print("获取配置快照失败，返回兜底配置")
         return {
-            "system": {"version": "5.0.0"},
+            "system": {"version": VERSION},
             "api": {"api_key": ""},
             "api_server": {"enabled": True},
             "grag": {"enabled": False},

@@ -12,6 +12,7 @@ export const ACCESS_TOKEN = useStorage('naga-access-token', '')
 export const authExpired = ref(false)
 
 /** 重新登录期间抑制 authExpired 触发（避免清空 token 后在途请求再次触发弹窗） */
+// eslint-disable-next-line import/no-mutable-exports
 export let suppressAuthExpired = false
 export function setAuthExpiredSuppressed(value: boolean) {
   suppressAuthExpired = value

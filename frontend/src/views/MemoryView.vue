@@ -7,8 +7,8 @@ import API from '@/api/core'
 import BoxContainer from '@/components/BoxContainer.vue'
 import ConfigGroup from '@/components/ConfigGroup.vue'
 import ConfigItem from '@/components/ConfigItem.vue'
-import { CONFIG } from '@/utils/config'
 import { isNagaLoggedIn, nagaUser } from '@/composables/useAuth'
+import { CONFIG } from '@/utils/config'
 
 const accordionValue = useStorage('accordion-memory', ['grag'])
 

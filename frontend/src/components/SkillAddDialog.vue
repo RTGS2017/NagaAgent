@@ -11,15 +11,18 @@ const selectedFile = ref<File | null>(null)
 const errorMsg = ref('')
 
 const mode = computed<'text' | 'file' | null>(() => {
-  if (textContent.value.trim()) return 'text'
-  if (selectedFile.value) return 'file'
+  if (textContent.value.trim())
+    return 'text'
+  if (selectedFile.value)
+    return 'file'
   return null
 })
 
 const canSubmit = computed(() => name.value.trim() && mode.value)
 
 watch(() => textContent.value, (v) => {
-  if (v.trim()) selectedFile.value = null
+  if (v.trim())
+    selectedFile.value = null
 })
 
 function onFileSelect(e: Event) {

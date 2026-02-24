@@ -1,6 +1,5 @@
 <script lang="ts">
 // 模块级标记，HMR 重挂载时不会重置
-let _splashDismissed = false
 </script>
 
 <script setup lang="ts">
@@ -9,25 +8,27 @@ import { useWindowSize } from '@vueuse/core'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
+import { ACCESS_TOKEN, authExpired, setAuthExpiredSuppressed } from '@/api'
+import BackendErrorDialog from '@/components/BackendErrorDialog.vue'
 import Live2dModel from '@/components/Live2dModel.vue'
 import LoginDialog from '@/components/LoginDialog.vue'
-import BackendErrorDialog from '@/components/BackendErrorDialog.vue'
 import SplashScreen from '@/components/SplashScreen.vue'
 import TitleBar from '@/components/TitleBar.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
-import FloatingView from '@/views/FloatingView.vue'
+import WindowResizeHandles from '@/components/WindowResizeHandles.vue'
+import { playBgm, playClickEffect, stopBgm } from '@/composables/useAudio'
 import { isNagaLoggedIn, nagaUser, sessionRestored, useAuth } from '@/composables/useAuth'
+import { useElectron } from '@/composables/useElectron'
+import { useMusicPlayer } from '@/composables/useMusicPlayer'
 import { useParallax } from '@/composables/useParallax'
 import { useStartupProgress } from '@/composables/useStartupProgress'
 import { checkForUpdate, showUpdateDialog, updateInfo } from '@/composables/useVersionCheck'
-import { CONFIG, backendConnected } from '@/utils/config'
-import { ACCESS_TOKEN, authExpired, setAuthExpiredSuppressed } from '@/api'
+import { backendConnected, CONFIG } from '@/utils/config'
 import { clearExpression, setExpression } from '@/utils/live2dController'
-import { initParallax, destroyParallax } from '@/utils/parallax'
-import { playBgm, playClickEffect, stopBgm } from '@/composables/useAudio'
-import { useMusicPlayer } from '@/composables/useMusicPlayer'
-import { useElectron } from '@/composables/useElectron'
-import WindowResizeHandles from '@/components/WindowResizeHandles.vue'
+import { destroyParallax, initParallax } from '@/utils/parallax'
+import FloatingView from '@/views/FloatingView.vue'
+
+let _splashDismissed = false
 
 const isElectron = !!window.electronAPI
 const { isMaximized } = useElectron()
@@ -53,7 +54,7 @@ let unsubStateChange: (() => void) | undefined
 const { tx: lightTx, ty: lightTy } = useParallax({ translateX: 40, translateY: 30, invert: true })
 
 // ─── 启动界面状态 ───────────────────────────
-const { progress, phase, isReady, stallHint, startProgress, notifyModelReady, cleanup } = useStartupProgress()
+const { progress, phase, isReady: _isReady, stallHint, startProgress, notifyModelReady, cleanup } = useStartupProgress()
 const splashVisible = ref(!_splashDismissed)
 const showMainContent = ref(_splashDismissed)
 const modelReady = ref(false)
@@ -63,7 +64,8 @@ const titlePhaseDone = ref(false)
 watch(isFloatingMode, (floating) => {
   if (floating) {
     stopBgm()
-  } else if (showMainContent.value) {
+  }
+  else if (showMainContent.value) {
     playBgm('8.日常的小曲.mp3')
   }
 })

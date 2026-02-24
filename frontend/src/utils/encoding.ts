@@ -1,7 +1,7 @@
 export const decoder = new TextDecoder('utf-8')
 
 export interface StreamChunk {
-  type: 'content' | 'reasoning' | 'content_clean' | 'round_start' | 'tool_calls' | 'tool_results' | 'round_end' | 'auth_expired' | 'compress_start' | 'compress_progress' | 'compress_end' | 'compress_info'
+  type: 'content' | 'reasoning' | 'content_clean' | 'round_start' | 'tool_calls' | 'tool_results' | 'round_end' | 'auth_expired' | 'token_refreshed' | 'compress_start' | 'compress_progress' | 'compress_end' | 'compress_info'
   text?: string
   round?: number
   calls?: Array<{ agentType: string, service_name?: string, tool_name?: string, message?: string }>

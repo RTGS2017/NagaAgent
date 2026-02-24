@@ -66,7 +66,7 @@ export function stop() {
     clearTimeout(maxDurationTimer)
     maxDurationTimer = null
   }
-  
+
   if (audio.value) {
     audio.value.pause()
     audio.value = null

@@ -4,7 +4,7 @@ import { useTemplateRef } from 'vue'
 import back from '@/assets/icons/back.png'
 import { useParallax } from '@/composables/useParallax'
 
-const props = withDefaults(defineProps<{ parallax?: boolean, boxClass?: string, noScroll?: boolean }>(), { parallax: true, boxClass: 'w-3/5', noScroll: false })
+const _props = withDefaults(defineProps<{ parallax?: boolean, boxClass?: string, noScroll?: boolean }>(), { parallax: true, boxClass: 'w-3/5', noScroll: false })
 const { transform: boxTransform } = useParallax({ rotateX: 3, rotateY: 3, translateX: 12, translateY: 8, invertRotate: true })
 
 const scrollPanelRef = useTemplateRef<{

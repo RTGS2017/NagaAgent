@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, h } from 'vue'
+import { h, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -14,16 +14,16 @@ const tabs = [
   { id: 'recharge', label: '氪金' },
 ] as const
 
-const svgIcon = (...paths: string[]) => h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'tab-icon-svg' }, paths.map(d => h('path', { d })))
+const svgIcon = (...paths: string[]) => h('svg', { 'viewBox': '0 0 24 24', 'fill': 'none', 'stroke': 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'class': 'tab-icon-svg' }, paths.map(d => h('path', { d })))
 
 const tabIcons: Record<string, { render: () => ReturnType<typeof h> }> = {
-  album: { render: () => svgIcon('M9 18V5l12-2v13', 'M9 18a3 3 0 1 0 6 0 9 9 0 0 0 6 0') },
-  mcp: { render: () => svgIcon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z') },
-  skill: { render: () => svgIcon('M13 2L3 14h9l-1 8 10-12h-9l1-8z') },
-  skin: { render: () => svgIcon('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2', 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z') },
+  'album': { render: () => svgIcon('M9 18V5l12-2v13', 'M9 18a3 3 0 1 0 6 0 9 9 0 0 0 6 0') },
+  'mcp': { render: () => svgIcon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z') },
+  'skill': { render: () => svgIcon('M13 2L3 14h9l-1 8 10-12h-9l1-8z') },
+  'skin': { render: () => svgIcon('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2', 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z') },
   'memory-skin': { render: () => svgIcon('M2 10c3 0 5 2 8 0s5-2 8 0', 'M2 14c3 0 5 2 8 0s5-2 8 0') },
   'memory-trade': { render: () => svgIcon('M7 16V4m0 0L3 8m4-4l4 4', 'M17 8v12m0 0l4-4m-4 4l-4-4') },
-  recharge: { render: () => svgIcon('M12 2L3 9l4 12h10l4-12-9-7z') },
+  'recharge': { render: () => svgIcon('M12 2L3 9l4 12h10l4-12-9-7z') },
 }
 
 type TabId = typeof tabs[number]['id']
@@ -46,7 +46,8 @@ let dragStartX = 0
 let dragScrollLeft = 0
 
 function onPointerMove(e: MouseEvent) {
-  if (!dragActive || !albumSection.value) return
+  if (!dragActive || !albumSection.value)
+    return
   const x = e.pageX - albumSection.value.getBoundingClientRect().left
   const delta = x - dragStartX
   albumSection.value.scrollLeft = dragScrollLeft - delta
@@ -56,17 +57,20 @@ function onPointerUp() {
   dragActive = false
   document.removeEventListener('mousemove', onPointerMove)
   document.removeEventListener('mouseup', onPointerUp)
-  if (albumSection.value) albumSection.value.style.cursor = 'grab'
+  if (albumSection.value)
+    albumSection.value.style.cursor = 'grab'
   document.body.style.cursor = ''
 }
 
 function onWheel(e: WheelEvent) {
-  if (!albumSection.value) return
+  if (!albumSection.value)
+    return
   albumSection.value.scrollLeft += e.deltaY
 }
 
 function onDragStart(e: MouseEvent) {
-  if (!albumSection.value) return
+  if (!albumSection.value)
+    return
   dragActive = true
   dragStartX = e.pageX - albumSection.value.getBoundingClientRect().left
   dragScrollLeft = albumSection.value.scrollLeft
@@ -75,7 +79,6 @@ function onDragStart(e: MouseEvent) {
   document.addEventListener('mousemove', onPointerMove)
   document.addEventListener('mouseup', onPointerUp)
 }
-
 </script>
 
 <template>

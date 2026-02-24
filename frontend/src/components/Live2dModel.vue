@@ -6,15 +6,13 @@ declare global {
     PIXI: typeof PIXI
   }
 }
-window.PIXI = PIXI
 </script>
 
 <script setup lang="ts">
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { destroyController, initController, startTracking, stopTracking, trackingCalibration, updateTracking } from '@/utils/live2dController'
 import { CONFIG } from '@/utils/config'
-
+import { destroyController, initController, startTracking, stopTracking, trackingCalibration, updateTracking } from '@/utils/live2dController'
 const { source, width, height, x, y, scale, ssaa } = defineProps<{
   source: string
   width: number
@@ -26,8 +24,10 @@ const { source, width, height, x, y, scale, ssaa } = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'model-ready': [pos: { faceX: number, faceY: number }]
+  modelReady: [pos: { faceX: number, faceY: number }]
 }>()
+
+window.PIXI = PIXI
 
 let app: PIXI.Application
 
@@ -51,9 +51,12 @@ const markerPos = ref({ left: '0px', top: '0px' })
 const INTERACTIVE_SELECTOR = 'button, input, textarea, select, a, [contenteditable], label, [role="button"]'
 
 function isInteractiveTarget(el: EventTarget | null): boolean {
-  if (!(el instanceof Element)) return false
-  if (el.closest(INTERACTIVE_SELECTOR)) return true
-  if (el.closest('.box, .session-panel, .p-scrollpanel')) return true
+  if (!(el instanceof Element))
+    return false
+  if (el.closest(INTERACTIVE_SELECTOR))
+    return true
+  if (el.closest('.box, .session-panel, .p-scrollpanel'))
+    return true
   return false
 }
 
@@ -65,7 +68,8 @@ function clearHoldTimer() {
 }
 
 function onWindowPointerDown(e: PointerEvent) {
-  if (isInteractiveTarget(e.target)) return
+  if (isInteractiveTarget(e.target))
+    return
   isDragging = true
   trackingActive = false
   clearHoldTimer()
@@ -87,12 +91,15 @@ function onWindowPointerDown(e: PointerEvent) {
 }
 
 function onWindowPointerMove(e: PointerEvent) {
-  if (!isDragging) return
-  if (trackingActive) updateTrackingFromPointer(e)
+  if (!isDragging)
+    return
+  if (trackingActive)
+    updateTrackingFromPointer(e)
 }
 
 function onWindowPointerUp(_e: PointerEvent) {
-  if (!isDragging) return
+  if (!isDragging)
+    return
   clearHoldTimer()
   isDragging = false
   if (trackingActive) {
@@ -157,7 +164,7 @@ onMounted(async () => {
         modelFaceScreenX = (model.x + model.rawWidth * s * 0.5) / ssaa
         modelFaceScreenY = (model.y + model.rawHeight * s * faceY) / ssaa
         markerPos.value = { left: `${modelFaceScreenX}px`, top: `${modelFaceScreenY}px` }
-        emit('model-ready', { faceX: modelFaceScreenX, faceY: modelFaceScreenY })
+        emit('modelReady', { faceX: modelFaceScreenX, faceY: modelFaceScreenY })
       }
       // 响应 face_y_ratio 配置变化（设置界面滑块调节时实时更新）
       const centerHandle = watch(
@@ -168,7 +175,7 @@ onMounted(async () => {
 
       model.autoInteract = false
       app.stage.addChild(model)
-      initController(rawModel, source)
+      await initController(rawModel, source)
 
       onCleanUp(() => {
         destroyController()
@@ -188,7 +195,8 @@ onUnmounted(() => {
   window.removeEventListener('pointerdown', onWindowPointerDown)
   window.removeEventListener('pointermove', onWindowPointerMove)
   window.removeEventListener('pointerup', onWindowPointerUp)
-  if (app) app.destroy()
+  if (app)
+    app.destroy()
 })
 </script>
 

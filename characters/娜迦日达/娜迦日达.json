@@ -1,0 +1,6 @@
+{
+  "ai_name": "娜迦日达",
+  "user_name": "用户",
+  "live2d_model": "NagaTest2/NagaTest2.model3.json",
+  "prompt_file": "conversation_style_prompt.txt"
+}

@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { useStorage } from '@vueuse/core'
 import { Accordion, Button, Divider, InputNumber, InputText, Select, Slider, Textarea, ToggleSwitch } from 'primevue'
-import { ref, onMounted, useTemplateRef } from 'vue'
+import { useToast } from 'primevue/usetoast'
+import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import BoxContainer from '@/components/BoxContainer.vue'
 import ConfigGroup from '@/components/ConfigGroup.vue'
 import ConfigItem from '@/components/ConfigItem.vue'
+import { audioSettings, effectFileOptions, wakeVoiceOptions } from '@/composables/useAudio'
 import { nagaUser } from '@/composables/useAuth'
-import { audioSettings, wakeVoiceOptions, effectFileOptions } from '@/composables/useAudio'
 import { CONFIG, DEFAULT_CONFIG, DEFAULT_MODEL, MODELS, SYSTEM_PROMPT } from '@/utils/config'
 import { trackingCalibration } from '@/utils/live2dController'
+
+// 当 active_character 有值时，AI昵称/Live2D模型/系统提示词由角色文件管理，不可手动修改
+const characterLocked = computed(() => !!CONFIG.value.system.active_character)
+const characterLockedHint = computed(() =>
+  characterLocked.value
+    ? `由角色「${CONFIG.value.system.active_character}.json」管理，不可直接修改`
+    : undefined,
+)
 
 const selectedModel = ref(Object.entries(MODELS).find(([_, model]) => {
   return model.source === CONFIG.value.web_live2d.model.source
@@ -27,13 +36,28 @@ const ssaaInputRef = useTemplateRef<{
 }>('ssaaInputRef')
 
 function recoverUiConfig() {
-  CONFIG.value.system.ai_name = DEFAULT_CONFIG.system.ai_name
+  if (!characterLocked.value) {
+    CONFIG.value.system.ai_name = DEFAULT_CONFIG.system.ai_name
+    modelSelectRef.value?.updateModel(null, DEFAULT_MODEL)
+  }
   CONFIG.value.ui.user_name = DEFAULT_CONFIG.ui.user_name
-  modelSelectRef.value?.updateModel(null, DEFAULT_MODEL)
   ssaaInputRef.value?.updateModel(null, DEFAULT_CONFIG.web_live2d.ssaa)
 }
 
 const accordionValue = useStorage('accordion-config', [])
+
+const toast = useToast()
+
+let _previousUserName = CONFIG.value.ui.user_name
+watch(() => CONFIG.value.ui.user_name, (newVal) => {
+  if (newVal.includes('柏斯阔落')) {
+    toast.add({ severity: 'info', summary: '系统提示', detail: '此名词不可用', life: 3000 })
+    CONFIG.value.ui.user_name = '用户'
+  }
+  else {
+    _previousUserName = newVal
+  }
+})
 
 // 开机自启动（仅 Electron）
 const autoLaunchEnabled = ref(false)
@@ -76,21 +100,10 @@ function toggleFloatingMode(enabled: boolean) {
           </div>
         </template>
         <div class="grid gap-4">
-          <ConfigItem name="AI 昵称" description="聊天窗口显示的 AI 昵称">
-            <InputText v-model="CONFIG.system.ai_name" />
-          </ConfigItem>
           <ConfigItem name="用户昵称" description="聊天窗口显示的用户昵称">
             <InputText v-model="CONFIG.ui.user_name" />
           </ConfigItem>
           <Divider class="m-1!" />
-          <ConfigItem name="Live2D 模型">
-            <Select
-              ref="modelSelectRef"
-              :options="Object.keys(MODELS)"
-              :model-value="selectedModel"
-              @change="(event) => onModelChange(event.value)"
-            />
-          </ConfigItem>
           <ConfigItem name="Live2D 模型位置">
             <div class="flex flex-col items-center justify-evenly">
               <label v-for="direction in ['x', 'y'] as const" :key="direction" class="w-full flex items-center">
@@ -144,6 +157,31 @@ function toggleFloatingMode(enabled: boolean) {
           </ConfigItem>
         </div>
       </ConfigGroup>
+      <ConfigGroup value="character" header="角色档案">
+        <div class="grid gap-4">
+          <ConfigItem name="角色名称" :description="characterLockedHint ?? '聊天窗口显示的 AI 昵称'">
+            <InputText v-model="CONFIG.system.ai_name" :disabled="characterLocked" />
+          </ConfigItem>
+          <ConfigItem name="L2D 模型" :description="characterLocked ? characterLockedHint : undefined">
+            <Select
+              ref="modelSelectRef"
+              :options="Object.keys(MODELS)"
+              :model-value="selectedModel"
+              :disabled="characterLocked"
+              @change="(event) => onModelChange(event.value)"
+            />
+          </ConfigItem>
+          <ConfigItem
+            layout="column"
+            name="系统提示词"
+            :description="characterLocked ? characterLockedHint : '编辑对话风格提示词，影响AI的回复风格和语言特点'"
+          >
+            <div class="flex flex-col gap-1 mt-3">
+              <Textarea v-model="SYSTEM_PROMPT" rows="10" class="resize-none" :disabled="characterLocked" />
+            </div>
+          </ConfigItem>
+        </div>
+      </ConfigGroup>
       <ConfigGroup value="audio" header="音乐设置">
         <div class="grid gap-4">
           <ConfigItem name="背景音乐" description="启用/关闭背景音乐">
@@ -168,7 +206,13 @@ function toggleFloatingMode(enabled: boolean) {
           </ConfigItem>
         </div>
       </ConfigGroup>
-      <ConfigGroup value="portal" header="账号设置">
+      <ConfigGroup value="system">
+        <template #header>
+          <div class="flex w-full justify-between">
+            <span>系统设置</span>
+            <span>v{{ CONFIG.system.version }}</span>
+          </div>
+        </template>
         <div class="grid gap-4">
           <ConfigItem name="当前账号">
             <div v-if="nagaUser" class="flex items-center gap-3">
@@ -179,21 +223,8 @@ function toggleFloatingMode(enabled: boolean) {
             </div>
             <span v-else class="text-white/40">未登录</span>
           </ConfigItem>
-        </div>
-      </ConfigGroup>
-      <ConfigGroup value="system">
-        <template #header>
-          <div class="flex w-full justify-between">
-            <span>系统设置</span>
-            <span>v{{ CONFIG.system.version }}</span>
-          </div>
-        </template>
-        <div class="grid gap-4">
           <ConfigItem v-if="isElectron" name="开机自启动" description="系统启动时自动运行应用">
             <ToggleSwitch :model-value="autoLaunchEnabled" @update:model-value="onAutoLaunchChange" />
-          </ConfigItem>
-          <ConfigItem layout="column" name="系统提示词" description="编辑对话风格提示词，影响AI的回复风格和语言特点">
-            <Textarea v-model="SYSTEM_PROMPT" rows="10" class="mt-3 resize-none" />
           </ConfigItem>
         </div>
       </ConfigGroup>

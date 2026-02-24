@@ -1,176 +1,37 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import BoxContainer from '@/components/BoxContainer.vue'
 import musicBox from '@/assets/icons/音乐盒.png'
+import BoxContainer from '@/components/BoxContainer.vue'
+import { useMusicPlayer } from '@/composables/useMusicPlayer'
 
 const router = useRouter()
+// 统一使用全局音乐盒，主界面 BGM 与音律坊同一实例，避免叠加；isPlaying 与全局播放器同步，图标会随 BGM 自动变为播放态
+const {
+  tracks,
+  currentIndex,
+  isPlaying,
+  playMode,
+  duration,
+  currentTime,
+  currentTrack,
+  progress,
+  playModeLabel,
+  togglePlay,
+  prev,
+  next,
+  togglePlayMode,
+  play,
+  reloadPlaylist,
+} = useMusicPlayer()
 
-interface Track {
-  id: number
-  title: string
-  duration: string
-  src: string
-}
-
-function parseDisplayName(filename: string): string {
-  const name = filename.replace(/\.mp3$/i, '')
-  const match = name.match(/^\d+\.(.+)$/)
-  return match ? match[1] || name : name
-
-}
-
-function loadPlaylist(): Track[] {
-  const saved = localStorage.getItem('music-playlist')
-  if (saved != null && saved !== '') {
-    try {
-      const savedIds = JSON.parse(saved) as string[]
-      return savedIds.map((filename, idx) => ({
-        id: idx + 1,
-        title: parseDisplayName(filename),
-        duration: '00:00',
-        src: `/voices/background/${filename}`,
-      }))
-    }
-    catch {
-      // 解析失败时使用默认列表
-    }
-  }
-  // 首次使用或从未保存过时使用默认列表
-  return [
-    { id: 1, title: '日常的小曲', duration: '03:24', src: '/voices/background/8.日常的小曲.mp3' },
-    { id: 2, title: '快乐的小曲', duration: '03:07', src: '/voices/background/9.快乐的小曲.mp3' },
-  ]
-}
-
-const tracks = ref<Track[]>([])
-
-const currentIndex = ref(0)
-const isPlaying = ref(false)
-
-// 播放顺序：列表循环 / 随机 / 单曲循环
-const playMode = ref<'list' | 'shuffle' | 'single'>('list')
-const playModeLabel = computed(() => {
-  if (playMode.value === 'shuffle')
-    return '随机播放'
-  if (playMode.value === 'single')
-    return '单曲循环'
-  return '列表循环'
-})
-
-// 音频实例和进度
-const audio = ref<HTMLAudioElement | null>(null)
-const duration = ref(0)
-const currentTime = ref(0)
-
-const currentTrack = computed(() => tracks.value[currentIndex.value])
-const progress = computed(() => (duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0))
-
-function setupAudioForTrack() {
-  if (!audio.value || !currentTrack.value)
-    return
-  audio.value.src = currentTrack.value.src
-  audio.value.currentTime = 0
-  duration.value = 0
-  currentTime.value = 0
-  if (isPlaying.value)
-    audio.value.play().catch(() => { isPlaying.value = false })
-}
-
-function togglePlay() {
-  if (!audio.value) return
-
-  if (audio.value.paused) {
-    audio.value.play().then(() => {
-      isPlaying.value = true
-    }).catch(() => {
-      isPlaying.value = false
-    })
-  }
-  else {
-    audio.value.pause()
-    isPlaying.value = false
-  }
-}
-
-function prev() {
-  if (!tracks.value.length) return
-  currentIndex.value = (currentIndex.value - 1 + tracks.value.length) % tracks.value.length
-  setupAudioForTrack()
-}
-
-function next() {
-  if (!tracks.value.length) return
-
-  if (playMode.value === 'shuffle') {
-    if (tracks.value.length === 1) return
-    let idx = currentIndex.value
-    while (idx === currentIndex.value)
-      idx = Math.floor(Math.random() * tracks.value.length)
-    currentIndex.value = idx
-  }
-  else {
-    currentIndex.value = (currentIndex.value + 1) % tracks.value.length
-  }
-
-  setupAudioForTrack()
-}
-
-function handleEnded() {
-  if (playMode.value === 'single') {
-    // 单曲循环
-    if (audio.value) {
-      audio.value.currentTime = 0
-      audio.value.play().catch(() => { isPlaying.value = false })
-    }
-  }
-  else {
-    next()
-  }
-}
-
-function togglePlayMode() {
-  if (playMode.value === 'list')
-    playMode.value = 'shuffle'
-  else if (playMode.value === 'shuffle')
-    playMode.value = 'single'
-  else
-    playMode.value = 'list'
+function selectTrack(index: number) {
+  currentIndex.value = index
+  play()
 }
 
 onMounted(() => {
-  tracks.value = loadPlaylist()
-  currentIndex.value = 0
-
-  audio.value = new Audio()
-  if (!audio.value)
-    return
-
-  audio.value.addEventListener('timeupdate', () => {
-    if (!audio.value) return
-    currentTime.value = audio.value.currentTime
-    duration.value = audio.value.duration || duration.value
-  })
-  audio.value.addEventListener('loadedmetadata', () => {
-    if (!audio.value) return
-    duration.value = audio.value.duration
-  })
-  audio.value.addEventListener('ended', handleEnded)
-
-  setupAudioForTrack()
-})
-
-onBeforeUnmount(() => {
-  if (!audio.value)
-    return
-  audio.value.pause()
-  audio.value.src = ''
-  audio.value.load()
-  audio.value = null
-})
-
-watch(currentTrack, () => {
-  setupAudioForTrack()
+  reloadPlaylist() // 从编辑页返回时同步歌单
 })
 </script>
 
@@ -222,10 +83,11 @@ watch(currentTrack, () => {
           <!-- 右侧：播放列表 -->
           <div class="music-track-list">
             <div
-              v-for="track in tracks"
+              v-for="(track, index) in tracks"
               :key="track.id"
               class="track-row"
-              :class="{ active: track.id === currentTrack?.id }"
+              :class="{ active: currentIndex === index }"
+              @click="selectTrack(index)"
             >
               <div class="dot" />
               <div class="title line-clamp-1">
@@ -354,6 +216,7 @@ watch(currentTrack, () => {
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.65);
   color: rgba(248, 250, 252, 0.7);
+  cursor: pointer;
 }
 
 .track-row .dot {
@@ -517,4 +380,3 @@ watch(currentTrack, () => {
   color: #e5e7eb;
 }
 </style>
-

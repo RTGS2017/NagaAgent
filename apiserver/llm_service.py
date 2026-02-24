@@ -319,7 +319,11 @@ class LLMService:
                     auth_retried = True
                     logger.warning(f"LLM 调用 401，尝试刷新 token 后重试: {e}")
                     try:
-                        await naga_auth.refresh()
+                        result = await naga_auth.refresh()
+                        new_token = result.get("access_token")
+                        # 通过 SSE 推送新 token 给前端，避免前端旧 token 轮询覆盖后端新 token
+                        if new_token:
+                            yield self._format_sse_chunk("token_refreshed", new_token)
                         logger.info("Token 刷新成功，重试 LLM 调用")
                         continue  # 重试
                     except Exception as refresh_err:

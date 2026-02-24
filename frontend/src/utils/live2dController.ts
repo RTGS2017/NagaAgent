@@ -68,7 +68,7 @@ let activeAction: { config: ActionConfig, startTime: number } | null = null
 const expressionDefs: Map<string, ExpressionDef> = new Map()
 let currentEmotionName: string | null = null
 let emotionCurrentValues: Record<string, number> = {}
-let emotionFadeStartTime = 0
+let _emotionFadeStartTime = 0
 
 // 手动参数覆盖（由 setExpression 驱动，用于开屏闭眼等，优先级最高）
 let expressionTarget: Record<string, number> = {}
@@ -94,7 +94,8 @@ const EXPRESSION_DEFAULTS: Record<string, number> = {
 }
 
 function computeManualOverride(dt: number): Record<string, number> {
-  if (!expressionActive && Object.keys(expressionCurrent).length === 0) return {}
+  if (!expressionActive && Object.keys(expressionCurrent).length === 0)
+    return {}
 
   const allParams = new Set([...Object.keys(expressionTarget), ...Object.keys(expressionCurrent)])
   const halfLife = 100 // 100ms 平滑过渡
@@ -142,7 +143,8 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 function smoothFactor(halfLife: number, dt: number): number {
-  if (halfLife <= 0) return 1
+  if (halfLife <= 0)
+    return 1
   return 1 - Math.exp((-0.693 / halfLife) * dt)
 }
 
@@ -214,22 +216,25 @@ async function loadExpressions(modelBasePath: string, modelSource: string) {
         }
         expressionDefs.set(expName, def)
       }
-      catch {
-        // 单个表情文件加载失败不影响其他
+      catch (e) {
+        console.warn(`[Live2D] Failed to load expression: ${fileName}`, e)
       }
     }
+    console.log('[Live2D] Loaded expressions:', Array.from(expressionDefs.keys()))
   }
-  catch {
-    // model3.json 加载失败，表情通道不可用
+  catch (e) {
+    console.warn('[Live2D] Failed to load model3.json for expressions:', e)
   }
 }
 
 // ─── 通道计算（只计算不写入） ─────────────────────────
 
 function computeStateParams(now: number): Record<string, number> {
-  if (!actionsData) return {}
+  if (!actionsData)
+    return {}
   const stateCfg = actionsData.states[currentStateName]
-  if (!stateCfg) return {}
+  if (!stateCfg)
+    return {}
 
   const result: Record<string, number> = {}
 
@@ -248,9 +253,11 @@ function computeStateParams(now: number): Record<string, number> {
 }
 
 function computeMouth(now: number, dt: number): Record<string, number> {
-  if (!actionsData) return {}
+  if (!actionsData)
+    return {}
   const stateCfg = actionsData.states[currentStateName]
-  if (!stateCfg?.mouth) return {}
+  if (!stateCfg?.mouth)
+    return {}
 
   const cfg = stateCfg.mouth
   if (now >= mouthNextChangeTime) {
@@ -264,7 +271,8 @@ function computeMouth(now: number, dt: number): Record<string, number> {
 }
 
 function computeActionParams(now: number): Record<string, number> {
-  if (!actionsData) return {}
+  if (!actionsData)
+    return {}
 
   if (!activeAction && actionQueue.length > 0) {
     const actionName = actionQueue.shift()!
@@ -272,12 +280,14 @@ function computeActionParams(now: number): Record<string, number> {
     const cfg = actionsData.actions[actionName]
     if (cfg) {
       activeAction = { config: cfg, startTime: now }
-    } else {
+    }
+    else {
       console.warn('[Live2D] Action not found:', actionName)
     }
   }
 
-  if (!activeAction) return {}
+  if (!activeAction)
+    return {}
 
   const { config, startTime } = activeAction
   const totalDuration = config.duration * config.repeat
@@ -396,7 +406,8 @@ function computeTracking(dt: number): Record<string, number> {
 // ─── 主 tick ─────────────────────────────────────────
 
 function tick(now: number) {
-  if (!actionsData) return
+  if (!actionsData)
+    return
 
   const dt = lastTickTime > 0 ? Math.min(now - lastTickTime, 100) : 16
   lastTickTime = now
@@ -411,10 +422,10 @@ function tick(now: number) {
   }
 
   // ── 计算各正交通道 ──
-  const stateParams = computeStateParams(now)     // 通道1: 身体摇摆
-  const mouthParams = computeMouth(now, dt)        // 附属: 嘴巴
-  const actionParams = computeActionParams(now)    // 通道2: 头部动作
-  const emotionParams = computeEmotionParams(dt)   // 通道3: Emotion 表情（从 .exp3.json）
+  const stateParams = computeStateParams(now) // 通道1: 身体摇摆
+  const mouthParams = computeMouth(now, dt) // 附属: 嘴巴
+  const actionParams = computeActionParams(now) // 通道2: 头部动作
+  const emotionParams = computeEmotionParams(dt) // 通道3: Emotion 表情（从 .exp3.json）
   const overrideParams = computeManualOverride(dt) // 手动覆盖（setExpression）
 
   // 合并基础通道（身体 + 嘴巴 + 头部 + 手动覆盖）
@@ -482,8 +493,12 @@ export async function setEmotion(emotion: EmotionCategory) {
 
   // 只有在已加载对应表情时才切换
   if (expressionDefs.has(targetName)) {
+    console.log('[Live2D] Set emotion:', emotion, '→', targetName)
     currentEmotionName = targetName
-    emotionFadeStartTime = performance.now()
+    _emotionFadeStartTime = performance.now()
+  }
+  else {
+    console.warn('[Live2D] Emotion expression not loaded:', targetName, 'available:', Array.from(expressionDefs.keys()))
   }
 }
 
@@ -535,18 +550,24 @@ export async function initController(modelInstance: Live2DModel, modelSource: st
   // e.g. './models/NagaTest2/NagaTest2.model3.json' → './models/NagaTest2'
   const basePath = modelSource.replace(/\/[^/]+$/, '')
 
-  // 加载身体/头部动作数据
-  const response = await fetch(`${basePath}/naga-actions.json`)
-  actionsData = await response.json() as ActionsData
+  try {
+    // 加载身体/头部动作数据
+    const response = await fetch(`${basePath}/naga-actions.json`)
+    actionsData = await response.json() as ActionsData
 
-  // 加载 .exp3.json 表情文件
-  await loadExpressions(basePath, modelSource)
+    // 加载 .exp3.json 表情文件
+    await loadExpressions(basePath, modelSource)
 
-  originalUpdate = model.update.bind(model)
-  model.update = function (dt: number) {
-    const now = performance.now()
-    originalUpdate!(dt)
-    tick(now)
+    originalUpdate = model.update.bind(model)
+    model.update = function (dt: number) {
+      const now = performance.now()
+      originalUpdate!(dt)
+      tick(now)
+    }
+    console.log('[Live2D] Controller initialized for:', modelSource)
+  }
+  catch (e) {
+    console.error('[Live2D] Controller initialization failed:', e)
   }
 }
 
@@ -560,9 +581,10 @@ export function destroyController() {
   actionQueue = []
   activeAction = null
   // Emotion 通道
+  expressionDefs.clear()
   currentEmotionName = null
   emotionCurrentValues = {}
-  emotionFadeStartTime = 0
+  _emotionFadeStartTime = 0
   // 手动覆盖通道
   expressionTarget = {}
   expressionCurrent = {}

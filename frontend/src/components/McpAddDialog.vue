@@ -79,49 +79,49 @@ function handleCancel() {
 
 <template>
   <Teleport to="body">
-  <Transition name="dialog-fade">
-    <div v-if="visible" class="dialog-overlay" @click.self="handleCancel">
-      <div class="dialog-card">
-        <h2 class="dialog-title">
-          {{ isEdit ? '编辑 MCP 服务' : '添加 MCP 服务' }}
-        </h2>
-        <div class="dialog-form">
-          <label class="dialog-label">MCP 标题（唯一标识）</label>
-          <InputText
-            v-model="name"
-            :disabled="isEdit"
-            placeholder="如 firecrawl-mcp"
-            class="dialog-input"
-            :class="{ 'op-50': isEdit }"
-          />
-
-          <!-- 附加信息（可折叠） -->
-          <div class="extra-toggle" @click="showExtra = !showExtra">
-            <span class="extra-arrow">{{ showExtra ? '▾' : '▸' }}</span>
-            <span>附加信息</span>
-          </div>
-          <div v-if="showExtra" class="extra-section">
-            <label class="dialog-label">显示名称</label>
+    <Transition name="dialog-fade">
+      <div v-if="visible" class="dialog-overlay" @click.self="handleCancel">
+        <div class="dialog-card">
+          <h2 class="dialog-title">
+            {{ isEdit ? '编辑 MCP 服务' : '添加 MCP 服务' }}
+          </h2>
+          <div class="dialog-form">
+            <label class="dialog-label">MCP 标题（唯一标识）</label>
             <InputText
-              v-model="displayName"
-              placeholder="显示名称（可选）"
+              v-model="name"
+              :disabled="isEdit"
+              placeholder="如 firecrawl-mcp"
               class="dialog-input"
+              :class="{ 'op-50': isEdit }"
             />
-            <label class="dialog-label mt-2">描述</label>
-            <InputText
-              v-model="description"
-              placeholder="简短描述（可选）"
-              class="dialog-input"
-            />
-          </div>
 
-          <label class="dialog-label">JSON 配置</label>
-          <Textarea
-            v-model="jsonText"
-            rows="8"
-            :placeholder='`{\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@mcp/server\"],\n  \"type\": \"stdio\"\n}`'
-            class="dialog-input resize-none font-mono text-xs!"
-          />
+            <!-- 附加信息（可折叠） -->
+            <div class="extra-toggle" @click="showExtra = !showExtra">
+              <span class="extra-arrow">{{ showExtra ? '▾' : '▸' }}</span>
+              <span>附加信息</span>
+            </div>
+            <div v-if="showExtra" class="extra-section">
+              <label class="dialog-label">显示名称</label>
+              <InputText
+                v-model="displayName"
+                placeholder="显示名称（可选）"
+                class="dialog-input"
+              />
+              <label class="dialog-label mt-2">描述</label>
+              <InputText
+                v-model="description"
+                placeholder="简短描述（可选）"
+                class="dialog-input"
+              />
+            </div>
+
+            <label class="dialog-label">JSON 配置</label>
+            <Textarea
+              v-model="jsonText"
+              rows="8"
+              placeholder="{\n  &quot;command&quot;: &quot;npx&quot;,\n  &quot;args&quot;: [&quot;-y&quot;, &quot;@mcp/server&quot;],\n  &quot;type&quot;: &quot;stdio&quot;\n}"
+              class="dialog-input resize-none font-mono text-xs!"
+            />
 
             <div v-if="errorMsg" class="dialog-error">
               {{ errorMsg }}

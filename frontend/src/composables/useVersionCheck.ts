@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { CONFIG } from '@/utils/config'
 import API from '@/api/core'
+import { CONFIG } from '@/utils/config'
 
 export interface UpdateInfo {
   hasUpdate: boolean
@@ -14,13 +14,18 @@ export interface UpdateInfo {
 
 function detectPlatform(): string {
   const p = window.electronAPI?.platform
-  if (p === 'darwin') return 'macos'
-  if (p === 'win32') return 'windows'
-  if (p === 'linux') return 'linux'
+  if (p === 'darwin')
+    return 'macos'
+  if (p === 'win32')
+    return 'windows'
+  if (p === 'linux')
+    return 'linux'
   // web 环境做粗略猜测
   const ua = navigator.userAgent.toLowerCase()
-  if (ua.includes('mac')) return 'macos'
-  if (ua.includes('win')) return 'windows'
+  if (ua.includes('mac'))
+    return 'macos'
+  if (ua.includes('win'))
+    return 'windows'
   return 'linux'
 }
 
@@ -34,7 +39,8 @@ export async function checkForUpdate(): Promise<void> {
       signal: AbortSignal.timeout(10_000),
     })
 
-    if (!res.ok) return
+    if (!res.ok)
+      return
 
     const data = await res.json() as {
       version?: string
@@ -45,10 +51,12 @@ export async function checkForUpdate(): Promise<void> {
       has_update?: boolean
     }
 
-    if (!data.version || data.has_update === false) return
+    if (!data.version || data.has_update === false)
+      return
 
-    const currentVersion = CONFIG.value.system.version ?? '5.0.0'
-    if (data.version === currentVersion) return
+    const currentVersion = CONFIG.value.system.version ?? '5.1.0'
+    if (data.version === currentVersion)
+      return
 
     updateInfo.value = {
       hasUpdate: true,

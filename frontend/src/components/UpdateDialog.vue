@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { UpdateInfo } from '@/composables/useVersionCheck'
 import { Button } from 'primevue'
 import { computed } from 'vue'
-import type { UpdateInfo } from '@/composables/useVersionCheck'
 import { dismissUpdate, openDownloadUrl } from '@/composables/useVersionCheck'
 
 const props = defineProps<{
@@ -14,9 +14,12 @@ const hasResource = computed(() => !!props.info?.downloadUrl)
 
 const fileSizeText = computed(() => {
   const size = props.info?.fileSize
-  if (!size) return ''
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
-  if (size >= 1024) return `${(size / 1024).toFixed(0)} KB`
+  if (!size)
+    return ''
+  if (size >= 1024 * 1024)
+    return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size >= 1024)
+    return `${(size / 1024).toFixed(0)} KB`
   return `${size} B`
 })
 

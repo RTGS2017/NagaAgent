@@ -30,15 +30,18 @@ const editingMcp = ref<{ name: string, displayName: string, description: string,
 const mcpEnabledCount = computed(() => mcpServices.value.filter(s => s.enabled).length)
 const mcpTotalCount = computed(() => mcpServices.value.length)
 
-function loadMcpServices() {
+async function loadMcpServices() {
   mcpLoading.value = true
-  API.getMcpServices().then((res) => {
+  try {
+    const res = await API.getMcpServices()
     mcpServices.value = res.services ?? []
-  }).catch(() => {
+  }
+  catch {
     mcpServices.value = []
-  }).finally(() => {
+  }
+  finally {
     mcpLoading.value = false
-  })
+  }
 }
 loadMcpServices()
 
@@ -48,7 +51,8 @@ function openAddMcp() {
 }
 
 function openEditMcp(svc: McpService) {
-  if (svc.source === 'builtin') return
+  if (svc.source === 'builtin')
+    return
   editingMcp.value = {
     name: svc.name,
     displayName: svc.displayName,
@@ -78,15 +82,17 @@ async function onMcpConfirm(data: { name: string, displayName: string, descripti
       }
     }
     showMcpDialog.value = false
-    loadMcpServices()
+    await loadMcpServices()
   }
   catch (e: any) {
+    // eslint-disable-next-line no-alert
     alert(`操作失败: ${e.message}`)
   }
 }
 
 async function toggleMcpEnabled(svc: McpService) {
-  if (svc.source === 'builtin') return
+  if (svc.source === 'builtin')
+    return
   const newEnabled = !svc.enabled
   svc.enabled = newEnabled
   try {
@@ -98,12 +104,14 @@ async function toggleMcpEnabled(svc: McpService) {
 }
 
 async function deleteMcp(svc: McpService) {
-  if (svc.source === 'builtin') return
+  if (svc.source === 'builtin')
+    return
   try {
     await API.deleteMcpService(svc.name)
     mcpServices.value = mcpServices.value.filter(s => s.name !== svc.name)
   }
   catch (e: any) {
+    // eslint-disable-next-line no-alert
     alert(`删除失败: ${e.message}`)
   }
 }
@@ -127,6 +135,7 @@ async function installItem(item: MarketItem) {
     item.installed = true
   }
   catch (e: any) {
+    // eslint-disable-next-line no-alert
     alert(`安装失败: ${e.message}`)
   }
   finally {
@@ -146,6 +155,7 @@ async function onSkillConfirm(data: { name: string, content: string }) {
     })
   }
   catch (e: any) {
+    // eslint-disable-next-line no-alert
     alert(`导入失败: ${e.message}`)
   }
 }
@@ -161,7 +171,6 @@ async function onSkillConfirm(data: { name: string, content: string }) {
           <div v-if="!mcpLoading && mcpServices.length > 0" class="mcp-summary">
             已配置 {{ mcpTotalCount }} 个 MCP 服务器 · 已启用 {{ mcpEnabledCount }} 个
           </div>
-
 
           <div v-if="mcpLoading" class="text-white/40 text-xs py-2">
             检查可用性...

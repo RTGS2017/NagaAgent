@@ -3,11 +3,11 @@ import type { CaptureSource, FloatingState } from '@/electron.d'
 import { useEventListener } from '@vueuse/core'
 import ScrollPanel from 'primevue/scrollpanel'
 import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import API from '@/api/core'
 import MessageItem from '@/components/MessageItem.vue'
 import { startToolPolling, stopToolPolling, toolMessage } from '@/composables/useToolStatus'
 import { CONFIG } from '@/utils/config'
-import { CURRENT_SESSION_ID, IS_TEMPORARY_SESSION, formatRelativeTime, loadCurrentSession, MESSAGES, newSession, newTemporarySession, switchSession } from '@/utils/session'
-import API from '@/api/core'
+import { CURRENT_SESSION_ID, formatRelativeTime, IS_TEMPORARY_SESSION, loadCurrentSession, MESSAGES, newSession, newTemporarySession, switchSession } from '@/utils/session'
 import { chatStream } from '@/views/MessageView.vue'
 
 // 悬浮球状态
@@ -61,7 +61,8 @@ const BLINK_FRAME_MS = 70
 function playBlink() {
   let step = 0
   const next = () => {
-    if (blinkStopped) return
+    if (blinkStopped)
+      return
     if (step >= BLINK_SEQUENCE.length) {
       // 眨眼结束，随机 2~5 秒后再次眨眼
       scheduleNextBlink()
@@ -131,11 +132,16 @@ let unsubBlur: (() => void) | undefined
 let resizeObserver: ResizeObserver | null = null
 let fitRAF = 0
 
+// ─── 会话历史（声明前置，fitWindowHeight 需要引用） ──────
+const showHistory = ref(false)
+
 // 根据消息内容自适应窗口高度
 function fitWindowHeight() {
-  if (floatingState.value !== 'full') return
+  if (floatingState.value !== 'full')
+    return
   const el = messageContentRef.value
-  if (!el) return
+  if (!el)
+    return
   const HEADER_HEIGHT = 100
   const BORDER = 2
   const toolH = toolMessage.value ? 24 : 0
@@ -148,7 +154,8 @@ function fitWindowHeight() {
 }
 
 function requestFitHeight() {
-  if (fitRAF) return
+  if (fitRAF)
+    return
   fitRAF = requestAnimationFrame(() => {
     fitRAF = 0
     fitWindowHeight()
@@ -273,16 +280,18 @@ function onDragPointerMove(e: PointerEvent) {
 }
 
 function onDragPointerUp(e: PointerEvent) {
-  if (!dragState)
+  if (!dragState) {
     return
+  }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
   dragState = null
 }
 
 // 球态：拖拽 + 点击展开（pointerup 需要区分拖拽和点击）
 function onBallPointerUp(e: PointerEvent) {
-  if (!dragState)
+  if (!dragState) {
     return
+  }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
   if (!hasDragged) {
     handleBallClick()
@@ -297,8 +306,9 @@ function onCompactBallPointerDown(e: PointerEvent) {
 }
 
 function onCompactBallPointerUp(e: PointerEvent) {
-  if (!dragState)
+  if (!dragState) {
     return
+  }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
   if (!hasDragged) {
     handleCollapse()
@@ -441,7 +451,9 @@ function triggerFileUpload() {
   suppressBlur = true
   // 用户取消文件选择器时 change 事件可能不触发，通过 focus 兜底恢复
   const onFocus = () => {
-    setTimeout(() => { suppressBlur = false }, 300)
+    setTimeout(() => {
+      suppressBlur = false
+    }, 300)
     window.removeEventListener('focus', onFocus)
   }
   window.addEventListener('focus', onFocus)
@@ -528,7 +540,6 @@ async function handleNewTemporarySession() {
 }
 
 // ─── 会话历史 ──────────────────────────
-const showHistory = ref(false)
 const sessions = ref<Array<{
   sessionId: string
   createdAt: string
@@ -554,13 +565,13 @@ async function fetchSessions() {
 }
 
 // 记录是否因打开历史面板而从紧凑态展开到完整态，关闭时需要收回
-let expandedForHistory = false
+let _expandedForHistory = false
 
 function toggleHistory() {
   if (!showHistory.value) {
     // 打开历史面板
     if (floatingState.value === 'compact') {
-      expandedForHistory = true
+      _expandedForHistory = true
       window.electronAPI?.floating.expandToFull()
     }
     showHistory.value = true
@@ -574,7 +585,7 @@ function toggleHistory() {
 // 关闭历史面板，通过 fitHeight 自适应窗口高度
 async function closeHistory() {
   showHistory.value = false
-  expandedForHistory = false
+  _expandedForHistory = false
   await nextTick()
   await nextTick()
   fitWindowHeight()
@@ -663,7 +674,7 @@ useEventListener('token', () => {
           <button class="action-btn" :class="{ active: IS_TEMPORARY_SESSION }" title="临时聊天" @click="handleNewTemporarySession">🕶</button>
           <button class="action-btn" title="对话历史" @click="toggleHistory">📋</button>
           <button class="action-btn" :class="{ active: isPinned }" :title="isPinned ? '取消固定' : '固定窗口'" @click="togglePin">📌</button>
-          <button class="action-btn" title="打开主界面" @click="handleExitFloating"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="action-btn" title="打开主界面" @click="handleExitFloating"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
           <button class="action-btn" title="退出悬浮球" @click="handleCollapse">✕</button>
         </div>
       </div>
@@ -728,7 +739,7 @@ useEventListener('token', () => {
             <button class="action-btn" :class="{ active: IS_TEMPORARY_SESSION }" title="临时聊天" @click="handleNewTemporarySession">🕶</button>
             <button class="action-btn" :class="{ active: showHistory }" title="对话历史" @click="toggleHistory">📋</button>
             <button class="action-btn" :class="{ active: isPinned }" :title="isPinned ? '取消固定' : '固定窗口'" @click="togglePin">📌</button>
-            <button class="action-btn" title="打开主界面" @click="handleExitFloating"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="action-btn" title="打开主界面" @click="handleExitFloating"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             <button class="action-btn" title="收起" @click="handleCollapse">✕</button>
           </div>
         </div>
@@ -776,47 +787,47 @@ useEventListener('token', () => {
     <!-- 会话历史面板（使用 opacity-only 过渡，不影响 offsetHeight 测量） -->
     <Transition name="session-fade">
       <div v-if="showHistory" ref="sessionPanelRef" class="session-panel" @pointerdown.stop>
-      <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
-        <span class="text-white/70 text-xs font-bold">对话历史</span>
-        <button
-          class="text-white/40 hover:text-white/80 bg-transparent border-none cursor-pointer text-xs"
-          @click="closeHistory"
-        >
-          关闭
-        </button>
-      </div>
-      <div class="session-list">
-        <div v-if="loadingSessions" class="text-white/40 text-xs text-center py-3">
-          加载中...
-        </div>
-        <div v-else-if="sessions.length === 0" class="text-white/40 text-xs text-center py-3">
-          暂无历史对话
-        </div>
-        <div
-          v-for="s in sessions" :key="s.sessionId"
-          class="session-item"
-          :class="{ 'bg-white/10': s.sessionId === CURRENT_SESSION_ID }"
-          @click="handleSwitchSession(s.sessionId)"
-        >
-          <div class="flex-1 min-w-0">
-            <div class="text-white/80 text-xs truncate">
-              <span v-if="s.temporary" class="temporary-tag">临时</span>
-              {{ s.sessionId.slice(0, 8) }}...
-            </div>
-            <div class="text-white/40 text-xs">
-              {{ formatRelativeTime(s.lastActiveAt) }} · {{ s.conversationRounds }} 轮
-            </div>
-          </div>
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
+          <span class="text-white/70 text-xs font-bold">对话历史</span>
           <button
-            class="text-white/30 hover:text-red-400 bg-transparent border-none cursor-pointer text-xs shrink-0 ml-2"
-            title="删除"
-            @click.stop="handleDeleteSession(s.sessionId)"
+            class="text-white/40 hover:text-white/80 bg-transparent border-none cursor-pointer text-xs"
+            @click="closeHistory"
           >
-            🗑
+            关闭
           </button>
         </div>
+        <div class="session-list">
+          <div v-if="loadingSessions" class="text-white/40 text-xs text-center py-3">
+            加载中...
+          </div>
+          <div v-else-if="sessions.length === 0" class="text-white/40 text-xs text-center py-3">
+            暂无历史对话
+          </div>
+          <div
+            v-for="s in sessions" :key="s.sessionId"
+            class="session-item"
+            :class="{ 'bg-white/10': s.sessionId === CURRENT_SESSION_ID }"
+            @click="handleSwitchSession(s.sessionId)"
+          >
+            <div class="flex-1 min-w-0">
+              <div class="text-white/80 text-xs truncate">
+                <span v-if="s.temporary" class="temporary-tag">临时</span>
+                {{ s.sessionId.slice(0, 8) }}...
+              </div>
+              <div class="text-white/40 text-xs">
+                {{ formatRelativeTime(s.lastActiveAt) }} · {{ s.conversationRounds }} 轮
+              </div>
+            </div>
+            <button
+              class="text-white/30 hover:text-red-400 bg-transparent border-none cursor-pointer text-xs shrink-0 ml-2"
+              title="删除"
+              @click.stop="handleDeleteSession(s.sessionId)"
+            >
+              🗑
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
     </Transition>
 
     <!-- 窗口截屏选择面板 -->
@@ -1269,5 +1280,4 @@ useEventListener('token', () => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 </style>
