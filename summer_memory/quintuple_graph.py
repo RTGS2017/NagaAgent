@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 # 延迟加载的graph实例
 _graph: Optional[Graph] = None
+_graph_connection_failed: bool = False  # 连接失败标志，避免重复尝试
 
 # Neo4j配置变量（全局）
 NEO4J_URI: Optional[str] = None
@@ -87,11 +88,16 @@ def _load_config():
 
 def get_graph():
     """获取graph实例（延迟加载）"""
-    global _graph, GRAG_ENABLED
+    global _graph, GRAG_ENABLED, _graph_connection_failed
+
+    # 已经连接失败过，不再重试
+    if _graph_connection_failed:
+        return None
 
     if _graph is None:
         if Graph is None:
             GRAG_ENABLED = False
+            _graph_connection_failed = True
             return None
         # 直接从系统配置获取，避免全局变量问题
         try:
@@ -101,27 +107,31 @@ def get_graph():
             neo4j_user = config.grag.neo4j_user
             neo4j_password = config.grag.neo4j_password
             neo4j_database = config.grag.neo4j_database
-            
+
             if grag_enabled and neo4j_uri and neo4j_user and neo4j_password:
                 try:
-                    _graph = Graph(neo4j_uri, auth=(neo4j_user, neo4j_password), name=neo4j_database)
+                    _graph = Graph(neo4j_uri, auth=(neo4j_user, neo4j_password), name=neo4j_database, timeout=5)
                     _graph.service.kernel_version
                     print("[GRAG] 成功连接到 Neo4j。")
                     GRAG_ENABLED = True
                 except ServiceUnavailable:
-                    print("[GRAG] 未能连接到 Neo4j，图数据库功能已临时禁用。请检查 Neo4j 是否正在运行以及配置是否正确。", file=sys.stderr)
+                    print("[GRAG] 未能连接到 Neo4j，图数据库功能已禁用。请检查 Neo4j 是否正在运行以及配置是否正确。", file=sys.stderr)
                     _graph = None
                     GRAG_ENABLED = False
+                    _graph_connection_failed = True
                 except Exception as e:
                     print(f"[GRAG] Neo4j连接失败: {e}", file=sys.stderr)
                     _graph = None
                     GRAG_ENABLED = False
+                    _graph_connection_failed = True
             else:
                 print(f"[GRAG] GRAG未启用或配置不完整: enabled={grag_enabled}, uri={neo4j_uri}")
                 GRAG_ENABLED = False
+                _graph_connection_failed = True
         except Exception as e:
             print(f"[GRAG] 无法加载配置: {e}", file=sys.stderr)
             GRAG_ENABLED = False
+            _graph_connection_failed = True
 
     return _graph
 
