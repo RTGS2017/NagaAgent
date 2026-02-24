@@ -113,6 +113,8 @@ function handleEnded() {
   }
   else {
     next()
+    // 播完会先触发 pause 使 isPlaying=false，setupAudioForTrack 内不会自动 play，这里显式续播下一首
+    play()
   }
 }
 
