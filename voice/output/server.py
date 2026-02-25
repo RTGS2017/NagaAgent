@@ -2,12 +2,20 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # 加入项目根目录到模块查找路径
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
-from voice.output.tts_handler import generate_speech
+from voice.output.tts_handler import _generate_audio
 from voice.output.utils import require_api_key, AUDIO_FORMAT_MIME_TYPES
 from system.config import config
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 @app.post('/v1/audio/speech')
 @require_api_key
@@ -23,7 +31,7 @@ async def text_to_speech(request: Request):
         speed = float(data.get('speed', config.tts.default_speed))
 
         mime_type = AUDIO_FORMAT_MIME_TYPES.get(response_format, "audio/mpeg")
-        output_file_path = generate_speech(text, voice, response_format, speed)
+        output_file_path = await _generate_audio(text, voice, response_format, speed)
         return FileResponse(output_file_path, media_type=mime_type, filename="speech.mp3")
     except Exception as e:
         with open('voice_server_error.log', 'a') as f:
