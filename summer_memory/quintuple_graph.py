@@ -110,7 +110,7 @@ def get_graph():
 
             if grag_enabled and neo4j_uri and neo4j_user and neo4j_password:
                 try:
-                    _graph = Graph(neo4j_uri, auth=(neo4j_user, neo4j_password), name=neo4j_database, timeout=5)
+                    _graph = Graph(neo4j_uri, auth=(neo4j_user, neo4j_password), name=neo4j_database)
                     _graph.service.kernel_version
                     print("[GRAG] 成功连接到 Neo4j。")
                     GRAG_ENABLED = True
