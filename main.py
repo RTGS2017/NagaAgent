@@ -728,9 +728,9 @@ def _lazy_init_services():
             print(f"GRAG状态: {'启用' if memory_manager.enabled else '禁用'}")
             if memory_manager.enabled:
                 stats = memory_manager.get_memory_stats()
-                from summer_memory.quintuple_graph import get_graph, GRAG_ENABLED
-                graph = get_graph()
-                print(f"Neo4j连接: {'成功' if graph and GRAG_ENABLED else '失败'}")
+                from summer_memory import quintuple_graph as _qg
+                graph = _qg.get_graph()
+                print(f"Neo4j连接: {'成功' if graph and _qg.GRAG_ENABLED else '失败'}")
         print("=" * 30)
         print(f'{AI_NAME}系统已启动')
         print("=" * 30)
