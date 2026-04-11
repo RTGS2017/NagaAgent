@@ -37,7 +37,7 @@ class Graph:
     def __init__(self, uri: str, user: str, password: str, database: str = "neo4j"):
         if Py2NeoGraph is None:
             raise RuntimeError("py2neo 未安装，请运行 pip install py2neo 或禁用图数据库功能")
-        self.driver = Py2NeoGraph(uri, auth=(user, password), name=database, timeout=5)
+        self.driver = Py2NeoGraph(uri, auth=(user, password), name=database)
 
     def check_connection(self) -> bool:
         try:
@@ -112,7 +112,6 @@ def get_graph() -> Optional[Py2NeoGraph]:
             NEO4J_URI,
             auth=(NEO4J_USER, NEO4J_PASSWORD),
             name=NEO4J_DATABASE,
-            timeout=5,
         )
         _ = _graph.service.kernel_version
         return _graph
