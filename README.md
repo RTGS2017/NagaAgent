@@ -40,6 +40,15 @@
 
 | 日期 | 版本 | 内容 |
 |------|------|------|
+| 🔧 2026-04-15 | — | 配置同步重构：source config 与 runtime config 双向合并；ASR 健康检查 URL 改用配置值；服务端口获取与配置路径重构 |
+| 🤖 2026-04-14 | — | 新增 Anthropic API 格式支持（`api_format` 字段）；五元组提取器兼容 Anthropic SDK；Live2D 空文本调用处理 |
+| 🐛 2026-04-12 | — | 修复 py2neo `Graph()` timeout 参数不兼容与 Neo4j 连接状态误报 |
+| 🌐 2026-04-05 | — | 论坛功能增强：Feed 模式与解锁进度特性 |
+| 📖 2026-03-21 | — | 新增日文 README（README_ja.md） |
+| 🧳 2026-03-20 | — | 改进旅行模块工作流与 Hub 安装流程 |
+| 📨 2026-03-17 | — | QQ 通知：专用验证端点、服务端 mention 处理、错误透传 |
+| 🛠️ 2026-03-16 | — | 论坛加载与打包视图恢复修复；macOS DMG 签名与文件系统修复；OpenClaw 打包从源码编译与运行时修复 |
+| 📦 2026-03-15 | — | OpenClaw 打包版运行时加固；遥测通知与运行时集成优化；Windows 构建脚本控制台编码修复 |
 | 🛰️ 2026-03-14 | — | 干员通讯录升级为设置弹窗（名称 / 人设 / 引擎 / 灵魂文档 / 专有 MCP·Skill）；技能工坊接入 NagaHub 与通用 MCP 预热；探索链路新增 QQ / 飞书完成通知；云端记忆优先时不再回退本地 Neo4j |
 | 🧩 2026-03-13 | — | OpenClaw 编排链路与打包集成继续扩展；后端 spec 修复 Windows 控制台 Unicode 输出报错 |
 | 🧱 2026-03-11 | — | OpenClaw Skill 自动执行；干员独立 workspace；模型选择器与定价显示接入 Default / Deepseek-V3.2 / Kimi-K2.5 |
@@ -116,13 +125,10 @@ cd..
 
 
 #后端安装
-# 方式一：setup 脚本（自动检测环境、创建虚拟环境、安装依赖）
-python setup.py
-
-# 方式二：uv
+# 方式一：uv（推荐）
 uv sync
 
-# 方式三：手动
+# 方式二：手动
 python -m venv .venv
 source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
@@ -137,12 +143,13 @@ pip install -r requirements.txt
   "api": {
     "api_key": "your-api-key",
     "base_url": "https://api.deepseek.com",
-    "model": "deepseek-v3.2"
+    "model": "deepseek-v3.2",
+    "api_format": "openai"
   }
 }
 ```
 
-支持所有 OpenAI 兼容 API（DeepSeek、通义千问、OpenAI、Ollama 等）。
+支持所有 OpenAI 兼容 API（DeepSeek、通义千问、OpenAI、Ollama 等），也支持 Anthropic 原生格式（将 `api_format` 设为 `"anthropic"`）。
 
 ### 启动
 
@@ -176,6 +183,7 @@ cd frontend && npm run dev （配置了一键启动）
 
 对话引擎通过 SSE 流式输出，同时实时送达前端显示与 TTS 分句播放。
 工具调用不依赖 OpenAI Function Calling API，LLM 在文本中以 ` ```tool``` ` 代码块嵌入 JSON，**任何 OpenAI 兼容提供商均可使用**。
+同时支持通过 `api_format: "anthropic"` 使用 Anthropic 原生 API 格式。
 
 **单轮工具调用流程：**
 
@@ -471,7 +479,7 @@ SSAA 超采样抗锯齿：Canvas 按 `width × ssaa` 渲染，CSS `transform: sc
 
 ### OpenClaw 电脑控制
 
-对接 OpenClaw Gateway（端口 18789），通过自然语言调度 AI 编程助手执行本地任务。
+对接 OpenClaw Gateway（端口 20789），通过自然语言调度 AI 编程助手执行本地任务。
 
 - **三级回退启动：** 打包内嵌 → 全局 `openclaw` 命令 → 自动 `npm install -g openclaw`
 - 支持 sessionKey hooks（2026.2.17+），可配置自定义 hooks 路径
@@ -500,7 +508,7 @@ SSAA 超采样抗锯齿：Canvas 按 `width × ssaa` 渲染，CSS `transform: sc
 
 ## 后端架构
 
-NagaAgent 由四个独立微服务组成，`main.py` 统一编排启动：
+NagaAgent 由五个独立微服务组成，`main.py` 统一编排启动：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -525,7 +533,7 @@ NagaAgent 由四个独立微服务组成，`main.py` 统一编排启动：
    │ Skill 市场   │  ┌───▼──────────┐
    │ 配置管理     │  │  OpenClaw    │
    └──────┬───────┘  │  Gateway    │
-          │          │  :18789     │
+          │          │  :20789     │
    ┌──────▼──────┐   └─────────────┘
    │ MCP Server  │
    │   :8003     │
@@ -581,14 +589,14 @@ NagaAgent/
 │   └── agent_office_doc/
 │
 ├── summer_memory/            # GRAG 知识图谱记忆
-│   ├── quintuple_extractor.py
+│   ├── quintuple_extractor.py  #   支持 OpenAI / Anthropic 格式
 │   ├── quintuple_graph.py
 │   ├── quintuple_rag_query.py
 │   ├── task_manager.py
 │   ├── memory_manager.py
 │   └── memory_client.py      #   NagaMemory 远程客户端
 │
-├── voice/                    # 语音服务（:5048）
+├── voice/                    # 语音服务（:5048 / :5060）
 │   ├── output/               #   TTS + 口型同步
 │   └── input/                #   ASR + 实时语音
 │
@@ -707,9 +715,10 @@ NagaAgent/
 | API Server | 8000 | 主接口：对话、配置、认证、Skill 市场 |
 | Agent Server | 8001 | 任务调度、OpenClaw |
 | MCP Server | 8003 | MCP 工具注册与调度 |
+| Memory Server | 8004 | 记忆服务 |
 | Voice Service | 5048 | TTS / ASR |
 | Neo4j | 7687 | 知识图谱（可选） |
-| OpenClaw Gateway | 18789 | AI 电脑控制（可选） |
+| OpenClaw Gateway | 20789 | AI 电脑控制（可选） |
 
 ---
 
@@ -720,6 +729,7 @@ NagaAgent/
 | Python 版本报错 | 必须使用 Python 3.11；推荐用 uv 自动管理版本 |
 | 端口被占用 | 检查 8000、8001、8003、5048 是否可用 |
 | Neo4j 连接超时 / 挂起 | 已在 2.24 修复；确认 Neo4j 服务已启动 |
+| Neo4j 连接状态误报 | 已在 4.12 修复 py2neo `Graph()` timeout 参数兼容性 |
 | TTS 无声音 / CORS 报错 | 已在 2.25 修复；确认 `voice_enabled: true` |
 | 启动卡在进度条 | 检查 API Key 是否正确；等待 3 秒后出现重启提示 |
 | 悬浮球头像不显示 | 已在 2.17 修复序列帧路径；确认使用最新打包版本 |
@@ -729,7 +739,6 @@ NagaAgent/
 ```bash
 python main.py --check-env --force-check  # 完整环境诊断
 python main.py --quick-check              # 快速检查
-python update.py                          # 自动 git pull + 依赖同步
 ```
 
 ---
