@@ -38,6 +38,15 @@ Commercial inquiries: contact@nagaagent.com / bilibili [柏斯阔落]
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 🔧 2026-04-15 | — | Config sync refactor: source config and runtime config bidirectional merging; ASR health check URL now uses config values; server port retrieval and config path refactoring |
+| 🤖 2026-04-14 | — | Added Anthropic API format support (`api_format` field); quintuple extractor now compatible with Anthropic SDK; Live2D empty-text call handling |
+| 🐛 2026-04-12 | — | Fixed py2neo `Graph()` timeout parameter incompatibility and Neo4j connection status false positives |
+| 🌐 2026-04-05 | — | Forum enhancements: feed mode and unlock progress features |
+| 📖 2026-03-21 | — | Added Japanese README (README_ja.md) |
+| 🧳 2026-03-20 | — | Improved travel module workflows and Hub installation flow |
+| 📨 2026-03-17 | — | QQ notifications: dedicated verification endpoints, server-side mention handling, error passthrough |
+| 🛠️ 2026-03-16 | — | Forum loading and packaged view restore fixes; macOS DMG signing & filesystem fixes; OpenClaw packaged from source with runtime fixes |
+| 📦 2026-03-15 | — | OpenClaw packaged runtime hardening; telemetry notification and runtime integration refinement; Windows build script console encoding fix |
 | 🛰️ 2026-03-14 | — | Agent directory upgraded with a full settings dialog (name / persona / engine / SOUL.md / private MCP & Skills); Skill Workshop now supports NagaHub and common MCP warm-up; travel/exploration flow adds QQ and Feishu completion callbacks; cloud memory no longer falls back to local Neo4j |
 | 🧩 2026-03-13 | — | OpenClaw orchestration and packaging integration expanded further; backend spec fixed Windows console Unicode output errors |
 | 🧱 2026-03-11 | — | OpenClaw Skill auto-execution; per-agent isolated workspaces; model selector and pricing display now support Default / Deepseek-V3.2 / Kimi-K2.5 |
@@ -112,13 +121,10 @@ npm install
 cd ..
 
 # Backend
-# Option 1: Setup script (auto-detects env, creates venv, installs deps)
-python setup.py
-
-# Option 2: uv
+# Option 1: uv (recommended)
 uv sync
 
-# Option 3: Manual
+# Option 2: Manual
 python -m venv .venv
 source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
@@ -133,12 +139,13 @@ Copy `config.json.example` to `config.json` and fill in your LLM API credentials
   "api": {
     "api_key": "your-api-key",
     "base_url": "https://api.deepseek.com",
-    "model": "deepseek-v3.2"
+    "model": "deepseek-v3.2",
+    "api_format": "openai"
   }
 }
 ```
 
-Works with any OpenAI-compatible API (DeepSeek, Qwen, OpenAI, Ollama, etc.).
+Works with any OpenAI-compatible API (DeepSeek, Qwen, OpenAI, Ollama, etc.), and also supports the native Anthropic format (set `api_format` to `"anthropic"`).
 
 ### Launch
 
@@ -172,6 +179,7 @@ All features are accessible through eight entry buttons on the main panel:
 
 The chat engine streams output via SSE, simultaneously sending to the frontend display and TTS sentence splitting.
 Tool calls do not rely on OpenAI's Function Calling API — the LLM embeds JSON inside ` ```tool``` ` code blocks, so **any OpenAI-compatible provider works out of the box**.
+Anthropic native API format is also supported via `api_format: "anthropic"`.
 
 **Single-round tool call flow:**
 
@@ -467,7 +475,7 @@ Merge order: body state → mouth → action → manual override → emotion ble
 
 ### OpenClaw Computer Control
 
-Interfaces with the OpenClaw Gateway (port 18789) to dispatch AI coding assistants for local tasks via natural language.
+Interfaces with the OpenClaw Gateway (port 20789) to dispatch AI coding assistants for local tasks via natural language.
 
 - **3-tier fallback startup:** packaged binary → global `openclaw` command → auto `npm install -g openclaw`
 - Supports sessionKey hooks (2026.2.17+), configurable custom hooks path
@@ -496,7 +504,7 @@ Source: [`agentserver/`](agentserver/)
 
 ## Backend Architecture
 
-NagaAgent consists of four independent microservices, all orchestrated by `main.py`:
+NagaAgent consists of five independent microservices, all orchestrated by `main.py`:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -522,7 +530,7 @@ NagaAgent consists of four independent microservices, all orchestrated by `main.
    │ Config mgmt  │  ┌───▼──────────┐
    └──────┬───────┘  │  OpenClaw    │
           │          │  Gateway     │
-   ┌──────▼──────┐   │  :18789      │
+   ┌──────▼──────┐   │  :20789      │
    │ MCP Server  │   └─────────────┘
    │   :8003     │
    │ Tool registry│
@@ -578,14 +586,14 @@ NagaAgent/
 │   └── agent_office_doc/
 │
 ├── summer_memory/            # GRAG knowledge graph memory
-│   ├── quintuple_extractor.py
+│   ├── quintuple_extractor.py  #   Supports OpenAI / Anthropic formats
 │   ├── quintuple_graph.py
 │   ├── quintuple_rag_query.py
 │   ├── task_manager.py
 │   ├── memory_manager.py
 │   └── memory_client.py      #   NagaMemory remote client
 │
-├── voice/                    # Voice service (:5048)
+├── voice/                    # Voice service (:5048 / :5060)
 │   ├── output/               #   TTS + lip sync
 │   └── input/                #   ASR + realtime voice
 │
@@ -704,9 +712,10 @@ When a character card is active, `ai_name` and `model.source` are automatically 
 | API Server | 8000 | Main interface: chat, config, auth, Skill Market |
 | Agent Server | 8001 | Task scheduling, OpenClaw |
 | MCP Server | 8003 | MCP tool registration & dispatch |
+| Memory Server | 8004 | Memory service |
 | Voice Service | 5048 | TTS / ASR |
 | Neo4j | 7687 | Knowledge graph (optional) |
-| OpenClaw Gateway | 18789 | AI computer control (optional) |
+| OpenClaw Gateway | 20789 | AI computer control (optional) |
 
 ---
 
@@ -717,6 +726,7 @@ When a character card is active, `ai_name` and `model.source` are automatically 
 | Python version error | Must use Python 3.11; recommend uv for automatic version management |
 | Port in use | Check that 8000, 8001, 8003, 5048 are available |
 | Neo4j timeout / hang | Fixed in 2.24; ensure Neo4j service is running |
+| Neo4j connection status false positive | Fixed in 4.12: py2neo `Graph()` timeout parameter compatibility |
 | TTS silent / CORS error | Fixed in 2.25; confirm `voice_enabled: true` |
 | Progress bar stuck | Check API Key; restart hint appears after 3 seconds |
 | Floating ball avatar missing | Fixed in 2.17 (sprite frame path); confirm using latest packaged version |
@@ -726,7 +736,6 @@ When a character card is active, `ai_name` and `model.source` are automatically 
 ```bash
 python main.py --check-env --force-check  # Full environment diagnostics
 python main.py --quick-check              # Quick check
-python update.py                          # Auto git pull + dependency sync
 ```
 
 ---
