@@ -221,11 +221,18 @@ async def refresh(refresh_token_override: Optional[str] = None) -> dict:
 
 
 def logout():
-    """清除本地认证状态和持久化文件"""
+    """清除本地认证状态和持久化文件，并将 OpenClaw 配置切换到本地模型"""
     global _access_token, _user_info
     _access_token = None
     _user_info = None
     _clear_refresh_token()
+
+    try:
+        from agentserver.openclaw.llm_config_bridge import inject_naga_llm_config
+        inject_naga_llm_config()
+        logger.info("登出后已同步 OpenClaw LLM 配置（切换为本地模型直连）")
+    except Exception as e:
+        logger.debug(f"登出后同步 OpenClaw 配置跳过: {e}")
 
 
 def is_authenticated() -> bool:

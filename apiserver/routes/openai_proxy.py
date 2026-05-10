@@ -20,6 +20,39 @@ logger = logging.getLogger(__name__)
 
 NAGABUSINESS_URL = "http://62.234.131.204:30031/v1/chat/completions"
 
+
+_DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
+_DEFAULT_API_KEY = "your-api-key-here"
+
+
+def _is_user_configured_api() -> bool:
+    """判断用户是否真正配置了自己的 API（非默认占位值）。"""
+    try:
+        from system.config import config as naga_config
+        user_base = (getattr(naga_config.api, "base_url", "") or "").strip().rstrip("/")
+        api_key = (getattr(naga_config.api, "api_key", "") or "").strip()
+        if not user_base:
+            return False
+        if user_base == _DEFAULT_BASE_URL and (not api_key or api_key == _DEFAULT_API_KEY):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def _get_upstream_url() -> str:
+    """返回上游 URL：用户配置了就使用用户配置，否则走 NagaBusiness。"""
+    try:
+        from system.config import config as naga_config
+        user_base = (getattr(naga_config.api, "base_url", "") or "").strip().rstrip("/")
+        if user_base:
+            if not _is_user_configured_api():
+                return NAGABUSINESS_URL
+            return f"{user_base}/chat/completions"
+    except Exception:
+        pass
+    return NAGABUSINESS_URL
+
 _TOOL_SECTION_BEGIN = "<|tool_calls_section_begin|>"
 _TOOL_SECTION_END = "<|tool_calls_section_end|>"
 _TOOL_CALL_BEGIN = "<|tool_call_begin|>functions."
@@ -31,6 +64,20 @@ _AUTH_INTERRUPT_DEBOUNCE_SECONDS = 5.0
 
 
 async def _upstream_headers() -> Dict[str, str]:
+    """返回上游请求头：用户配置了 API 则使用用户配置，否则用 NagaBusiness token。"""
+    if _is_user_configured_api():
+        try:
+            from system.config import config as naga_config
+            api_key = getattr(naga_config.api, "api_key", "") or ""
+            if api_key:
+                return {
+                    "Authorization": f"Bearer {api_key}",
+                    "Accept": "application/json, text/event-stream",
+                }
+        except Exception:
+            pass
+        return {"Accept": "application/json, text/event-stream"}
+
     token = naga_auth.get_access_token()
     if not token and naga_auth.has_refresh_token():
         try:
@@ -104,15 +151,19 @@ async def _post_with_auth_retry(
     *,
     json_body: Dict[str, Any],
     headers: Dict[str, str],
+    url: str = "",
 ) -> httpx.Response:
-    resp = await client.post(NAGABUSINESS_URL, json=json_body, headers=headers)
-    if resp.status_code != 401:
+    upstream_url = url or _get_upstream_url()
+    resp = await client.post(upstream_url, json=json_body, headers=headers)
+    if upstream_url != NAGABUSINESS_URL:
+        return resp
+    if resp.status_code != 401 or not naga_auth.is_authenticated():
         return resp
 
     new_token = await _refresh_upstream_token()
     if new_token:
         retry_headers = {**headers, "Authorization": f"Bearer {new_token}"}
-        resp = await client.post(NAGABUSINESS_URL, json=json_body, headers=retry_headers)
+        resp = await client.post(upstream_url, json=json_body, headers=retry_headers)
         if resp.status_code != 401:
             return resp
 
@@ -125,10 +176,14 @@ async def _stream_with_auth_retry(
     *,
     json_body: Dict[str, Any],
     headers: Dict[str, str],
+    url: str = "",
 ):
-    stream_ctx = client.stream("POST", NAGABUSINESS_URL, json=json_body, headers=headers)
+    upstream_url = url or _get_upstream_url()
+    stream_ctx = client.stream("POST", upstream_url, json=json_body, headers=headers)
     resp = await stream_ctx.__aenter__()
-    if resp.status_code != 401:
+    if upstream_url != NAGABUSINESS_URL:
+        return resp, stream_ctx
+    if resp.status_code != 401 or not naga_auth.is_authenticated():
         return resp, stream_ctx
 
     text = await resp.aread()
@@ -141,7 +196,7 @@ async def _stream_with_auth_retry(
     new_token = await _refresh_upstream_token()
     if new_token:
         retry_headers = {**headers, "Authorization": f"Bearer {new_token}"}
-        retry_ctx = client.stream("POST", NAGABUSINESS_URL, json=json_body, headers=retry_headers)
+        retry_ctx = client.stream("POST", upstream_url, json=json_body, headers=retry_headers)
         retry_resp = await retry_ctx.__aenter__()
         if retry_resp.status_code != 401:
             return retry_resp, retry_ctx
@@ -149,7 +204,7 @@ async def _stream_with_auth_retry(
         return retry_resp, retry_ctx
 
     await _interrupt_open_travel_sessions_for_auth_expired()
-    retry_ctx = client.stream("POST", NAGABUSINESS_URL, json=json_body, headers=headers)
+    retry_ctx = client.stream("POST", upstream_url, json=json_body, headers=headers)
     retry_resp = await retry_ctx.__aenter__()
     return retry_resp, retry_ctx
 
