@@ -135,7 +135,12 @@ export function startBackend(): void {
   appendBackendLog(`[Backend] Starting from ${cwd}`)
   appendBackendLog(`[Backend] Command: ${cmd} ${args.join(' ')}`)
 
-  const env: Record<string, string | undefined> = { ...process.env, PYTHONUNBUFFERED: '1' }
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1',
+  }
 
   const useDebugConsole = process.platform === 'win32' && shouldOpenDebugConsole()
 
@@ -200,14 +205,15 @@ export function startBackend(): void {
     detached: process.platform !== 'win32',
   })
 
-  backendProcess.stdout?.on('data', (data: Buffer) => {
-    const text = data.toString()
+  backendProcess.stdout?.setEncoding('utf-8')
+  backendProcess.stderr?.setEncoding('utf-8')
+
+  backendProcess.stdout?.on('data', (text: string) => {
     consumeStdoutChunk(text)
     console.log(`[Backend] ${text.trimEnd()}`)
   })
 
-  backendProcess.stderr?.on('data', (data: Buffer) => {
-    const text = data.toString()
+  backendProcess.stderr?.on('data', (text: string) => {
     console.error(`[Backend] ${text.trimEnd()}`)
     consumeStderrChunk(text)
   })
