@@ -8,10 +8,12 @@ from typing import Any
 from unittest.mock import patch
 
 import httpx
+from fastapi import HTTPException
 
 from apiserver import naga_auth
 from apiserver.api_server import app as api_app
 from apiserver.agentic_tool_loop import _execute_local_tool, format_tool_result_for_display
+from apiserver.routes import extensions as extensions_routes
 from apiserver.routes import openai_proxy
 from apiserver.routes import tools as tools_routes
 from apiserver.routes.system import _sanitize_system_config_payload
@@ -729,6 +731,59 @@ class ConfigAndToolTests(unittest.TestCase):
                     )
 
         asyncio.run(_run_request())
+
+    def test_skill_write_rejects_path_traversal_names(self) -> None:
+        traversal_names = [
+            "../escape",
+            "..\\escape",
+            "..",
+            "/tmp/escape",
+            "C:\\Temp\\escape",
+            "\\\\server\\share\\escape",
+            "nested/skill",
+            "nested\\skill",
+        ]
+
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir) / "skills"
+            for name in traversal_names:
+                with self.subTest(name=name):
+                    with self.assertRaises(HTTPException):
+                        extensions_routes._write_skill_file_to_dir(base_dir, name, "poc")
+
+            skill_path = extensions_routes._write_skill_file_to_dir(base_dir, "safe-skill_1", "ok")
+            self.assertEqual(skill_path, base_dir.resolve() / "safe-skill_1" / "SKILL.md")
+            self.assertEqual(skill_path.read_text(encoding="utf-8"), "ok")
+
+    def test_skill_delete_and_read_reject_path_traversal_names(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir)
+            public_dir = data_dir / "skills" / "public"
+            public_dir.mkdir(parents=True)
+            (public_dir / "safe").mkdir()
+            (public_dir / "safe" / "SKILL.md").write_text("content", encoding="utf-8")
+
+            outside_dir = data_dir / "outside"
+            outside_dir.mkdir()
+            marker = outside_dir / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            with (
+                patch.object(extensions_routes, "NAGA_PUBLIC_SKILLS_DIR", public_dir),
+                patch.object(extensions_routes, "NAGA_CACHE_SKILLS_DIR", data_dir / "skills" / "cache"),
+                patch.object(extensions_routes, "OPENCLAW_SKILLS_DIR", data_dir / "openclaw" / "skills"),
+                patch.object(extensions_routes, "NAGA_AGENTS_DIR", data_dir / "agents"),
+            ):
+                with self.assertRaises(HTTPException):
+                    extensions_routes._delete_skill_from_scope("../outside", "public")
+                with self.assertRaises(HTTPException):
+                    extensions_routes._read_skill_content_from_scope("../outside", "public")
+
+                self.assertTrue(marker.exists())
+                self.assertEqual(extensions_routes._read_skill_content_from_scope("safe", "public"), "content")
+                deleted_path = extensions_routes._delete_skill_from_scope("safe", "public")
+                self.assertEqual(deleted_path, public_dir.resolve() / "safe")
+                self.assertFalse(deleted_path.exists())
 
     def test_openai_proxy_uses_local_api_when_gateway_disabled(self) -> None:
         class _ProxyApiSettings:

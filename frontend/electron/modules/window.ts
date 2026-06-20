@@ -362,6 +362,9 @@ export function setWindowPosition(x: number, y: number): void {
     return
   const rx = Math.round(x)
   const ry = Math.round(y)
+  if (floatingState !== 'classic') {
+    cancelCurrentAnimation?.()
+  }
   win.setPosition(rx, ry)
   // 任何悬浮球相关状态拖拽时都同步位置（球态/展开态都需要）
   if (floatingState !== 'classic') {

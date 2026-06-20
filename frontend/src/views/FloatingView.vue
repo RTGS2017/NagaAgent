@@ -132,6 +132,7 @@ let unsubBlur: (() => void) | undefined
 let resizeObserver: ResizeObserver | null = null
 let fitRAF = 0
 let _lastFitHeight = 0 // 防止 ResizeObserver 反馈循环
+const isDraggingWindow = ref(false)
 
 // ─── 会话历史（声明前置，fitWindowHeight 需要引用） ──────
 const showHistory = ref(false)
@@ -139,6 +140,8 @@ const showHistory = ref(false)
 // 根据消息内容自适应窗口高度
 function fitWindowHeight() {
   if (floatingState.value !== 'full')
+    return
+  if (isDraggingWindow.value)
     return
   const el = messageContentRef.value
   if (!el)
@@ -261,6 +264,7 @@ let dragState: { screenX: number, screenY: number, winX: number, winY: number } 
 let hasDragged = false
 
 function onDragPointerDown(e: PointerEvent) {
+  isDraggingWindow.value = true
   dragState = {
     screenX: e.screenX,
     screenY: e.screenY,
@@ -284,22 +288,32 @@ function onDragPointerMove(e: PointerEvent) {
 
 function onDragPointerUp(e: PointerEvent) {
   if (!dragState) {
+    isDraggingWindow.value = false
     return
   }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+  const moved = hasDragged
   dragState = null
+  isDraggingWindow.value = false
+  if (moved)
+    requestFitHeight()
 }
 
 // 球态：拖拽 + 点击展开（pointerup 需要区分拖拽和点击）
 function onBallPointerUp(e: PointerEvent) {
   if (!dragState) {
+    isDraggingWindow.value = false
     return
   }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-  if (!hasDragged) {
+  const moved = hasDragged
+  if (!moved) {
     handleBallClick()
   }
   dragState = null
+  isDraggingWindow.value = false
+  if (moved)
+    requestFitHeight()
 }
 
 // 紧凑态/完整态球：拖拽 + 点击收起
@@ -310,13 +324,18 @@ function onCompactBallPointerDown(e: PointerEvent) {
 
 function onCompactBallPointerUp(e: PointerEvent) {
   if (!dragState) {
+    isDraggingWindow.value = false
     return
   }
   ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-  if (!hasDragged) {
+  const moved = hasDragged
+  if (!moved) {
     handleCollapse()
   }
   dragState = null
+  isDraggingWindow.value = false
+  if (moved)
+    requestFitHeight()
 }
 
 function handleCollapse() {

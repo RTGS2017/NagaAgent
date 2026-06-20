@@ -138,6 +138,8 @@ Content-Type: application/json
 
 技能文件会被创建为 `skills/{name}/SKILL.md`，包含 YAML frontmatter 元数据和 Markdown 内容。技能会在下次对话时自动加载到系统提示词中。
 
+`name` 是单段技能目录标识，不能是空值、`.`、`..`，也不能包含 `/`、`\`、绝对路径、Windows 盘符路径或控制字符。
+
 ### 自定义技能内容建议格式
 ```markdown
 # 技能标题

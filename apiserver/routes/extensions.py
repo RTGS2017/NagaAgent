@@ -11,7 +11,7 @@ import sys
 import time
 import traceback
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Dict, List, Optional, Any, Tuple
 from urllib.request import Request as UrlRequest, urlopen
 from urllib.error import URLError
@@ -49,6 +49,7 @@ MCPORTER_CONFIG_PATH = MCPORTER_DIR / "config.json"
 LEGACY_MCPORTER_DIR = Path.home() / ".mcporter"
 LEGACY_MCPORTER_CONFIG_PATH = LEGACY_MCPORTER_DIR / "config.json"
 SKILL_FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+MAX_SKILL_NAME_LENGTH = 120
 
 for _path in (OPENCLAW_SKILLS_DIR, NAGA_PUBLIC_SKILLS_DIR, NAGA_CACHE_SKILLS_DIR, NAGA_AGENTS_DIR):
     _path.mkdir(parents=True, exist_ok=True)
@@ -150,8 +151,50 @@ def _write_skill_file(skill_name: str, content: str) -> Path:
     return _write_skill_file_to_dir(OPENCLAW_SKILLS_DIR, skill_name, content)
 
 
+def _normalize_skill_name(skill_name: str) -> str:
+    name = (skill_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="技能名称不能为空")
+    if len(name) > MAX_SKILL_NAME_LENGTH:
+        raise HTTPException(status_code=400, detail=f"技能名称不能超过 {MAX_SKILL_NAME_LENGTH} 个字符")
+    if name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="技能名称不能是路径保留名称")
+    if "/" in name or "\\" in name:
+        raise HTTPException(status_code=400, detail="技能名称不能包含路径分隔符")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        raise HTTPException(status_code=400, detail="技能名称不能包含控制字符")
+
+    posix_path = PurePosixPath(name)
+    windows_path = PureWindowsPath(name)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive or windows_path.root:
+        raise HTTPException(status_code=400, detail="技能名称不能是绝对路径或盘符路径")
+    return name
+
+
+def _resolve_child_dir(base_dir: Path, child_name: str, label: str = "技能名称") -> Path:
+    name = _normalize_skill_name(child_name)
+    base = base_dir.resolve(strict=False)
+    target = (base / name).resolve(strict=False)
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{label} 指向了不允许的目录")
+    if target == base:
+        raise HTTPException(status_code=400, detail=f"{label} 不能指向根目录")
+    return target
+
+
+def _resolve_skill_dir(base_dir: Path, skill_name: str) -> Path:
+    return _resolve_child_dir(base_dir, skill_name, "技能名称")
+
+
+def _resolve_agent_skills_dir(agent_id: str) -> Path:
+    agent_dir = _resolve_child_dir(NAGA_AGENTS_DIR, agent_id, "agent_id")
+    return agent_dir / "skills"
+
+
 def _write_skill_file_to_dir(base_dir: Path, skill_name: str, content: str) -> Path:
-    skill_dir = base_dir / skill_name
+    skill_dir = _resolve_skill_dir(base_dir, skill_name)
     skill_dir.mkdir(parents=True, exist_ok=True)
     skill_path = skill_dir / "SKILL.md"
     skill_path.write_text(content, encoding="utf-8")
@@ -1315,6 +1358,7 @@ enabled: true
 
 
 def _write_skill_to_scope(name: str, content: str, scope: str, agent_id: Optional[str] = None) -> Path:
+    name = _normalize_skill_name(name)
     rendered_content = _render_skill_file_content(name, content)
 
     if scope == "openclaw-local":
@@ -1337,22 +1381,23 @@ def _write_skill_to_scope(name: str, content: str, scope: str, agent_id: Optiona
         agent = _get_agent_record(agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail="目标干员不存在")
-        agent_skill_dir = NAGA_AGENTS_DIR / agent_id / "skills"
+        agent_skill_dir = _resolve_agent_skills_dir(agent_id)
         return _write_skill_file_to_dir(agent_skill_dir, name, rendered_content)
 
     raise HTTPException(status_code=400, detail=f"未知技能范围: {scope}")
 
 
 def _delete_skill_from_scope(name: str, scope: str, agent_id: Optional[str] = None) -> Path:
+    name = _normalize_skill_name(name)
     if scope == "cache":
-        candidates = [NAGA_CACHE_SKILLS_DIR / name, OPENCLAW_SKILLS_DIR / name]
+        candidates = [_resolve_skill_dir(NAGA_CACHE_SKILLS_DIR, name), _resolve_skill_dir(OPENCLAW_SKILLS_DIR, name)]
     elif scope == "public":
-        candidates = [NAGA_PUBLIC_SKILLS_DIR / name]
+        candidates = [_resolve_skill_dir(NAGA_PUBLIC_SKILLS_DIR, name)]
     elif scope == "private":
         agent_id = (agent_id or "").strip()
         if not agent_id:
             raise HTTPException(status_code=400, detail="私有技能必须指定 agent_id")
-        candidates = [NAGA_AGENTS_DIR / agent_id / "skills" / name]
+        candidates = [_resolve_skill_dir(_resolve_agent_skills_dir(agent_id), name)]
     else:
         raise HTTPException(status_code=400, detail=f"未知技能范围: {scope}")
 
@@ -1371,19 +1416,20 @@ def _delete_skill_from_scope(name: str, scope: str, agent_id: Optional[str] = No
 
 
 def _read_skill_content_from_scope(name: str, scope: str, agent_id: Optional[str] = None) -> str:
+    name = _normalize_skill_name(name)
     candidates: List[Path]
     if scope == "cache":
         candidates = [
-            NAGA_CACHE_SKILLS_DIR / name / "SKILL.md",
-            OPENCLAW_SKILLS_DIR / name / "SKILL.md",
+            _resolve_skill_dir(NAGA_CACHE_SKILLS_DIR, name) / "SKILL.md",
+            _resolve_skill_dir(OPENCLAW_SKILLS_DIR, name) / "SKILL.md",
         ]
     elif scope == "public":
-        candidates = [NAGA_PUBLIC_SKILLS_DIR / name / "SKILL.md"]
+        candidates = [_resolve_skill_dir(NAGA_PUBLIC_SKILLS_DIR, name) / "SKILL.md"]
     elif scope == "private":
         agent_id = (agent_id or "").strip()
         if not agent_id:
             raise HTTPException(status_code=400, detail="私有技能必须指定 source_agent_id")
-        candidates = [NAGA_AGENTS_DIR / agent_id / "skills" / name / "SKILL.md"]
+        candidates = [_resolve_skill_dir(_resolve_agent_skills_dir(agent_id), name) / "SKILL.md"]
     else:
         raise HTTPException(status_code=400, detail=f"未知技能范围: {scope}")
 
@@ -1500,7 +1546,10 @@ def _build_skill_catalog() -> Dict[str, Any]:
         agent_id = agent.get("id")
         if not agent_id:
             continue
-        agent_dir = NAGA_AGENTS_DIR / str(agent_id) / "skills"
+        try:
+            agent_dir = _resolve_agent_skills_dir(str(agent_id))
+        except HTTPException:
+            continue
         private_skills.extend(
             _list_skill_dir(
                 agent_dir,
@@ -1613,6 +1662,9 @@ async def clone_skill(request: SkillCloneRequest):
 
 @router.delete("/skills/{name}")
 async def delete_skill(name: str, scope: str, agent_id: Optional[str] = None):
+    scope = (scope or "").strip().lower()
+    if scope == "legacy":
+        scope = "cache"
     telemetry_props = {
         "name": name,
         "scope": scope,

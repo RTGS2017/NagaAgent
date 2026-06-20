@@ -146,6 +146,8 @@ OpenClaw 配置桥接会在生成、迁移或注入配置时补齐 `gateway.mode
 | POST | `/travel/sessions/{session_id}/browser` | 更新探索浏览器策略 |
 | GET  | `/memory/stats` | 记忆系统统计 |
 | GET  | `/memory/quintuples` | 获取五元组 |
+
+技能管理接口会将 `name` 当作技能目录标识处理，只允许单段名称；空名称、`.`、`..`、包含 `/` 或 `\`、绝对路径、Windows 盘符路径和控制字符会被拒绝，避免写入、读取或删除越过技能目录边界。
 | GET  | `/memory/quintuples/search` | 搜索五元组 |
 | GET/POST | `/tools/search` | 搜索代理 |
 
