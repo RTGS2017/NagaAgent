@@ -65,6 +65,16 @@ export interface CharacterTemplate {
   active?: boolean
 }
 
+export interface CustomLive2DModel {
+  id: string
+  name: string
+  modelPath: string
+  source: string
+  fileCount: number
+  totalBytes: number
+  createdAt: string
+}
+
 export type AgentEngine = 'openclaw' | 'naga-core'
 
 export interface SkillCatalogItem {
@@ -255,6 +265,43 @@ export class CoreApiClient extends ApiClient {
     characters: CharacterTemplate[]
   }> {
     return this.instance.get('/system/characters')
+  }
+
+  listCustomLive2DModels(): Promise<{
+    status: 'success'
+    models: CustomLive2DModel[]
+  }> {
+    return this.instance.get('/system/live2d/custom-models')
+  }
+
+  uploadCustomLive2DModel(params: {
+    name: string
+    files: File[]
+    modelPath?: string
+  }): Promise<{
+    status: 'success'
+    model: CustomLive2DModel
+  }> {
+    const formData = new FormData()
+    formData.append('name', params.name)
+    if (params.modelPath) {
+      formData.append('model_path', params.modelPath)
+    }
+    for (const file of params.files) {
+      const relativePath = file.webkitRelativePath || file.name
+      formData.append('files', file, relativePath)
+    }
+    return this.instance.post('/system/live2d/custom-models', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })
+  }
+
+  deleteCustomLive2DModel(id: string): Promise<{
+    status: 'success'
+    message: string
+  }> {
+    return this.instance.delete(`/system/live2d/custom-models/${encodeURIComponent(id)}`)
   }
 
   chat(message: string, options?: {

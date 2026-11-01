@@ -1,220 +1,148 @@
 import { ref, watch } from 'vue'
 import { ACCESS_TOKEN } from '@/api'
 import API from '@/api/core'
+import { CONFIG } from '@/utils/config'
 
 const audio = ref<HTMLAudioElement | null>(null)
 export const isPlaying = ref(false)
+
+const MAX_PLAYBACK_DURATION_MS = 30_000
+const GATEWAY_TTS_MODEL = 'default'
+const LOCAL_TTS_MODEL = 'tts-1'
+const TTS_RESPONSE_FORMAT = 'mp3'
+
 let maxDurationTimer: number | null = null
 let abortController: AbortController | null = null
 let currentObjectUrl: string | null = null
 
-const MAX_PLAYBACK_DURATION = 30000 // 30秒最大播放时长
+const queue: string[] = []
+let processingQueue = false
+let queueGeneration = 0
 
-// ── Progressive TTS Queue ──
-const _queue: string[] = []
-let _processingQueue = false
-
-/** 移除 markdown 代码块（```...```）和行内代码（`...`），只保留自然语言文本 */
+/** 移除 Markdown 代码块和行内代码，只保留适合朗读的自然语言。 */
 function stripCodeBlocks(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, '') // 移除代码块
-    .replace(/`[^`]+`/g, '') // 移除行内代码
-    .replace(/\n{3,}/g, '\n\n') // 压缩多余空行
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`]+`/g, '')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
-export function speak(text: string): Promise<void> {
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
+export async function speak(text: string): Promise<void> {
   _stopCurrent()
 
-  // 移除代码块，只朗读自然语言
   const cleanText = stripCodeBlocks(text)
-  if (!cleanText)
-    return Promise.resolve()
+  if (!cleanText || !CONFIG.value.system.voice_enabled)
+    return
 
-  // 走 API Server 代理（和 chatStream 同一个 endpoint），后端自动判断走 NagaBusiness 还是本地 edge-tts
-  const url = `${API.endpoint}/tts/speech`
-
-  const isLoggedIn = !!ACCESS_TOKEN.value
+  const useGateway = Boolean(ACCESS_TOKEN.value && CONFIG.value.api.use_gateway)
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (isLoggedIn) {
+  if (useGateway)
     headers.Authorization = `Bearer ${ACCESS_TOKEN.value}`
-  }
 
-  // 创建 AbortController 以便中途取消 fetch
-  abortController = new AbortController()
-  const { signal } = abortController
+  const controller = new AbortController()
+  abortController = controller
 
-  return fetch(url, {
-    method: 'POST',
-    headers,
-    signal,
-    body: JSON.stringify({
-      model: isLoggedIn ? 'default' : 'tts-1',
-      input: cleanText,
-      voice: isLoggedIn ? 'Cherry' : 'zh-CN-XiaoyiNeural',
-      speed: 1.0,
-      response_format: 'mp3',
-    }),
-  }).then(async (res) => {
-    if (!res.ok)
-      throw new Error(`TTS responded ${res.status}`)
+  try {
+    const response = await fetch(`${API.endpoint}/tts/speech`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: useGateway ? GATEWAY_TTS_MODEL : LOCAL_TTS_MODEL,
+        input: cleanText,
+        voice: useGateway ? CONFIG.value.voice_realtime.voice : CONFIG.value.tts.default_voice,
+        speed: CONFIG.value.tts.default_speed,
+        response_format: TTS_RESPONSE_FORMAT,
+      }),
+    })
 
-    // 如果已被 stop() 中止，不再播放
-    if (signal.aborted)
+    if (!response.ok)
+      throw new Error(`TTS responded ${response.status}`)
+    const refreshedAccessToken = response.headers.get('x-naga-access-token')
+    if (refreshedAccessToken)
+      ACCESS_TOKEN.value = refreshedAccessToken
+    if (controller.signal.aborted)
       return
 
-    // ★ 流式播放：用 MediaSource 边收边播，大幅减少首音延迟
-    if (typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg')) {
-      await _streamPlayback(res, signal)
-    }
-    else {
-      // 降级：不支持 MediaSource 的浏览器走原始 blob 方式
-      await _blobPlayback(res, signal)
-    }
-  }).catch((err) => {
-    // AbortError 是正常取消，不需要报错
-    if (err instanceof DOMException && err.name === 'AbortError')
+    // 代理会先完整接收上游音频，因此 MediaSource 不会降低首音延迟。
+    // Blob 播放同时兼容 MP3 与代理包装后的 WAV，并可可靠等待播放结束。
+    await playResponse(response, controller.signal)
+  }
+  catch (error) {
+    if (controller.signal.aborted || isAbortError(error))
       return
     cleanup()
-    console.error('[TTS] speak failed:', err)
-    throw err
-  })
+    console.error('[TTS] speak failed:', error)
+    throw error
+  }
+  finally {
+    if (abortController === controller)
+      abortController = null
+  }
 }
 
-/** 等待 sourceBuffer 更新完成，同时监听 error 事件防止永远挂起 */
-function waitForUpdateEnd(sb: SourceBuffer): Promise<void> {
-  return new Promise((resolve, reject) => {
-    function onEnd() {
-      sb.removeEventListener('error', onErr)
-      resolve()
-    }
-    function onErr() {
-      sb.removeEventListener('updateend', onEnd)
-      reject(new Error('SourceBuffer error'))
-    }
-    sb.addEventListener('updateend', onEnd, { once: true })
-    sb.addEventListener('error', onErr, { once: true })
-  })
-}
-
-/** 流式播放——边接收边播放，首音延迟降至 <500ms */
-async function _streamPlayback(res: Response, signal: AbortSignal): Promise<void> {
-  const mediaSource = new MediaSource()
-  const objectUrl = URL.createObjectURL(mediaSource)
-  currentObjectUrl = objectUrl
-  const el = new Audio(objectUrl)
-  audio.value = el
-
-  el.onplay = () => {
-    isPlaying.value = true
-  }
-  el.onended = () => {
-    cleanup()
-  }
-  el.onerror = () => {
-    cleanup()
-  }
-
-  // 设置30秒最大播放时长定时器
-  maxDurationTimer = window.setTimeout(() => {
-    if (audio.value)
-      stop()
-  }, MAX_PLAYBACK_DURATION)
-
-  return new Promise<void>((resolve, reject) => {
-    mediaSource.addEventListener('sourceopen', async () => {
-      const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg')
-      const reader = res.body?.getReader()
-      if (!reader) {
-        cleanup()
-        reject(new Error('No response body'))
-        return
-      }
-
-      let firstChunk = true
-      try {
-        while (true) {
-          if (signal.aborted) {
-            await reader.cancel()
-            break
-          }
-          const { done, value } = await reader.read()
-          if (done)
-            break
-          if (!value || value.length === 0)
-            continue
-
-          // 等待 sourceBuffer 可写
-          if (sourceBuffer.updating) {
-            await waitForUpdateEnd(sourceBuffer)
-          }
-          sourceBuffer.appendBuffer(value)
-          await waitForUpdateEnd(sourceBuffer)
-
-          // 收到第一块数据后立即开始播放
-          if (firstChunk) {
-            firstChunk = false
-            el.play().catch(() => {})
-          }
-        }
-      }
-      catch (e: any) {
-        if (e?.name === 'AbortError' || signal.aborted) { /* 正常取消 */ }
-        else { console.warn('[TTS] stream error:', e) }
-      }
-
-      // 流结束，关闭 MediaSource
-      try {
-        if (mediaSource.readyState === 'open') {
-          if (sourceBuffer.updating) {
-            await waitForUpdateEnd(sourceBuffer)
-          }
-          mediaSource.endOfStream()
-        }
-      }
-      catch { /* ignore */ }
-      resolve()
-    }, { once: true })
-  })
-}
-
-/** 降级播放——完整下载后播放（老浏览器兜底） */
-async function _blobPlayback(res: Response, signal: AbortSignal): Promise<void> {
-  const blob = await res.blob()
+async function playResponse(response: Response, signal: AbortSignal): Promise<void> {
+  const blob = await response.blob()
   if (blob.size === 0)
     throw new Error('TTS returned empty audio')
   if (signal.aborted)
     return
 
-  const audioBlob = blob.type.startsWith('audio/') ? blob : new Blob([blob], { type: 'audio/mpeg' })
+  const responseType = response.headers.get('content-type')?.split(';', 1)[0]?.trim()
+  const audioBlob = blob.type || !responseType
+    ? blob
+    : new Blob([blob], { type: responseType })
   const objectUrl = URL.createObjectURL(audioBlob)
+  const element = new Audio(objectUrl)
   currentObjectUrl = objectUrl
-  const el = new Audio(objectUrl)
-  audio.value = el
+  audio.value = element
 
-  el.onplay = () => {
-    isPlaying.value = true
-  }
-  el.onended = () => {
-    cleanup()
-  }
-  el.onerror = () => {
-    cleanup()
-  }
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    let finish: (error?: Error) => void = () => {}
+    const handleAbort = () => finish()
 
-  maxDurationTimer = window.setTimeout(() => {
-    if (audio.value)
-      stop()
-  }, MAX_PLAYBACK_DURATION)
+    finish = (error?: Error) => {
+      if (settled)
+        return
+      settled = true
+      signal.removeEventListener('abort', handleAbort)
+      if (audio.value === element)
+        cleanup()
+      if (error)
+        reject(error)
+      else
+        resolve()
+    }
 
-  el.play().catch(() => {})
+    signal.addEventListener('abort', handleAbort, { once: true })
+    element.onplay = () => {
+      isPlaying.value = true
+    }
+    element.onended = () => finish()
+    element.onerror = () => finish(new Error('TTS audio playback failed'))
+
+    maxDurationTimer = window.setTimeout(() => {
+      finish(new Error('TTS audio playback timed out'))
+    }, MAX_PLAYBACK_DURATION_MS)
+
+    element.play().catch((error: unknown) => {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    })
+  })
 }
 
-function cleanup() {
-  if (maxDurationTimer) {
+function cleanup(): void {
+  if (maxDurationTimer !== null) {
     clearTimeout(maxDurationTimer)
     maxDurationTimer = null
   }
+
   isPlaying.value = false
   if (currentObjectUrl) {
     URL.revokeObjectURL(currentObjectUrl)
@@ -231,63 +159,61 @@ function cleanup() {
   audio.value = null
 }
 
-/** 停止当前播放（不清理队列，内部使用） */
-function _stopCurrent() {
-  if (abortController) {
-    abortController.abort()
-    abortController = null
-  }
-
+function _stopCurrent(): void {
+  abortController?.abort()
+  abortController = null
   cleanup()
 }
 
-/** 停止所有 TTS（当前播放 + 清空队列） */
-export function stop() {
-  _queue.length = 0
-  _processingQueue = false
+/** 停止当前播放并清空所有待播句子。 */
+export function stop(): void {
+  queue.length = 0
+  queueGeneration++
+  processingQueue = false
   _stopCurrent()
 }
 
-/** 逐句入队，按顺序播放（流式 TTS 用） */
+/** 逐句入队并严格按顺序播放。 */
 export function queueSpeak(text: string): void {
-  const clean = stripCodeBlocks(text).trim()
-  if (!clean)
+  if (!CONFIG.value.system.voice_enabled)
     return
-  _queue.push(clean)
-  if (!_processingQueue)
-    _drainQueue()
+
+  const cleanText = stripCodeBlocks(text)
+  if (!cleanText)
+    return
+
+  queue.push(cleanText)
+  if (processingQueue)
+    return
+
+  processingQueue = true
+  void drainQueue(queueGeneration)
 }
 
-/** 清空待播放队列（不中断当前播放） */
-export function clearSpeakQueue(): void {
-  _queue.length = 0
-}
+async function drainQueue(generation: number): Promise<void> {
+  for (;;) {
+    if (generation !== queueGeneration)
+      break
+    const text = queue.shift()
+    if (!text)
+      break
 
-async function _drainQueue(): Promise<void> {
-  if (_queue.length === 0) {
-    _processingQueue = false
-    return
-  }
-  _processingQueue = true
-  const text = _queue.shift()!
-  try {
-    await speak(text)
-    // 等待当前音频播放完毕
-    if (isPlaying.value) {
-      await new Promise<void>((resolve) => {
-        const unwatch = watch(isPlaying, (val) => {
-          if (!val) {
-            unwatch()
-            resolve()
-          }
-        })
-        setTimeout(() => {
-          unwatch()
-          resolve()
-        }, 35000)
-      })
+    try {
+      await speak(text)
+    }
+    catch {
+      // 单句失败不阻断后续句子。
     }
   }
-  catch { /* 当前句失败，继续下一句 */ }
-  _drainQueue()
+
+  if (generation === queueGeneration)
+    processingQueue = false
 }
+
+watch(
+  () => CONFIG.value.system.voice_enabled,
+  (enabled) => {
+    if (!enabled)
+      stop()
+  },
+)

@@ -216,7 +216,7 @@ class VoiceIntegration:
 
             # 认证态 → NagaBusiness 网关；否则 → 本地 edge-tts
             from apiserver import naga_auth
-            if naga_auth.is_authenticated():
+            if naga_auth.should_use_model_gateway():
                 tts_url = naga_auth.NAGA_MODEL_URL + "/audio/speech"
                 headers["Authorization"] = f"Bearer {naga_auth.get_access_token()}"
                 payload["model"] = "default"

@@ -6,8 +6,8 @@ import * as PIXI from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { CONFIG } from '@/utils/config'
-import { ensureLive2dCoreLoaded } from '@/utils/live2dCoreLoader'
 import { destroyController, initController, startTracking, stopTracking, trackingCalibration, updateTracking } from '@/utils/live2dController'
+import { ensureLive2dCoreLoaded } from '@/utils/live2dCoreLoader'
 
 const { source, width, height, x, y, scale, ssaa } = defineProps<{
   source: string

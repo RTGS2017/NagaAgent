@@ -14,7 +14,7 @@ Nagaの未来は、あなた自身で切り拓いてください。
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.0-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
@@ -38,6 +38,16 @@ Nagaの未来は、あなた自身で切り拓いてください。
 
 | 日付 | バージョン | 変更内容 |
 |------|---------|---------|
+| 🪟 2026-07-16 | 5.1.5 | Windows の透明フレームレス・メインウィンドウが最大化後の復元時に消える問題を修正：Electron の不安定なネイティブ最大化状態を避け、現在のディスプレイ作業領域を基準に確実に復元；トレイ・ショートカット・単一インスタンス起動の復帰処理を統一し、画面外のウィンドウも自動的に戻すようにしました |
+| 🔊 2026-07-15 | 5.1.4 | 日常会話 TTS を修正：設定画面とチャット画面の音声スイッチを統一し、`content_clean` 後の本文を保持、メインチャットとエージェントチャットの両方に対応、実際の MP3/WAV 形式に従って直列再生；更新確認は GitHub Release を正とし、公式バージョンを確認できない場合は明確に失敗を表示 |
+| 🧭 2026-07-08 | 5.1.3 | ランタイム設定の読み込み優先順位を調整：プロジェクトルートの `config.json` を優先し、存在しない場合のみユーザーデータ設定へフォールバック；設定画面の保存先と関連ドキュメントも有効な設定ファイルに合わせました |
+| 🔐 2026-07-03 | 5.1.2 | ローカルモデル API Key の保存処理を修正し、フロントエンドのプレースホルダーが実キーを上書きしないようにしました；空のストリーム応答はリトライ後に可視エラーを返します；DeepSeek Thinking Mode のツール呼び出しでは必要時のみ `reasoning_content` を再送します |
+| 🚀 2026-06-20 | 5.1.1 | カスタム Live2D モデル設定を追加：端末設定とキャラクター登録から完全なモデルディレクトリをアップロードし、ユーザーデータ配下に保存して現在の API ポートで動的にモデル URL を注入 |
+| 🧭 2026-06-20 | — | ネットワーク探索コントロールセンターを強化：エージェントごとの OpenClaw 探索タスク作成、時間 / クレジット上限と初期ブラウザポリシー設定、実行中のブラウザ表示切替、原始履歴確認に対応 |
+| 🛡️ 2026-06-20 | — | フルスタック実行フローを強化：ログアウト / オープンソースモードで古い token を消去、ローカルモデルのプレースホルダー API Key を拒否、OpenClaw gateway / hooks ランタイム設定を自動補完 |
+| 🧰 2026-06-20 | — | MCP と GUI モデル設定を改善：SSE に `tool_calls` / `tool_results` を追加し、フロントエンドで完全な構造化ツール結果を表示；`provider` / `use_gateway` モデル設定を追加 |
+| 🪟 2026-06-20 | — | Skill パス安全性とフローティングウィンドウのドラッグを修正：import / clone / read / delete 時にパストラバーサル名を拒否；展開状態のドラッグ中は高さ自動調整を一時停止して揺れを防止 |
+| 🔌 2026-05-10 | — | 未ログインまたはゲートウェイ無効時はユーザー設定 API に直接接続し、意図しない NagaBusiness クレジット消費を回避；ログアウト時に OpenClaw をローカルモデル設定へ同期；ローカル異常スクリプトを削除 |
 | 🔧 2026-04-15 | — | 設定同期リファクタリング：source config と runtime config の双方向マージ；ASRヘルスチェックURLが設定値を使用；サービスポート取得と設定パスの再構築 |
 | 🤖 2026-04-14 | — | Anthropic APIフォーマットサポートを追加（`api_format`フィールド）；五つ組抽出器がAnthropic SDKに対応；Live2D空テキスト呼び出しの処理 |
 | 🐛 2026-04-12 | — | py2neo `Graph()` timeoutパラメータの非互換とNeo4j接続状態の誤検知を修正 |
@@ -140,12 +150,16 @@ pip install -r requirements.txt
     "api_key": "your-api-key",
     "base_url": "https://api.deepseek.com",
     "model": "deepseek-v3.2",
+    "provider": "deepseek",
+    "use_gateway": true,
     "api_format": "openai"
   }
 }
 ```
 
-OpenAI互換の任意のAPI（DeepSeek、Qwen、OpenAI、Ollamaなど）で動作します。Anthropicネイティブフォーマットにも対応（`api_format`を`"anthropic"`に設定）。
+OpenAI互換の任意のAPI（DeepSeek、Qwen、OpenAI、Ollamaなど）で動作します。Anthropicネイティブフォーマットにも対応（`api_format`を`"anthropic"`に設定）。ログイン後は既定で NagaModel Gateway を使用します。ローカルのプロバイダー認証情報を使う場合は、ターミナル設定で `use_gateway` を無効化します。
+
+設定はまずプロジェクトルートの `config.json` から読み込まれます。このファイルがない場合のみ、ユーザーデータディレクトリの設定（Linux/macOS は `~/.naga/config.json`、Windows は `%APPDATA%/NagaAgent/config.json`）にフォールバックします。設定画面で保存すると、現在有効な設定ファイルへ書き戻されます。
 
 ### 起動
 
@@ -561,7 +575,7 @@ NagaAgent/
 ├── main.py                   # 統一エントリーポイント、全サービスをオーケストレーション
 ├── build.py                  # クロスプラットフォームビルドスクリプト
 ├── config.json               # ランタイム設定（config.json.exampleからコピー）
-├── pyproject.toml            # バージョン5.1.0、プロジェクトメタデータ & 依存関係
+├── pyproject.toml            # バージョン5.1.5、プロジェクトメタデータ & 依存関係
 │
 ├── apiserver/                # API Server (:8000)
 │   ├── api_server.py         #   FastAPIメインアプリ
@@ -670,23 +684,26 @@ Neo4jなしの場合、GRAGはローカルJSONファイルストレージのみ�
 <details>
 <summary><b>Live2Dアバター（カスタムモデル）</b></summary>
 
+**端末設定 → 音声/ビジュアル設定 → Live2Dモデル** からカスタムモデルをアップロードできます。`.model3.json`、`.moc3`、テクスチャ、モーション、物理ファイルなどを含む完全なモデルディレクトリを選択してください。アップロード後はユーザーデータディレクトリに保存され、自動的に適用されます。**枢機集市 → キャラクター登録 → カスタムキャラクター** でも、キャラクター名、プロンプト、同じ Live2D モデルディレクトリを登録できます。
+
 ```json
 {
   "web_live2d": {
     "ssaa": 2,
     "model": {
-      "source": "./models/your-model/model.model3.json",
+      "source": "GUI またはキャラクターシステムが自動注入",
       "x": 0.5,
       "y": 1.3,
       "size": 6800
     },
+    "custom_model_id": "アップロード後に生成されるモデルID",
     "face_y_ratio": 0.13,
     "tracking_hold_delay_ms": 100
   }
 }
 ```
 
-キャラクターカードが有効な場合、`ai_name`と`model.source`はキャラクターJSONによって自動的に上書きされます — 手動編集は不要です。
+キャラクターカードが有効な場合、`ai_name` と `model.source` はキャラクター JSON によって上書きされます。カスタムモデルでは `custom_model_id` が永続化され、`model.source` は現在の API ポートに合わせて動的に注入されます。
 </details>
 
 <details>

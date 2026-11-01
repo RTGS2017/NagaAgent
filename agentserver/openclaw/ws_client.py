@@ -71,7 +71,7 @@ class OpenClawWSClient:
                 "client": {
                     "id": "gateway-client",
                     "displayName": "openclaw-tui",
-                    "version": "5.1.0",
+                    "version": "5.1.1",
                     "platform": sys.platform,
                     "mode": "ui",
                     "instanceId": self._instance_id,

@@ -8,10 +8,10 @@ interface AgentOption {
   engine?: string
 }
 
-type SkillDialogConfirmPayload =
-  | { mode: 'hub', name: string, source: string }
-  | { mode: 'cache', name: string, sourceScope: 'cache' | 'public' | 'private', sourceAgentId?: string }
-  | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string }
+type SkillDialogConfirmPayload
+  = | { mode: 'hub', name: string, source: string }
+    | { mode: 'cache', name: string, sourceScope: 'cache' | 'public' | 'private', sourceAgentId?: string }
+    | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string }
 
 const props = withDefaults(defineProps<{
   visible: boolean

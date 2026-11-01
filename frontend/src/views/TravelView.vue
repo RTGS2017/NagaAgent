@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import BoxContainer from '@/components/BoxContainer.vue'
 import TravelConfigForm from '@/travel/components/TravelConfigForm.vue'
 import TravelHistoryList from '@/travel/components/TravelHistoryList.vue'
 import TravelResultPanel from '@/travel/components/TravelResultPanel.vue'
 import TravelRunningPanel from '@/travel/components/TravelRunningPanel.vue'
 import { useTravel } from '@/travel/composables/useTravel'
-import { computed, ref } from 'vue'
 
 const {
   travelSession,

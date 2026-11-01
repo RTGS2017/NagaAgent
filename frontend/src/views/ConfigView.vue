@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ModelPricing } from '@/api/business'
-import type { MemoryStats } from '@/api/core'
+import type { CustomLive2DModel, MemoryStats } from '@/api/core'
 import { useStorage } from '@vueuse/core'
 import { Accordion, Button, Divider, InputNumber, InputText, Message, Select, Slider, Textarea, ToggleSwitch } from 'primevue'
 import { useToast } from 'primevue/usetoast'
@@ -15,8 +15,9 @@ import NotificationSettingsPanel from '@/components/NotificationSettingsPanel.vu
 import { audioSettings, effectFileOptions, wakeVoiceOptions } from '@/composables/useAudio'
 import { isNagaLoggedIn, nagaUser } from '@/composables/useAuth'
 import { checkForUpdate } from '@/composables/useVersionCheck'
-import { CONFIG, DEFAULT_CONFIG, DEFAULT_MODEL, MODELS, SYSTEM_PROMPT } from '@/utils/config'
+import { backendConnected, CONFIG, DEFAULT_CONFIG, DEFAULT_MODEL, MODELS, SYSTEM_PROMPT } from '@/utils/config'
 import { trackingCalibration } from '@/utils/live2dController'
+import { applyCustomLive2DModel, applyLive2DModel, toCustomLive2DModelConfig, upsertCustomLive2DModel } from '@/utils/live2dModels'
 
 // ── Tab 切换 ──
 type TabKey = 'model' | 'memory' | 'terminal' | 'notifications'
@@ -38,16 +39,13 @@ const characterLockedHint = computed(() =>
     : undefined,
 )
 
-const selectedModel = ref(Object.entries(MODELS).find(([_, model]) => {
+const selectedModel = computed(() => Object.entries(MODELS).find(([_, model]) => {
   return model.source === CONFIG.value.web_live2d.model.source
 })?.[0] ?? DEFAULT_MODEL)
 
-const modelSelectRef = useTemplateRef<{
-  updateModel: (event: null, value: string) => void
-}>('modelSelectRef')
-
 function onModelChange(value: keyof typeof MODELS) {
-  CONFIG.value.web_live2d.model = { ...MODELS[value] }
+  applyLive2DModel({ ...MODELS[value] })
+  CONFIG.value.system.active_character = ''
 }
 
 const ssaaInputRef = useTemplateRef<{
@@ -57,7 +55,7 @@ const ssaaInputRef = useTemplateRef<{
 function recoverUiConfig() {
   if (!characterLocked.value) {
     CONFIG.value.system.ai_name = DEFAULT_CONFIG.system.ai_name
-    modelSelectRef.value?.updateModel(null, DEFAULT_MODEL)
+    onModelChange(DEFAULT_MODEL)
   }
   CONFIG.value.ui.user_name = DEFAULT_CONFIG.ui.user_name
   ssaaInputRef.value?.updateModel(null, DEFAULT_CONFIG.web_live2d.ssaa)
@@ -71,9 +69,47 @@ const accordionMemory = useStorage('accordion-config-memory', [])
 
 const MODEL_OPTIONS = [
   { label: 'Default', value: 'default' },
-  { label: 'Deepseek-V3.2', value: 'Deepseek-V3.2' },
-  { label: 'Kimi-K2.5', value: 'Kimi-K2.5' },
+  { label: 'DeepSeek V3.2', value: 'deepseek-v3.2' },
+  { label: 'Kimi K2.5', value: 'kimi-k2.5' },
+  { label: 'GPT-5', value: 'gpt-5' },
+  { label: 'Claude Sonnet 4.5', value: 'claude-sonnet-4-5' },
 ]
+
+const PROVIDER_OPTIONS = [
+  { label: '自动识别', value: 'auto', apiFormat: 'openai', baseUrl: '' },
+  { label: 'DeepSeek', value: 'deepseek', apiFormat: 'openai', baseUrl: 'https://api.deepseek.com/v1' },
+  { label: 'OpenAI 兼容', value: 'openai', apiFormat: 'openai', baseUrl: 'https://api.openai.com/v1' },
+  { label: 'OpenRouter', value: 'openrouter', apiFormat: 'openai', baseUrl: 'https://openrouter.ai/api/v1' },
+  { label: 'Anthropic', value: 'anthropic', apiFormat: 'anthropic', baseUrl: 'https://api.anthropic.com' },
+  { label: 'Gemini', value: 'gemini', apiFormat: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { label: '自定义', value: 'custom', apiFormat: 'openai', baseUrl: '' },
+]
+
+const API_FORMAT_OPTIONS = [
+  { label: 'OpenAI 兼容', value: 'openai' },
+  { label: 'Anthropic 原生', value: 'anthropic' },
+]
+
+const useNagaGateway = computed({
+  get() {
+    return CONFIG.value.api.use_gateway
+  },
+  set(value: boolean) {
+    CONFIG.value.api.use_gateway = value
+  },
+})
+
+const llmUsesGateway = computed(() => isNagaLoggedIn.value && CONFIG.value.api.use_gateway)
+
+function onProviderChange(value: string) {
+  const provider = PROVIDER_OPTIONS.find(item => item.value === value)
+  CONFIG.value.api.provider = value
+  if (!provider)
+    return
+  CONFIG.value.api.api_format = provider.apiFormat
+  if (provider.baseUrl)
+    CONFIG.value.api.base_url = provider.baseUrl
+}
 
 // ── 模型定价（登录后从服务端拉取） ──
 const modelPricingMap = ref<Record<string, ModelPricing>>({})
@@ -132,6 +168,112 @@ async function onAutoLaunchChange(value: boolean) {
 }
 
 const checkingUpdate = ref(false)
+const customLive2dModels = computed(() => CONFIG.value.web_live2d.custom_models)
+const customLive2dName = ref('')
+const customLive2dFiles = ref<File[]>([])
+const customLive2dModelPath = ref('')
+const customLive2dUploading = ref(false)
+const customLive2dLoading = ref(false)
+const customLive2dFileInputRef = ref<HTMLInputElement | null>(null)
+const customLive2dReady = computed(() =>
+  customLive2dName.value.trim() !== '' && customLive2dFiles.value.length > 0,
+)
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0)
+    return '0 KB'
+  if (bytes < 1024 * 1024)
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function getFileRelativePath(file: File) {
+  return file.webkitRelativePath || file.name
+}
+
+function pickCustomLive2dFolder() {
+  customLive2dFileInputRef.value?.click()
+}
+
+function handleCustomLive2dFilesChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  customLive2dFiles.value = files
+  const modelFiles = files
+    .map(getFileRelativePath)
+    .filter(path => path.toLowerCase().endsWith('.model3.json'))
+  customLive2dModelPath.value = modelFiles.length === 1 ? modelFiles[0] ?? '' : ''
+  if (!customLive2dName.value.trim() && customLive2dModelPath.value) {
+    const parts = customLive2dModelPath.value.split('/')
+    customLive2dName.value = parts.length > 1
+      ? parts[parts.length - 2] ?? ''
+      : parts[0]?.replace(/\.model3\.json$/i, '') ?? ''
+  }
+}
+
+async function loadCustomLive2dModels() {
+  if (!backendConnected.value || customLive2dLoading.value)
+    return
+  customLive2dLoading.value = true
+  try {
+    const res = await API.listCustomLive2DModels()
+    CONFIG.value.web_live2d.custom_models = (res.models || []).map(toCustomLive2DModelConfig)
+  }
+  catch {
+    // 后端旧版本或暂不可用时不影响其他设置
+  }
+  finally {
+    customLive2dLoading.value = false
+  }
+}
+
+watch(backendConnected, (connected) => {
+  if (connected) {
+    loadCustomLive2dModels()
+  }
+}, { immediate: true })
+
+async function uploadCustomLive2dModel() {
+  if (!customLive2dReady.value || customLive2dUploading.value)
+    return
+  customLive2dUploading.value = true
+  try {
+    const res = await API.uploadCustomLive2DModel({
+      name: customLive2dName.value.trim(),
+      files: customLive2dFiles.value,
+      modelPath: customLive2dModelPath.value || undefined,
+    })
+    const savedModel = upsertCustomLive2DModel(res.model)
+    applyCustomLive2DModel(savedModel)
+    customLive2dName.value = ''
+    customLive2dFiles.value = []
+    customLive2dModelPath.value = ''
+    if (customLive2dFileInputRef.value) {
+      customLive2dFileInputRef.value.value = ''
+    }
+    toast.add({ severity: 'success', summary: 'Live2D 已应用', detail: res.model.name, life: 2500 })
+  }
+  catch (e: any) {
+    toast.add({ severity: 'error', summary: '上传失败', detail: e?.response?.data?.detail || e.message, life: 4000 })
+  }
+  finally {
+    customLive2dUploading.value = false
+  }
+}
+
+async function deleteCustomLive2dModel(model: CustomLive2DModel | typeof CONFIG.value.web_live2d.custom_models[number]) {
+  try {
+    await API.deleteCustomLive2DModel(model.id)
+    CONFIG.value.web_live2d.custom_models = CONFIG.value.web_live2d.custom_models.filter(item => item.id !== model.id)
+    if (CONFIG.value.web_live2d.model.source === model.source) {
+      applyLive2DModel({ ...MODELS[DEFAULT_MODEL] })
+    }
+    toast.add({ severity: 'info', summary: '已删除', detail: model.name, life: 2200 })
+  }
+  catch (e: any) {
+    toast.add({ severity: 'error', summary: '删除失败', detail: e?.response?.data?.detail || e.message, life: 3000 })
+  }
+}
 
 async function handleCheckUpdate() {
   if (checkingUpdate.value)
@@ -235,38 +377,47 @@ async function testConnection() {
 
     <!-- 模型 Tab -->
     <div v-show="activeTab === 'model'">
-      <!-- 配置模式指示器 -->
-      <div class="config-mode-banner" :class="isNagaLoggedIn ? 'mode-gateway' : 'mode-local'">
-        <div class="config-mode-icon">
-          <span v-if="isNagaLoggedIn">&#9729;</span>
-          <span v-else>&#9881;</span>
-        </div>
-        <div class="config-mode-info">
-          <div class="config-mode-title">
-            {{ isNagaLoggedIn ? '网关模式' : '本地模式' }}
-          </div>
-          <div class="config-mode-desc">
-            <template v-if="isNagaLoggedIn">
-              已登录 <strong>{{ nagaUser?.username }}</strong>，所有模型请求通过 NagaModel 网关转发，无需配置 API 密钥
-            </template>
-            <template v-else>
-              未登录，需手动配置各模型的 API 地址和密钥
-            </template>
-          </div>
-        </div>
-      </div>
-
       <Accordion :value="accordionModel" class="pb-8" multiple>
         <!-- 大语言模型 -->
         <ConfigGroup value="llm" header="大语言模型">
           <div class="grid gap-4">
+            <ConfigItem name="使用 NagaModel 网关" description="登录后可通过网关调用模型；关闭后使用下方自定义供应商配置">
+              <div class="flex items-center gap-3">
+                <ToggleSwitch v-model="useNagaGateway" :disabled="!isNagaLoggedIn" />
+                <span v-if="isNagaLoggedIn" class="gateway-state" :class="{ active: llmUsesGateway }">
+                  {{ llmUsesGateway ? '网关已启用' : '使用本地配置' }}
+                </span>
+                <span v-else class="gateway-state">未登录，使用本地配置</span>
+              </div>
+            </ConfigItem>
+            <ConfigItem name="模型供应商" description="决定 API 格式与 LiteLLM 路由前缀">
+              <Select
+                v-model="CONFIG.api.provider"
+                :options="PROVIDER_OPTIONS"
+                option-label="label"
+                option-value="value"
+                @update:model-value="onProviderChange"
+              />
+            </ConfigItem>
+            <ConfigItem name="API 格式" description="OpenAI 兼容接口或 Anthropic 原生 Messages API">
+              <Select
+                v-model="CONFIG.api.api_format"
+                :options="API_FORMAT_OPTIONS"
+                option-label="label"
+                option-value="value"
+                :disabled="CONFIG.api.provider === 'anthropic'"
+              />
+            </ConfigItem>
             <ConfigItem name="模型名称" description="用于对话的大语言模型">
               <div class="flex items-center gap-3">
                 <Select
                   v-model="CONFIG.api.model"
+                  editable
+                  filter
                   :options="MODEL_OPTIONS"
                   option-label="label"
                   option-value="value"
+                  placeholder="选择或输入模型名"
                 />
                 <span v-if="selectedModelPricing" class="model-pricing">
                   <span title="输入价格">↑{{ selectedModelPricing.inputPrice ?? '-' }}</span>
@@ -275,21 +426,14 @@ async function testConnection() {
                 </span>
               </div>
             </ConfigItem>
-            <!-- 网关模式: 合并显示连接状态 -->
-            <template v-if="isNagaLoggedIn">
-              <ConfigItem name="连接状态" description="API 地址与密钥由网关自动管理">
-                <span class="naga-authed">&#10003; NagaModel 网关已连接</span>
-              </ConfigItem>
-            </template>
-            <!-- 本地模式: 展开完整配置 -->
-            <template v-else>
-              <ConfigItem name="API 地址" description="兼容 OpenAI 格式的 API 地址">
-                <InputText v-model="CONFIG.api.base_url" placeholder="https://api.deepseek.com/v1" />
-              </ConfigItem>
-              <ConfigItem name="API 密钥" description="大语言模型的 API 密钥">
-                <InputText v-model="CONFIG.api.api_key" type="password" placeholder="sk-..." />
-              </ConfigItem>
-            </template>
+            <ConfigItem name="API 地址" description="大语言模型的 API 地址">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录 ({{ nagaUser?.username }})，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.api.base_url" placeholder="https://api.example.com/v1" />
+            </ConfigItem>
+            <ConfigItem name="API 密钥" description="大语言模型的 API 密钥">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录 ({{ nagaUser?.username }})，无需输入</span>
+              <InputText v-else v-model="CONFIG.api.api_key" type="password" />
+            </ConfigItem>
             <Divider class="m-1!" />
             <ConfigItem name="最大令牌数" description="单次对话的最大长度限制">
               <InputNumber v-model="CONFIG.api.max_tokens" show-buttons />
@@ -315,32 +459,31 @@ async function testConnection() {
             </div>
           </template>
           <div class="grid gap-4">
-            <template v-if="isNagaLoggedIn">
-              <ConfigItem name="连接状态" description="控制模型与定位模型均由网关管理">
-                <span class="naga-authed">&#10003; NagaModel 网关已连接</span>
-              </ConfigItem>
-            </template>
-            <template v-else>
-              <ConfigItem name="控制模型" description="用于电脑控制任务的主要模型">
-                <InputText v-model="CONFIG.computer_control.model" />
-              </ConfigItem>
-              <ConfigItem name="控制模型 API 地址" description="控制模型的 API 地址">
-                <InputText v-model="CONFIG.computer_control.model_url" placeholder="https://..." />
-              </ConfigItem>
-              <ConfigItem name="控制模型 API 密钥" description="控制模型的 API 密钥">
-                <InputText v-model="CONFIG.computer_control.api_key" type="password" placeholder="sk-..." />
-              </ConfigItem>
-              <Divider class="m-1!" />
-              <ConfigItem name="定位模型" description="用于元素定位和坐标识别的模型">
-                <InputText v-model="CONFIG.computer_control.grounding_model" />
-              </ConfigItem>
-              <ConfigItem name="定位模型 API 地址" description="定位模型的 API 地址">
-                <InputText v-model="CONFIG.computer_control.grounding_url" placeholder="https://..." />
-              </ConfigItem>
-              <ConfigItem name="定位模型 API 密钥" description="定位模型的 API 密钥">
-                <InputText v-model="CONFIG.computer_control.grounding_api_key" type="password" placeholder="sk-..." />
-              </ConfigItem>
-            </template>
+            <ConfigItem name="控制模型" description="用于电脑控制任务的主要模型">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.computer_control.model" />
+            </ConfigItem>
+            <ConfigItem name="控制模型 API 地址" description="控制模型的 API 地址">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.computer_control.model_url" />
+            </ConfigItem>
+            <ConfigItem name="控制模型 API 密钥" description="控制模型的 API 密钥">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，无需输入</span>
+              <InputText v-else v-model="CONFIG.computer_control.api_key" />
+            </ConfigItem>
+            <Divider class="m-1!" />
+            <ConfigItem name="定位模型" description="用于元素定位和坐标识别的模型">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.computer_control.grounding_model" />
+            </ConfigItem>
+            <ConfigItem name="定位模型 API 地址" description="定位模型的 API 地址">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.computer_control.grounding_url" />
+            </ConfigItem>
+            <ConfigItem name="定位模型 API 密钥" description="定位模型的 API 密钥">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，无需输入</span>
+              <InputText v-else v-model="CONFIG.computer_control.grounding_api_key" />
+            </ConfigItem>
           </div>
         </ConfigGroup>
 
@@ -356,15 +499,11 @@ async function testConnection() {
             </div>
           </template>
           <div class="grid gap-4">
-            <template v-if="isNagaLoggedIn">
-              <ConfigItem name="连接状态" description="语音识别由网关管理">
-                <span class="naga-authed">&#10003; NagaModel 网关已连接</span>
-              </ConfigItem>
-            </template>
-            <template v-else>
-              <ConfigItem name="模型名称" description="用于语音识别的模型">
-                <InputText v-model="CONFIG.voice_realtime.asr_model" />
-              </ConfigItem>
+            <ConfigItem name="模型名称" description="用于语音识别的模型">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.voice_realtime.asr_model" />
+            </ConfigItem>
+            <template v-if="!llmUsesGateway">
               <ConfigItem name="模型提供者" description="语音识别模型的提供者">
                 <Select v-model="CONFIG.voice_realtime.provider" :options="Object.keys(ASR_PROVIDERS)">
                   <template #option="{ option }">
@@ -376,9 +515,12 @@ async function testConnection() {
                 </Select>
               </ConfigItem>
               <ConfigItem name="API 密钥" description="语音识别模型的 API 密钥">
-                <InputText v-model="CONFIG.voice_realtime.api_key" type="password" />
+                <InputText v-model="CONFIG.voice_realtime.api_key" />
               </ConfigItem>
             </template>
+            <ConfigItem v-else name="API 密钥">
+              <span class="naga-authed">&#10003; 已登录，无需输入</span>
+            </ConfigItem>
           </div>
         </ConfigGroup>
 
@@ -394,6 +536,10 @@ async function testConnection() {
             </div>
           </template>
           <div class="grid gap-4">
+            <ConfigItem name="模型名称" description="用于语音合成的模型">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.voice_realtime.tts_model" />
+            </ConfigItem>
             <ConfigItem name="声线" description="语音合成模型的声线">
               <Select v-model="CONFIG.tts.default_voice" :options="Object.keys(TTS_VOICES)">
                 <template #option="{ option }">
@@ -404,44 +550,35 @@ async function testConnection() {
                 </template>
               </Select>
             </ConfigItem>
-            <template v-if="isNagaLoggedIn">
-              <ConfigItem name="连接状态" description="语音合成由网关管理">
-                <span class="naga-authed">&#10003; NagaModel 网关已连接</span>
-              </ConfigItem>
-            </template>
-            <template v-else>
-              <ConfigItem name="模型名称" description="用于语音合成的模型">
-                <InputText v-model="CONFIG.voice_realtime.tts_model" />
-              </ConfigItem>
+            <template v-if="!llmUsesGateway">
               <ConfigItem name="服务端口" description="用于语音合成的本地服务端口">
                 <InputNumber v-model="CONFIG.tts.port" :min="1000" :max="65535" show-buttons />
               </ConfigItem>
               <ConfigItem name="API 密钥" description="语音合成模型的 API 密钥">
-                <InputText v-model="CONFIG.tts.api_key" type="password" />
+                <InputText v-model="CONFIG.tts.api_key" />
               </ConfigItem>
             </template>
+            <ConfigItem v-else name="API 密钥">
+              <span class="naga-authed">&#10003; 已登录，无需输入</span>
+            </ConfigItem>
           </div>
         </ConfigGroup>
 
         <!-- 嵌入模型 -->
         <ConfigGroup value="embedding" header="嵌入模型">
           <div class="grid gap-4">
-            <template v-if="isNagaLoggedIn">
-              <ConfigItem name="连接状态" description="嵌入模型由网关管理">
-                <span class="naga-authed">&#10003; NagaModel 网关已连接</span>
-              </ConfigItem>
-            </template>
-            <template v-else>
-              <ConfigItem name="模型名称" description="用于向量嵌入的模型">
-                <InputText v-model="CONFIG.embedding.model" />
-              </ConfigItem>
-              <ConfigItem name="API 地址" description="嵌入模型的 API 地址（留空使用主模型地址）">
-                <InputText v-model="CONFIG.embedding.api_base" placeholder="留空使用主模型地址" />
-              </ConfigItem>
-              <ConfigItem name="API 密钥" description="嵌入模型的 API 密钥（留空使用主模型密钥）">
-                <InputText v-model="CONFIG.embedding.api_key" type="password" placeholder="留空使用主模型密钥" />
-              </ConfigItem>
-            </template>
+            <ConfigItem name="模型名称" description="用于向量嵌入的模型">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.embedding.model" />
+            </ConfigItem>
+            <ConfigItem name="API 地址" description="嵌入模型的 API 地址（留空使用主模型地址）">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，使用 NagaModel 网关</span>
+              <InputText v-else v-model="CONFIG.embedding.api_base" />
+            </ConfigItem>
+            <ConfigItem name="API 密钥" description="嵌入模型的 API 密钥（留空使用主模型密钥）">
+              <span v-if="llmUsesGateway" class="naga-authed">&#10003; 已登录，无需输入</span>
+              <InputText v-else v-model="CONFIG.embedding.api_key" type="password" />
+            </ConfigItem>
           </div>
         </ConfigGroup>
       </Accordion>
@@ -449,34 +586,27 @@ async function testConnection() {
 
     <!-- 记忆 Tab -->
     <div v-show="activeTab === 'memory'">
-      <!-- 配置模式指示器 -->
-      <div class="config-mode-banner" :class="isCloudMode ? 'mode-gateway' : 'mode-local'">
-        <div class="config-mode-icon">
-          <span v-if="isCloudMode">&#9729;</span>
-          <span v-else>&#9881;</span>
-        </div>
-        <div class="config-mode-info">
-          <div class="config-mode-title">
-            {{ isCloudMode ? '云端记忆' : '本地记忆' }}
-          </div>
-          <div class="config-mode-desc">
-            <template v-if="isCloudMode">
-              使用夏园云端记忆微服务，数据自动同步
-            </template>
-            <template v-else>
-              使用本地 Neo4j 图数据库存储记忆
-            </template>
-          </div>
-        </div>
-      </div>
-
       <Accordion :value="accordionMemory" class="pb-8" multiple>
-        <ConfigGroup value="neo4j" :header="isCloudMode ? '云端记忆服务' : 'Neo4j 数据库'">
+        <ConfigGroup value="neo4j">
+          <template #header>
+            <div class="w-full flex justify-between items-center -my-1.5">
+              <span>{{ isCloudMode ? '云端记忆服务' : 'Neo4j 数据库' }}</span>
+              <span v-if="isCloudMode" class="text-xs text-green-400 flex items-center gap-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-400" />
+                已登录
+              </span>
+            </div>
+          </template>
           <div class="grid gap-4">
             <!-- 云端模式 -->
             <template v-if="isCloudMode">
               <ConfigItem name="服务状态" description="夏园 云端记忆微服务">
-                <span class="naga-authed">&#10003; 云端记忆已连接 ({{ nagaUser?.username }})</span>
+                <div class="text-xs text-white/70">
+                  <div>用户: {{ nagaUser?.username }}</div>
+                  <div class="mt-1 text-white/40">
+                    云端记忆服务已连接
+                  </div>
+                </div>
               </ConfigItem>
               <ConfigItem
                 v-if="memoryStats"
@@ -495,7 +625,7 @@ async function testConnection() {
                 <InputText v-model="CONFIG.grag.neo4j_user" placeholder="neo4j" />
               </ConfigItem>
               <ConfigItem name="密码" description="Neo4j 数据库密码">
-                <InputText v-model="CONFIG.grag.neo4j_password" type="password" placeholder="••••••••" />
+                <InputText v-model="CONFIG.grag.neo4j_password" placeholder="••••••••" />
               </ConfigItem>
             </template>
             <Divider class="m-1!" />
@@ -547,6 +677,99 @@ async function testConnection() {
           <div class="grid gap-4">
             <ConfigItem name="用户昵称" description="聊天窗口显示的用户昵称">
               <InputText v-model="CONFIG.ui.user_name" />
+            </ConfigItem>
+            <Divider class="m-1!" />
+            <ConfigItem layout="column" name="Live2D 模型" description="上传整套 Cubism 模型目录，或从已保存模型中切换">
+              <div class="live2d-model-panel">
+                <div class="builtin-live2d-row">
+                  <Select
+                    :options="Object.keys(MODELS)"
+                    :model-value="selectedModel"
+                    :disabled="characterLocked"
+                    @change="(event) => onModelChange(event.value)"
+                  />
+                  <Button
+                    size="small"
+                    label="角色注册"
+                    @click="configRouter.push('/market?tab=memory-skin')"
+                  />
+                </div>
+                <div v-if="characterLocked" class="live2d-lock-hint">
+                  {{ characterLockedHint }}
+                </div>
+
+                <div class="custom-live2d-uploader">
+                  <input
+                    ref="customLive2dFileInputRef"
+                    type="file"
+                    webkitdirectory
+                    directory
+                    multiple
+                    hidden
+                    @change="handleCustomLive2dFilesChange"
+                  >
+                  <InputText
+                    v-model="customLive2dName"
+                    class="min-w-0"
+                    placeholder="自定义模型名称"
+                  />
+                  <Button
+                    size="small"
+                    outlined
+                    :label="customLive2dFiles.length ? `${customLive2dFiles.length} 个文件` : '选择目录'"
+                    @click="pickCustomLive2dFolder"
+                  />
+                  <Button
+                    size="small"
+                    label="上传并应用"
+                    :disabled="!customLive2dReady"
+                    :loading="customLive2dUploading"
+                    @click="uploadCustomLive2dModel"
+                  />
+                </div>
+                <div v-if="customLive2dModelPath" class="live2d-path-hint">
+                  入口文件：{{ customLive2dModelPath }}
+                </div>
+
+                <div class="custom-live2d-list">
+                  <div v-if="customLive2dLoading" class="custom-live2d-empty">
+                    正在读取模型列表...
+                  </div>
+                  <div v-else-if="customLive2dModels.length === 0" class="custom-live2d-empty">
+                    暂无自定义 Live2D 模型
+                  </div>
+                  <template v-else>
+                    <div
+                      v-for="model in customLive2dModels"
+                      :key="model.id"
+                      class="custom-live2d-item"
+                      :class="{ active: CONFIG.web_live2d.model.source === model.source }"
+                    >
+                      <div class="custom-live2d-meta">
+                        <div class="custom-live2d-name">{{ model.name }}</div>
+                        <div class="custom-live2d-detail">
+                          {{ model.file_count }} 个文件 · {{ formatFileSize(model.total_bytes) }}
+                        </div>
+                      </div>
+                      <div class="custom-live2d-actions">
+                        <Button
+                          size="small"
+                          :label="CONFIG.web_live2d.model.source === model.source ? '使用中' : '应用'"
+                          :disabled="CONFIG.web_live2d.model.source === model.source"
+                          @click="applyCustomLive2DModel(model)"
+                        />
+                        <Button
+                          size="small"
+                          severity="danger"
+                          outlined
+                          label="删除"
+                          @click="deleteCustomLive2dModel(model)"
+                        />
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
             </ConfigItem>
             <Divider class="m-1!" />
             <ConfigItem name="Live2D 模型位置">
@@ -613,14 +836,10 @@ async function testConnection() {
             <ConfigItem name="角色名称" :description="characterLockedHint ?? '聊天窗口显示的 AI 昵称'">
               <InputText v-model="CONFIG.system.ai_name" :disabled="characterLocked" />
             </ConfigItem>
-            <ConfigItem name="L2D 模型" :description="characterLocked ? characterLockedHint : undefined">
-              <Select
-                ref="modelSelectRef"
-                :options="Object.keys(MODELS)"
-                :model-value="selectedModel"
-                :disabled="characterLocked"
-                @change="(event) => onModelChange(event.value)"
-              />
+            <ConfigItem name="L2D 模型" :description="characterLocked ? characterLockedHint : '在上方 Live2D 模型入口切换内置或自定义模型'">
+              <span class="live2d-source-preview">
+                {{ CONFIG.web_live2d.model.source }}
+              </span>
             </ConfigItem>
             <ConfigItem
               layout="column"
@@ -732,58 +951,20 @@ async function testConnection() {
   color: rgba(255, 255, 255, 0.9);
 }
 
-.config-mode-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid;
-}
-
-.config-mode-banner.mode-gateway {
-  background: rgba(74, 222, 128, 0.06);
-  border-color: rgba(74, 222, 128, 0.2);
-}
-
-.config-mode-banner.mode-local {
-  background: rgba(251, 191, 36, 0.06);
-  border-color: rgba(251, 191, 36, 0.2);
-}
-
-.config-mode-icon {
-  font-size: 1.25rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.mode-gateway .config-mode-icon { color: #4ade80; }
-.mode-local .config-mode-icon { color: #fbbf24; }
-
-.config-mode-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.mode-gateway .config-mode-title { color: #4ade80; }
-.mode-local .config-mode-title { color: #fbbf24; }
-
-.config-mode-desc {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-  line-height: 1.4;
-  margin-top: 0.125rem;
-}
-
-.config-mode-desc strong {
-  color: rgba(255, 255, 255, 0.8);
-}
-
 .naga-authed {
   color: #4ade80;
   font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.gateway-state {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.gateway-state.active {
+  color: #4ade80;
   font-weight: 500;
 }
 
@@ -795,6 +976,75 @@ async function testConnection() {
   color: rgba(255, 255, 255, 0.4);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.live2d-model-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.builtin-live2d-row,
+.custom-live2d-uploader,
+.custom-live2d-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.custom-live2d-uploader {
+  flex-wrap: wrap;
+}
+
+.live2d-lock-hint,
+.live2d-path-hint,
+.custom-live2d-empty,
+.live2d-source-preview {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.custom-live2d-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.custom-live2d-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.custom-live2d-item.active {
+  border-color: rgba(74, 222, 128, 0.42);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.custom-live2d-meta {
+  min-width: 0;
+}
+
+.custom-live2d-name {
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-live2d-detail {
+  margin-top: 0.15rem;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
 }
 
 .terminal-footer {

@@ -290,7 +290,7 @@ def _format_messages_for_summary(messages: List[Dict]) -> str:
 
 def _get_compress_llm_params() -> Dict:
     """获取压缩模型的 LLM 调用参数"""
-    if naga_auth.is_authenticated():
+    if naga_auth.should_use_model_gateway():
         token = naga_auth.get_access_token()
         return {
             "api_key": token,
@@ -309,7 +309,7 @@ def _get_compress_llm_params() -> Dict:
 
 def _get_compress_model_name() -> str:
     """获取压缩模型名称（LiteLLM 格式）"""
-    if naga_auth.is_authenticated():
+    if naga_auth.should_use_model_gateway():
         return f"openai/{COMPRESS_MODEL}"
     cfg = get_config()
     if cfg.api.api_format == "anthropic":

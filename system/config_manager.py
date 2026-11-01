@@ -17,7 +17,14 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .config import hot_reload_config, add_config_listener, detect_file_encoding, get_config_path, VERSION
+from .config import (
+    hot_reload_config,
+    add_config_listener,
+    bootstrap_config_from_example,
+    detect_file_encoding,
+    get_config_path,
+    VERSION,
+)
 import json5  # 支持带注释的JSON解析
 
 class ConfigManager:
@@ -174,6 +181,7 @@ class ConfigManager:
             
             # 验证配置文件存在性
             config_path = get_config_path()
+            bootstrap_config_from_example(config_path)
             if not os.path.exists(config_path):
                 print(f"❌ 配置文件不存在: {config_path}")
                 print(f"❌ 当前工作目录: {os.getcwd()}")

@@ -140,7 +140,10 @@ export function useAuth() {
   }
 
   function skipLogin() {
+    ACCESS_TOKEN.value = ''
     nagaUser.value = null
+    syncMemoryServer(false)
+    syncGameEnabled(false)
   }
 
   // 首次调用时自动恢复会话（仅在有 token 时才请求，避免无谓的 401）

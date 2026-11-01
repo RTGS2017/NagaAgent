@@ -1,38 +1,36 @@
 # NagaAgent 语音服务 🗣️
 
-基于Edge-TTS的OpenAI兼容语音合成服务，为NagaAgent 5.0提供高质量的文本转语音功能。支持流式TTS播放、智能分句、并发音频合成和内存直接播放。
+基于 Edge TTS 与 NagaModel 网关的 OpenAI 兼容语音合成服务。当前桌面端由前端按句排队，经 API Server 的 `/tts/speech` 代理合成，并使用浏览器音频能力串行播放 MP3 或 WAV。
 
 ## 🚀 核心功能特性
 
 ### 基础TTS功能
 - **OpenAI兼容接口**：`/v1/audio/speech`，请求结构和行为与OpenAI类似
 - **支持多种语音**：将OpenAI语音（alloy, echo, fable, onyx, nova, shimmer）映射到`edge-tts`语音
-- **多音频格式**：支持多种音频格式（mp3, opus, aac, flac, wav, pcm）
-- **可调节语速**：支持0.25x到4.0x的播放速度
+- **多音频格式**：本地接口支持 mp3、opus、aac、flac、wav 等格式；桌面会话固定请求浏览器兼容的 mp3
+- **可调节语速**：使用 `tts.default_speed` 控制语速
 - **可选直接指定edge-tts语音**：既可用OpenAI语音映射，也可直接指定任意edge-tts语音
-- **HTTP和WebSocket双模式**：支持REST API和实时WebSocket连接
+- **网关与本地回退**：启用 NagaModel 网关时使用角色绑定声线，未启用时使用本地 Edge TTS
 
-### 🎯 流式TTS播放（参考实现）
-- **智能标点符号分割**：参考的标点符号分割算法，实时检测句子结束
-- **括号计数**：智能处理嵌套括号，避免错误分割工具调用
-- **内存直接播放**：使用pygame库直接在内存中播放音频数据，无需创建临时文件
-- **并发音频合成**：支持多个音频片段并发申请API，提高处理速度
-- **工具调用分流**：与apiserver的流式工具调用提取器完美集成，支持工具调用的特殊处理
-- **异步处理**：语音处理不阻塞前端显示，提供更好的用户体验
+### 🎯 渐进式 TTS 播放
+- **智能分句**：流式回复遇到中英文句末标点时立即进入待播队列
+- **工具调用清理**：收到 `content_clean` 后停止原始片段，并使用清理后的自然语言重建语音队列
+- **严格串行**：每句音频播放结束后再合成和播放下一句，避免后一句中断前一句
+- **格式兼容**：MP3 保持原容器；网关返回 raw PCM 时由代理包装为 WAV
+- **会话覆盖**：主会话、Naga Core 干员和 OpenClaw 干员共用同一套语音开关和队列
 
 ### 🔄 架构优化
 - **避免重复处理**：移除voice模块中的复杂标点符号分割算法
-- **依赖apiserver**：使用apiserver的流式工具调用提取器进行预处理
-- **简化voice模块**：voice只负责TTS音频生成和播放
-- **完全移除旧方式**：删除所有旧的完整文本处理逻辑
+- **统一设置源**：设置页“语音合成模型”开关与聊天输入栏扬声器按钮都写入 `system.voice_enabled`
+- **依赖 API Server**：浏览器只请求同源 `/tts/speech`，由后端选择 NagaModel 或本地 Edge TTS
+- **前后端分工**：后端负责合成和媒体类型归一化，前端负责分句、队列及播放状态
 
 ## 📋 快速开始
 
 ### 前置条件
 
-- **Python 3.8+**：确保Python环境已安装
-- **依赖包**：安装项目依赖 `pip install -r requirements.txt`
-- **pygame**：用于后台音频播放（已包含在requirements.txt中）
+- **Python 3.11**：项目要求 Python 3.11
+- **依赖包**：推荐在项目根目录运行 `uv sync`
 - **ffmpeg**（可选）：音频格式转换需要，只用mp3可不装
 
 ### 配置说明
@@ -46,15 +44,14 @@
   },
   "tts": {
     "api_key": "your_api_key_here",
-    "port": 5050,
+    "port": 5048,
     "default_voice": "zh-CN-XiaoxiaoNeural",
     "default_format": "mp3",
     "default_speed": 1.0,
     "default_language": "zh-CN",
     "remove_filter": false,
     "expand_api": true,
-    "require_api_key": true,
-    "keep_audio_files": false  // 是否保留音频文件用于调试
+    "require_api_key": false
   }
 }
 ```
@@ -70,40 +67,30 @@ python main.py
 #### 方式2：独立启动语音服务
 ```bash
 # 启动HTTP服务器
-python voice/start_voice_service.py --mode http
-
-# 启动WebSocket服务器
-python voice/start_voice_service.py --mode websocket
-
-# 同时启动两种模式
-python voice/start_voice_service.py --mode both
+python voice/output/start_voice_service.py
 
 # 检查依赖
-python voice/start_voice_service.py --check-deps
+python voice/output/start_voice_service.py --check-deps
 
 # 自定义端口
-python voice/start_voice_service.py --port 8080
+python voice/output/start_voice_service.py --port 8080
 ```
 
 #### 方式3：直接启动服务器
 ```bash
 # HTTP服务器
-python voice/server.py
-
-# WebSocket服务器
-python voice/websocket_edge_tts.py
+python voice/output/server.py
 ```
 
 ## 🎵 流式TTS播放功能
 
 ### 处理流程
-1. **apiserver接收** → LLM流式输出
-2. **工具调用提取** → `streaming_tool_extractor` 进行标点分割和工具调用检测
-3. **文本分流** → 普通文本发送给voice模块，工具调用单独处理
-4. **voice接收** → `receive_text_chunk()` 接收处理好的普通文本
-5. **音频生成** → `_audio_processing_worker()` 并发生成音频
-6. **内存播放** → `_audio_player_worker()` pygame直接播放
-7. **完成处理** → `finish_processing()` 清理剩余内容
+1. **对话流到达前端** → `MessageView` 接收 `content` / `content_clean` / `round_end`
+2. **智能分句** → `TtsSentenceBuffer` 输出完整句子并保留未结束尾部
+3. **TTS 代理** → 前端调用 API Server `/tts/speech`
+4. **引擎选择** → 登录且启用网关时走 NagaModel，否则走本地 `127.0.0.1:5048`
+5. **格式归一化** → 后端保留 MP3/WAV 容器，必要时把 raw PCM 包装为 WAV
+6. **串行播放** → 前端等待当前句播放完成，再处理下一句
 
 ### 智能分句算法
 ```python
@@ -158,35 +145,26 @@ voice_integration.finish_processing()
 
 ## 🔧 服务状态检查
 
-### 检查服务状态
-```bash
-python voice/voice_status.py
-```
-
 ### 测试TTS功能
 ```bash
-curl -X POST http://127.0.0.1:5050/v1/audio/speech \
+curl -X POST http://127.0.0.1:5048/v1/audio/speech \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your_api_key_here" \
   -d '{
-    "input": "Hello, this is a test.",
-    "voice": "alloy",
+    "input": "你好，这是一段语音测试。",
+    "voice": "zh-CN-XiaoxiaoNeural",
     "response_format": "mp3",
     "speed": 1.0
   }' \
   --output test_speech.mp3
 ```
 
-### 测试流式TTS功能
+通过 API Server 测试与桌面端相同的代理链路：
+
 ```bash
-# 测试新的流式TTS实现（参考）
-python voice/test__tts.py
-
-# 测试基础播放功能
-python voice/test_audio_playback.py
-
-# 测试句子分割功能
-python voice/test_sentence_splitting.py
+curl -X POST http://127.0.0.1:8000/tts/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input":"代理链路测试。","voice":"zh-CN-XiaoxiaoNeural","response_format":"mp3","speed":1.0}' \
+  --output test_proxy_speech.mp3
 ```
 
 ## 📁 文件存储结构
@@ -205,9 +183,8 @@ logs/audio_temp/
 - `port`: TTS服务端口
 - `default_voice`: 默认语音
 - `default_format`: 音频格式（mp3, wav, opus等）
-- `default_speed`: 播放速度（0.25-4.0）
+- `default_speed`: 播放速度（0.1-3.0）
 - `remove_filter`: 是否移除文本过滤器
-- `keep_audio_files`: 是否保留音频文件用于调试
 
 ### 分句配置
 - **句子结束标点**：`[。？！；\.\?\!\;]`
@@ -241,48 +218,32 @@ logs/audio_temp/
 ## 🔧 故障排除
 
 ### 常见问题
-1. **TTS服务未启动**：运行`python voice/start_voice_service.py`
-2. **语音功能被禁用**：检查`config.json`中的`voice_enabled`
-3. **pygame不可用**：安装pygame `pip install pygame`
-4. **音频文件未生成**：检查TTS服务状态和网络连接
-
-### 调试模式
-启用调试模式保留音频文件：
-```json
-{
-  "tts": {
-    "keep_audio_files": true
-  }
-}
-```
+1. **TTS 服务未启动**：确认主程序日志中 5048 端口已就绪，或运行 `python voice/output/start_voice_service.py`
+2. **语音功能被禁用**：设置页开关和聊天栏扬声器按钮现在共用 `system.voice_enabled`
+3. **只有音乐和启动播报**：检查 `/tts/speech` 是否返回 200；这两类静态音频不经过 TTS 服务
+4. **登录模式无声**：检查 NagaModel 登录状态、积分与后端 TTS 代理日志；401 会自动刷新并重试一次
+5. **本地模式无声**：确认 Edge TTS 所需网络可用，且 `tts.default_voice` 是有效声线
 
 ### 音频播放失败排查
-1. 检查TTS服务是否正常运行：
-   ```bash
-   python voice/voice_status.py
-   ```
+1. 使用上方两个 `curl` 命令分别验证本地合成服务和 API 代理。
 
-2. 检查音频文件目录：
-   ```bash
-   # 查看音频文件
-   ls logs/audio_temp/
-   
-   # 检查文件权限
-   ls -la logs/audio_temp/
-   ```
-
-3. 检查音频设备：
+2. 检查音频设备：
    - Windows：检查系统音量
    - macOS：检查音频输出设备
    - Linux：检查音频驱动
 
-4. 查看日志：
+3. 查看日志：
    ```bash
-   # 查看详细日志
-   tail -f logs/nagaagent.log
+   tail -f ~/.naga/logs/nagaagent.log
    ```
 
 ## 📝 更新日志
+
+### 5.1.4（2026-07-15）- 桌面会话 TTS 修复
+- 设置页与聊天栏语音开关统一为 `system.voice_enabled`
+- `content_clean` 改为使用清理后的正文重建队列，不再丢失日常对话
+- 主会话、Naga Core 与 OpenClaw 干员会话统一接入 TTS
+- 播放队列等待当前音频结束，按响应媒体类型兼容 MP3 与 WAV
 
 ### v3.1.0 - 流式TTS重构
 - ✅ 参考的流式TTS实现

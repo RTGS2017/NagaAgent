@@ -1,10 +1,8 @@
 """工具状态、消息队列、前端轮询、主动消息、WebSocket 路由"""
 
-import asyncio
 import json
 import logging
 import time
-import traceback
 from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
@@ -45,6 +43,30 @@ def _emit_tool_status_to_ui(status_text: str, auto_hide_ms: int = 0) -> None:
 def _hide_tool_status_in_ui() -> None:
     """隐藏工具状态，前端通过轮询获取"""
     _tool_status_store["current"] = {"message": "", "visible": False}
+
+
+def _format_tool_payload(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _build_tool_result_blocks(results: list[Dict[str, Any]]) -> str:
+    blocks: list[str] = []
+    for item in results:
+        service_name = str(item.get("service_name") or "mcp")
+        tool_name = str(item.get("tool_name") or "").strip()
+        ok = str(item.get("status") or "").lower() in {"ok", "success"}
+        marker = "✅" if ok else "❌"
+        label = f"{service_name}: {tool_name}" if tool_name else service_name
+        result = item.get("result") if ok else item.get("error", item.get("result", ""))
+        blocks.append(f"```tool-result\n{marker} {label}\n{_format_tool_payload(result).strip()}\n```")
+    return "\n\n".join(blocks)
 
 
 async def _update_proactive_activity_silent():
@@ -209,6 +231,8 @@ async def tool_notification(payload: Dict[str, Any]):
             "auto_hide_ms": auto_hide_ms,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"工具调用通知处理失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
@@ -290,6 +314,8 @@ async def tool_result_callback(payload: Dict[str, Any]):
             "session_id": session_id,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         _hide_tool_status_in_ui()
         logger.error(f"[工具回调] 工具结果回调处理失败: {e}")
@@ -317,6 +343,8 @@ async def tool_result(payload: Dict[str, Any]):
 
         return {"success": True, "message": "工具结果已接收", "result": result, "session_id": session_id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"处理工具结果失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
@@ -347,6 +375,8 @@ async def save_tool_conversation(payload: Dict[str, Any]):
 
         return {"success": True, "message": "工具对话历史已保存", "session_id": session_id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[保存工具对话] 保存工具对话历史失败: {e}")
         raise HTTPException(500, f"保存失败: {str(e)}")
@@ -407,6 +437,17 @@ async def ui_notification(payload: Dict[str, Any]):
             logger.info(f"[UI通知] 通知: [{ntype}] {msg}")
             return {"success": True, "message": "通知已接收"}
 
+        if action == "show_mcp_result":
+            results = payload.get("results", [])
+            if not isinstance(results, list):
+                raise HTTPException(400, "results 必须是数组")
+            result_blocks = _build_tool_result_blocks([r for r in results if isinstance(r, dict)])
+            if result_blocks:
+                _clawdbot_replies.append(result_blocks)
+                logger.info(f"[UI通知] MCP结果已存储到队列，数量: {len(results)}")
+                return {"success": True, "message": "MCP结果已存储"}
+            return {"success": True, "message": "MCP结果为空"}
+
         # ── 以下动作需要 session_id ──
 
         if not session_id:
@@ -430,6 +471,8 @@ async def ui_notification(payload: Dict[str, Any]):
 
         return {"success": True, "message": "UI通知已处理"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"处理UI通知失败: {e}")
         raise HTTPException(500, f"处理失败: {str(e)}")
@@ -510,6 +553,8 @@ async def receive_proactive_message(payload: Dict[str, Any]):
             "pushed": pushed,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[ProactiveMessage] 处理主动消息失败: {e}", exc_info=True)
         raise HTTPException(500, f"处理失败: {e}")

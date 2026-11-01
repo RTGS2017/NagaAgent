@@ -205,6 +205,12 @@ async function stopListedSession(sessionId: string) {
   await stopTravel(sessionId)
 }
 
+async function updateCurrentBrowserSettings(params: { browserVisible?: boolean, browserKeepOpen?: boolean }) {
+  if (!currentSession.value?.sessionId)
+    return
+  await updateTravelBrowserSettings(currentSession.value.sessionId, params)
+}
+
 async function openRawHistory() {
   if (!currentSession.value?.sessionId || rawHistoryLoading.value)
     return
@@ -405,6 +411,36 @@ async function openRawHistory() {
                 outlined
                 @click="stopCurrentSession"
               />
+              <Button
+                label="查看原始历史"
+                outlined
+                :loading="rawHistoryLoading"
+                @click="openRawHistory"
+              />
+            </div>
+            <div v-if="currentSession.status === 'pending' || currentSession.status === 'running' || currentSession.status === 'interrupted'" class="browser-live-settings">
+              <div class="policy-card">
+                <div>
+                  <div class="policy-title">浏览器可见</div>
+                  <div class="policy-desc">运行中的探索会尽量切换到可见窗口继续浏览。</div>
+                </div>
+                <ToggleSwitch
+                  :model-value="Boolean(currentSession.browserVisible)"
+                  class="policy-switch"
+                  @update:model-value="updateCurrentBrowserSettings({ browserVisible: $event })"
+                />
+              </div>
+              <div class="policy-card">
+                <div>
+                  <div class="policy-title">页面保持打开</div>
+                  <div class="policy-desc">关闭时空闲后自动回收；打开后保留浏览标签页。</div>
+                </div>
+                <ToggleSwitch
+                  :model-value="Boolean(currentSession.browserKeepOpen)"
+                  class="policy-switch"
+                  @update:model-value="updateCurrentBrowserSettings({ browserKeepOpen: $event })"
+                />
+              </div>
             </div>
           </div>
 
@@ -513,8 +549,7 @@ async function openRawHistory() {
             placeholder="选择一个通讯录中的干员"
             :disabled="!createAgentOptions.length"
             append-to="body"
-          >
-          </Select>
+          />
           <div v-if="!openclawAgents.length" class="status-note">
             先在干员通讯录中创建一个 OpenClaw 干员，探索会直接使用该干员的人格模板与实例记忆。
           </div>
@@ -570,22 +605,22 @@ async function openRawHistory() {
         <div class="goal-block">
           <div class="stats-label">浏览器策略</div>
           <div class="browser-policy-grid">
-              <div class="policy-card">
-                <div>
-                  <div class="policy-title">浏览器可见</div>
-                  <div class="policy-desc">打开后探索会尽量用可见窗口执行后续浏览器动作。</div>
-                </div>
-                <ToggleSwitch v-model="createBrowserVisible" :disabled="!selectedAgentId" class="policy-switch" />
+            <div class="policy-card">
+              <div>
+                <div class="policy-title">浏览器可见</div>
+                <div class="policy-desc">打开后探索会尽量用可见窗口执行后续浏览器动作。</div>
               </div>
-              <div class="policy-card">
-                <div>
-                  <div class="policy-title">页面保持打开</div>
-                  <div class="policy-desc">关闭时空闲 300 秒自动关闭；打开后不自动回收标签页。</div>
-                </div>
-                <ToggleSwitch v-model="createBrowserKeepOpen" :disabled="!selectedAgentId" class="policy-switch" />
+              <ToggleSwitch v-model="createBrowserVisible" :disabled="!selectedAgentId" class="policy-switch" />
+            </div>
+            <div class="policy-card">
+              <div>
+                <div class="policy-title">页面保持打开</div>
+                <div class="policy-desc">关闭时空闲 300 秒自动关闭；打开后不自动回收标签页。</div>
               </div>
+              <ToggleSwitch v-model="createBrowserKeepOpen" :disabled="!selectedAgentId" class="policy-switch" />
             </div>
           </div>
+        </div>
       </div>
       <template #footer>
         <Button label="取消" text @click="createDialogVisible = false" />
@@ -596,6 +631,34 @@ async function openRawHistory() {
           @click="toggleExplore"
         />
       </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="rawHistoryVisible"
+      modal
+      header="原始历史"
+      :style="{ width: 'min(860px, 94vw)' }"
+    >
+      <div class="raw-history-list">
+        <div v-if="rawHistoryLoading" class="status-note">
+          正在加载历史...
+        </div>
+        <template v-else-if="rawHistoryMessages.length">
+          <div
+            v-for="(message, index) in rawHistoryMessages"
+            :key="index"
+            class="raw-history-item"
+          >
+            <div class="raw-history-role">
+              {{ String(message.role || 'unknown') }}
+            </div>
+            <pre>{{ typeof message.content === 'string' ? message.content : JSON.stringify(message, null, 2) }}</pre>
+          </div>
+        </template>
+        <div v-else class="status-note">
+          暂无历史。
+        </div>
+      </div>
     </Dialog>
   </template>
 </template>
@@ -1038,8 +1101,49 @@ async function openRawHistory() {
 
 .status-actions {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.browser-live-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.raw-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(620px, 70vh);
+  overflow: auto;
+}
+
+.raw-history-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.raw-history-role {
+  margin-bottom: 6px;
+  color: rgba(212, 175, 55, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.raw-history-item pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .progress-row {
@@ -1250,6 +1354,7 @@ async function openRawHistory() {
 @media (max-width: 1100px) {
   .limits-grid,
   .browser-policy-grid,
+  .browser-live-settings,
   .status-metrics {
     grid-template-columns: 1fr;
   }

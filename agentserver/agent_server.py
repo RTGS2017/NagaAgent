@@ -1168,14 +1168,31 @@ async def openclaw_get_task_detail(
 
 
 @app.get("/openclaw/history")
-async def openclaw_get_history(session_key: str, limit: int = 120, include_tools: bool = True):
-    """按 session_key 获取 OpenClaw 原始历史，供 travel 看板/对话界面查看原始记录。"""
-    if not session_key:
-        raise HTTPException(400, "session_key 不能为空")
+async def openclaw_get_history(
+    session_key: Optional[str] = None,
+    limit: int = 120,
+    include_tools: bool = True,
+):
+    """
+    获取 OpenClaw 历史。
 
-    normalized_key = str(session_key).strip()
+    - session_key 为空：读取当前默认会话的 Gateway sessions_history。
+    - session_key 非空：读取对应本地 transcript，供 travel 看板/对话界面查看原始记录。
+    """
+    normalized_key = str(session_key or "").strip()
     if not normalized_key:
-        raise HTTPException(400, "session_key 不能为空")
+        if not Modules.openclaw_client:
+            raise HTTPException(503, "OpenClaw 客户端未就绪")
+
+        try:
+            return await Modules.openclaw_client.get_sessions_history(
+                session_key=None,
+                limit=limit,
+                include_tools=include_tools,
+            )
+        except Exception as e:
+            logger.error(f"获取 OpenClaw 默认会话历史失败: {e}")
+            raise HTTPException(500, f"获取失败: {e}")
 
     try:
         if normalized_key.startswith("travel:"):
@@ -1250,31 +1267,6 @@ async def openclaw_get_session():
         return {"has_session": True, "session": session_info}
     except Exception as e:
         logger.error(f"获取 OpenClaw 会话信息失败: {e}")
-        raise HTTPException(500, f"获取失败: {e}")
-
-
-@app.get("/openclaw/history")
-async def openclaw_get_history(session_key: Optional[str] = None, limit: int = 20):
-    """
-    获取 OpenClaw 会话历史消息
-
-    用于在设置界面显示 OpenClaw Agent 的对话内容
-
-    Args:
-        session_key: 会话标识，不传则使用默认会话
-        limit: 返回消息条数限制
-
-    Returns:
-        会话历史消息列表
-    """
-    if not Modules.openclaw_client:
-        raise HTTPException(503, "OpenClaw 客户端未就绪")
-
-    try:
-        result = await Modules.openclaw_client.get_sessions_history(session_key=session_key, limit=limit)
-        return result
-    except Exception as e:
-        logger.error(f"获取 OpenClaw 会话历史失败: {e}")
         raise HTTPException(500, f"获取失败: {e}")
 
 

@@ -6,12 +6,25 @@
 统一管理所有语音服务提供商的客户端创建
 """
 
-from typing import Dict, Type, Optional
+from dataclasses import dataclass
+from importlib import import_module
+from typing import Dict, Type, Optional, Union
 import logging
 
 from .base_client import BaseVoiceClient
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _LazyProvider:
+    """延迟加载语音适配器，避免可选依赖阻塞普通导入。"""
+
+    module_path: str
+    class_name: str
+
+
+ProviderEntry = Union[Type[BaseVoiceClient], _LazyProvider]
 
 
 class VoiceClientFactory:
@@ -21,7 +34,7 @@ class VoiceClientFactory:
     """
 
     # 注册的客户端类型
-    _registry: Dict[str, Type[BaseVoiceClient]] = {}
+    _registry: Dict[str, ProviderEntry] = {}
 
     @classmethod
     def register(cls, provider_name: str, client_class: Type[BaseVoiceClient]):
@@ -41,6 +54,39 @@ class VoiceClientFactory:
 
         cls._registry[provider_name.lower()] = client_class
         logger.info(f"Registered voice client provider: {provider_name}")
+
+    @classmethod
+    def register_lazy(cls, provider_name: str, module_path: str, class_name: str) -> None:
+        """
+        注册延迟加载的客户端类型。
+
+        参数:
+            provider_name: 提供商名称
+            module_path: 适配器模块路径
+            class_name: 模块中的客户端类名
+        """
+        cls._registry[provider_name.lower()] = _LazyProvider(module_path=module_path, class_name=class_name)
+        logger.info(f"Registered lazy voice client provider: {provider_name}")
+
+    @classmethod
+    def _resolve_client_class(cls, provider_key: str) -> Type[BaseVoiceClient]:
+        entry = cls._registry[provider_key]
+        if isinstance(entry, type):
+            return entry
+
+        try:
+            module = import_module(entry.module_path)
+            client_class = getattr(module, entry.class_name)
+        except ImportError as exc:
+            raise ImportError(
+                f"语音提供商 '{provider_key}' 的可选依赖未安装或不可用: {exc}"
+            ) from exc
+
+        if not isinstance(client_class, type) or not issubclass(client_class, BaseVoiceClient):
+            raise TypeError(f"{entry.module_path}.{entry.class_name} must inherit from BaseVoiceClient")
+
+        cls._registry[provider_key] = client_class
+        return client_class
 
     @classmethod
     def create(
@@ -86,7 +132,7 @@ class VoiceClientFactory:
                 f"Available providers: {available}"
             )
 
-        client_class = cls._registry[provider_key]
+        client_class = cls._resolve_client_class(provider_key)
         logger.info(f"Creating {provider} voice client")
 
         # 准备参数

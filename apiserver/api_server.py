@@ -152,6 +152,7 @@ async def sync_auth_token(request: Request, call_next):
 # 挂载静态文件
 from fastapi.staticfiles import StaticFiles as _StaticFiles
 from system.config import CHARACTERS_DIR as _CHARACTERS_DIR
+from system.live2d_assets import CUSTOM_LIVE2D_DIR as _CUSTOM_LIVE2D_DIR
 if _CHARACTERS_DIR.exists():
     app.mount("/characters", _StaticFiles(directory=str(_CHARACTERS_DIR)), name="characters")
 else:
@@ -162,6 +163,12 @@ else:
         app.mount("/characters", _StaticFiles(directory=str(_CHARACTERS_DIR)), name="characters")
     except Exception as e:
         logger.error(f"角色静态目录初始化失败，将跳过 /characters 挂载: {e}")
+
+try:
+    _CUSTOM_LIVE2D_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/custom-live2d", _StaticFiles(directory=str(_CUSTOM_LIVE2D_DIR)), name="custom-live2d")
+except Exception as e:
+    logger.error(f"自定义 Live2D 静态目录初始化失败，将跳过 /custom-live2d 挂载: {e}")
 
 # ============ 运行时状态检查（naga_control） ============
 

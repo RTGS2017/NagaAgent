@@ -1,12 +1,13 @@
 {
   "name": "naga-agent",
   "type": "module",
-  "version": "5.1.0",
+  "version": "5.1.5",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
     "lint": "node scripts/run-eslint.mjs",
     "lint:fix": "node scripts/run-eslint.mjs --fix",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
     "dev": "node scripts/dev.mjs",
     "dev:web": "npx cross-env WEB_ONLY=1 vite",
     "build": "node scripts/run-build.mjs",

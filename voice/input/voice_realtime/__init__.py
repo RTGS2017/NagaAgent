@@ -19,15 +19,22 @@ from .core.base_client import BaseVoiceClient
 from .core.audio_manager import AudioManager
 from .core.state_manager import StateManager, ConversationState
 
-# 导入适配器
-from .adapters.qwen_adapter import QwenVoiceClientAdapter
-from .adapters.openai_adapter import OpenAIVoiceClientAdapter
-from .adapters.local import LocalVoiceClientAdapter
-
 # 注册默认适配器
-VoiceClientFactory.register('qwen', QwenVoiceClientAdapter)
-VoiceClientFactory.register('openai', OpenAIVoiceClientAdapter)
-VoiceClientFactory.register('local', LocalVoiceClientAdapter)
+VoiceClientFactory.register_lazy(
+    'qwen',
+    'voice.input.voice_realtime.adapters.qwen_adapter',
+    'QwenVoiceClientAdapter',
+)
+VoiceClientFactory.register_lazy(
+    'openai',
+    'voice.input.voice_realtime.adapters.openai_adapter',
+    'OpenAIVoiceClientAdapter',
+)
+VoiceClientFactory.register_lazy(
+    'local',
+    'voice.input.voice_realtime.adapters.local',
+    'LocalVoiceClientAdapter',
+)
 
 # 导出公共接口
 __all__ = [
@@ -36,12 +43,10 @@ __all__ = [
     'AudioManager',
     'StateManager',
     'ConversationState',
-    'QwenVoiceClientAdapter',
-    'OpenAIVoiceClientAdapter',
 ]
 
 # 简化的创建函数
-def create_voice_client(provider='qwen', api_key=None, **kwargs):
+def create_voice_client(provider: str = 'qwen', api_key: str | None = None, **kwargs):
     """
     快速创建语音客户端
 

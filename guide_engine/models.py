@@ -65,7 +65,7 @@ class GuideEngineSettings:
 
         # NagaModel 网关优先：认证态走统一网关
         from apiserver import naga_auth
-        if naga_auth.is_authenticated():
+        if naga_auth.should_use_model_gateway():
             _emb_base = naga_auth.NAGA_MODEL_URL
             _emb_key = naga_auth.get_access_token()
             _emb_model = "default"

@@ -5,7 +5,7 @@ export interface StreamChunk {
   text?: string
   round?: number
   calls?: Array<{ agentType: string, service_name?: string, tool_name?: string, message?: string }>
-  results?: Array<{ service_name: string, tool_name?: string, result: string, status: string }>
+  results?: Array<{ service_name: string, tool_name?: string, result: unknown, status: string }>
   has_more?: boolean
   tools?: string[]
 }

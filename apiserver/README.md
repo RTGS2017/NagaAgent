@@ -68,6 +68,8 @@ apiserver/
 | POST | `/tts/speech` | TTS 语音合成代理 |
 | POST | `/asr/transcribe` | ASR 语音识别代理 |
 
+`/tts/speech` 在启用且登录 NagaModel 网关时使用当前角色元数据中的 `voice`，否则转发到本地 Edge TTS。代理会保留上游 MP3/WAV 等真实媒体类型；只有无法识别容器且上游未声明音频类型时，才将响应按 24 kHz、16-bit、单声道 PCM 包装为 WAV。网关返回 401 时会使用已保存的 refresh token 刷新并重试一次，并通过 `X-Naga-Access-Token` 响应头把新 token 同步回桌面端。
+
 ### 会话管理 — `routes/session.py`
 
 | 方法 | 路径 | 说明 |
@@ -94,6 +96,14 @@ apiserver/
 | GET  | `/logs/context/statistics` | 日志上下文统计 |
 | GET  | `/logs/context/load` | 加载日志上下文 |
 
+`/update/latest` 以 `RTGS2017/NagaAgent` 的 GitHub Latest Release 为正式版本源，并按 `windows` / `macos` / `linux` 选择安装资源；GitHub 不可达时回退到 NagaBusiness 更新服务。两个来源都失败时返回 HTTP 502；仅回退源可用且其版本不高于本地版本时，前端也会显示检查失败，避免把“未能访问官方版本源”误报成“已是最新版本”。
+
+`/system/config` 会读写当前生效的运行时 `config.json`：优先使用项目根目录配置；若项目根目录不存在 `config.json`，再回退到用户数据目录（Linux/macOS 为 `~/.naga/config.json`，Windows 为 `%APPDATA%/NagaAgent/config.json`），缺失时由配置模板自动生成。模型连接字段包括 `api.provider`、`api.model`、`api.api_format` 和 `api.use_gateway`，用于区分本地模型供应商与 NagaModel 网关。保存配置时会过滤角色/自定义 Live2D 的运行时 `model.source`，只持久化 `custom_model_id` 等稳定字段；历史 `agentserver` / `mcpserver` 键会归一为 `agent_server` / `mcp_server`。
+
+未登录且 `api.use_gateway=false` 时，OpenAI 兼容代理只接受真实本地 API 配置；`your-api-key-here` 与 `sk-placeholder-key-not-set` 会被识别为占位值并返回配置错误。
+
+OpenClaw 配置桥接会在生成、迁移或注入配置时补齐 `gateway.mode=local`、当前 `gateway.port`、`hooks.path=/hooks` 与 `hooks.allowRequestSessionKey=true`，保证 `/hooks/agent` 和 sessionKey 调度链路可用。
+
 ### 工具 & WebSocket — `routes/tools.py`
 
 | 方法 | 路径 | 说明 |
@@ -112,6 +122,8 @@ apiserver/
 | WS   | `/ws` | WebSocket 实时通信 |
 | GET  | `/ws/stats` | WebSocket 连接统计 |
 | POST | `/ws/broadcast` | WebSocket 广播 |
+
+`/ui_notification` 支持 `show_mcp_result`，用于 MCP Server callback 将工具结果写入前端回复队列；前端会按 `tool-result` 结构折叠展示。工具通知、工具结果和 UI 通知接口会保留缺少参数等显式 `400` 错误，避免被统一包装成 `500`。
 
 ### 扩展功能 — `routes/extensions.py`
 
@@ -135,10 +147,15 @@ apiserver/
 | POST | `/travel/stop` | 停止旅行会话 |
 | GET  | `/travel/history` | 旅行历史列表 |
 | GET  | `/travel/history/{session_id}` | 旅行历史详情 |
+| POST | `/travel/sessions/{session_id}/browser` | 更新探索浏览器策略 |
 | GET  | `/memory/stats` | 记忆系统统计 |
 | GET  | `/memory/quintuples` | 获取五元组 |
+
+技能管理接口会将 `name` 当作技能目录标识处理，只允许单段名称；空名称、`.`、`..`、包含 `/` 或 `\`、绝对路径、Windows 盘符路径和控制字符会被拒绝，避免写入、读取或删除越过技能目录边界。
 | GET  | `/memory/quintuples/search` | 搜索五元组 |
 | GET/POST | `/tools/search` | 搜索代理 |
+
+旅行会话支持运行中更新 `browser_visible`、`browser_keep_open` 与 `browser_idle_timeout_seconds`；前端 `/forum/quota` 会同步这些设置并提供原始历史查看入口，用于排查 OpenClaw session 消息链路。
 
 ### 社区论坛 — `routes/forum.py`
 
@@ -183,6 +200,16 @@ python apiserver/start_server.py api
 
 # 直接使用 uvicorn
 uvicorn apiserver.api_server:app --host 127.0.0.1 --port 8000
+```
+
+## 冒烟验证
+
+```bash
+# 无账号：启动缺失的本地后端并验证未登录、本地配置、工具通知和 OpenClaw 代理链路
+uv run python scripts/smoke_backend.py --skip-auth --start-if-needed
+
+# 有 NagaCAS 账号：额外验证验证码、登录和 /auth/me
+uv run python scripts/smoke_backend.py --username "$NAGA_SMOKE_USERNAME" --password "$NAGA_SMOKE_PASSWORD" --start-if-needed
 ```
 
 ## 代理问题

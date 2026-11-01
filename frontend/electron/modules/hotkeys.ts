@@ -1,5 +1,5 @@
 import { globalShortcut } from 'electron'
-import { collapseFloatingWindow, expandFloatingWindow, getFloatingState, getMainWindow } from './window'
+import { collapseFloatingWindow, expandFloatingWindow, getFloatingState, getMainWindow, showMainWindow } from './window'
 
 export function registerHotkeys(): void {
   // Ctrl+Shift+N (Cmd+Shift+N on macOS) toggles window visibility
@@ -16,8 +16,7 @@ export function registerHotkeys(): void {
         win.hide()
       }
       else {
-        win.show()
-        win.focus()
+        showMainWindow()
       }
     }
     else if (state === 'ball') {
@@ -27,7 +26,7 @@ export function registerHotkeys(): void {
         win.focus()
       }
       else {
-        win.show()
+        showMainWindow()
       }
     }
     else if (state === 'compact' || state === 'full') {

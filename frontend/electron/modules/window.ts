@@ -2,11 +2,13 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, screen, shell } from 'electron'
+import { fitBoundsWithinWorkArea, ManualMaximizeController, rectanglesEqual } from './windowState'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
+const manualMaximizeController = new ManualMaximizeController()
 
 // 悬浮球模式状态
 export type FloatingState = 'classic' | 'ball' | 'compact' | 'full'
@@ -110,6 +112,8 @@ export function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     frame: false,
+    // Electron 不支持 Windows 透明窗口的原生最大化，改由自定义按钮模拟。
+    maximizable: !isWin,
     resizable: true,
     hasShadow: true,
     transparent: true,
@@ -122,6 +126,7 @@ export function createWindow(): BrowserWindow {
       webgl: true,
     },
   })
+  manualMaximizeController.reset()
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
@@ -148,6 +153,92 @@ export function createWindow(): BrowserWindow {
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow
+}
+
+export function usesManualMainWindowMaximize(): boolean {
+  return process.platform === 'win32'
+}
+
+export function isMainWindowMaximized(): boolean {
+  const win = mainWindow
+  if (!win || floatingState !== 'classic')
+    return false
+
+  return usesManualMainWindowMaximize()
+    ? manualMaximizeController.isMaximized()
+    : win.isMaximized()
+}
+
+function setBoundsIfChanged(win: BrowserWindow, bounds: Electron.Rectangle): void {
+  if (!rectanglesEqual(win.getBounds(), bounds)) {
+    win.setBounds(bounds)
+  }
+}
+
+function sendMaximizedState(win: BrowserWindow, maximized: boolean): void {
+  win.webContents.send('window:maximized', maximized)
+}
+
+export function toggleMainWindowMaximize(): void {
+  const win = mainWindow
+  if (!win || floatingState !== 'classic')
+    return
+
+  if (!usesManualMainWindowMaximize()) {
+    if (win.isMaximized())
+      win.unmaximize()
+    else
+      win.maximize()
+    return
+  }
+
+  if (manualMaximizeController.isMaximized()) {
+    const restoreBounds = manualMaximizeController.restore(win.getBounds())
+    const display = screen.getDisplayMatching(restoreBounds)
+    const visibleBounds = fitBoundsWithinWorkArea(restoreBounds, display.workArea)
+
+    win.setMovable(true)
+    win.setResizable(true)
+    setBoundsIfChanged(win, visibleBounds)
+    sendMaximizedState(win, false)
+    return
+  }
+
+  if (win.isMinimized())
+    win.restore()
+
+  const currentBounds = win.getBounds()
+  const display = screen.getDisplayMatching(currentBounds)
+  const maximizedBounds = manualMaximizeController.maximize(currentBounds, display.workArea)
+
+  setBoundsIfChanged(win, maximizedBounds)
+  win.setResizable(false)
+  win.setMovable(false)
+  sendMaximizedState(win, true)
+}
+
+export function showMainWindow(): void {
+  const win = mainWindow
+  if (!win)
+    return
+
+  if (win.isMinimized())
+    win.restore()
+
+  if (floatingState === 'classic' && usesManualMainWindowMaximize() && manualMaximizeController.isMaximized()) {
+    const referenceBounds = manualMaximizeController.getRestoreBounds() ?? win.getBounds()
+    const display = screen.getDisplayMatching(referenceBounds)
+    setBoundsIfChanged(win, display.workArea)
+  }
+  else {
+    const bounds = win.getBounds()
+    const display = screen.getDisplayMatching(bounds)
+    setBoundsIfChanged(win, fitBoundsWithinWorkArea(bounds, display.workArea))
+  }
+
+  win.show()
+  win.moveTop()
+  win.focus()
 }
 
 export function getFloatingState(): FloatingState {
@@ -201,13 +292,22 @@ export function exitFloatingMode(): void {
 
   floatingState = 'classic'
 
+  const restoreToManualMaximized = usesManualMainWindowMaximize()
+    && manualMaximizeController.isMaximized()
+
   win.setAlwaysOnTop(false)
   win.setSkipTaskbar(false)
-  win.setResizable(true)
+  win.setResizable(!restoreToManualMaximized)
+  win.setMovable(!restoreToManualMaximized)
   win.setHasShadow(true)
   win.setMinimumSize(800, 600)
 
-  if (classicBounds) {
+  if (restoreToManualMaximized) {
+    const referenceBounds = manualMaximizeController.getRestoreBounds() ?? classicBounds ?? win.getBounds()
+    const display = screen.getDisplayMatching(referenceBounds)
+    win.setBounds(display.workArea)
+  }
+  else if (classicBounds) {
     win.setBounds(classicBounds)
   }
   else {
@@ -362,6 +462,9 @@ export function setWindowPosition(x: number, y: number): void {
     return
   const rx = Math.round(x)
   const ry = Math.round(y)
+  if (floatingState !== 'classic') {
+    cancelCurrentAnimation?.()
+  }
   win.setPosition(rx, ry)
   // 任何悬浮球相关状态拖拽时都同步位置（球态/展开态都需要）
   if (floatingState !== 'classic') {

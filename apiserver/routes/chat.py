@@ -922,11 +922,12 @@ async def chat_stream(request: ChatRequest):
             model_override = None
             use_vlm = session_id in _vlm_sessions
             cc = get_config().computer_control
-            if use_vlm and cc.enabled and (cc.api_key or naga_auth.is_authenticated()):
+            if use_vlm and cc.enabled and (cc.api_key or naga_auth.should_use_model_gateway()):
                 model_override = {
                     "model": cc.model,
                     "api_base": cc.model_url,
                     "api_key": cc.api_key,
+                    "provider": "gemini" if "gemini" in (cc.model or "").lower() else get_config().api.provider,
                 }
                 logger.info(f"[API Server] VLM 会话，使用视觉模型: {cc.model}")
 

@@ -19,8 +19,12 @@ import {
   expandFloatingWindow,
   getFloatingState,
   getMainWindow,
+  isMainWindowMaximized,
   setFloatingHeight,
   setWindowPosition,
+  showMainWindow,
+  toggleMainWindowMaximize,
+  usesManualMainWindowMaximize,
 } from './modules/window'
 
 let isQuitting = false
@@ -51,13 +55,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.on('second-instance', () => {
-  const win = getMainWindow()
-  if (win) {
-    if (win.isMinimized())
-      win.restore()
-    win.show()
-    win.focus()
-  }
+  showMainWindow()
 })
 
 app.whenReady().then(async () => {
@@ -181,9 +179,6 @@ app.whenReady().then(async () => {
   // Create main window
   const win = createWindow()
 
-  // 透明无边框窗口在 Windows 上 unmaximize 后系统不可靠地还原尺寸，手动保存/还原
-  let preMaximizeBounds: Electron.Rectangle | null = null
-
   // Create system tray
   createTray()
 
@@ -197,18 +192,7 @@ app.whenReady().then(async () => {
 
   // Window controls
   ipcMain.on('window:minimize', () => getMainWindow()?.minimize())
-  ipcMain.on('window:maximize', () => {
-    const w = getMainWindow()
-    if (w) {
-      if (w.isMaximized()) {
-        w.unmaximize()
-      }
-      else {
-        preMaximizeBounds = w.getBounds()
-        w.maximize()
-      }
-    }
-  })
+  ipcMain.on('window:maximize', () => toggleMainWindowMaximize())
   ipcMain.on('window:close', () => {
     const state = getFloatingState()
     if (state === 'compact' || state === 'full') {
@@ -225,11 +209,11 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('window:isMaximized', () => getMainWindow()?.isMaximized() ?? false)
+  ipcMain.handle('window:isMaximized', () => isMainWindowMaximized())
   ipcMain.handle('window:getBounds', () => getMainWindow()?.getBounds() ?? { x: 0, y: 0, width: 1280, height: 800 })
   ipcMain.on('window:setBounds', (_event, bounds: { x?: number, y?: number, width?: number, height?: number }) => {
     const win = getMainWindow()
-    if (!win || win.isMaximized())
+    if (!win || isMainWindowMaximized())
       return
     const current = win.getBounds()
     const next = {
@@ -384,14 +368,13 @@ app.whenReady().then(async () => {
     }
   })
 
-  win.on('maximize', () => win.webContents.send('window:maximized', true))
+  win.on('maximize', () => {
+    if (!usesManualMainWindowMaximize())
+      win.webContents.send('window:maximized', true)
+  })
   win.on('unmaximize', () => {
-    win.webContents.send('window:maximized', false)
-    // 透明无边框窗口在 Windows 上还原尺寸不可靠，手动恢复最大化前的 bounds
-    if (preMaximizeBounds) {
-      win.setBounds(preMaximizeBounds)
-      preMaximizeBounds = null
-    }
+    if (!usesManualMainWindowMaximize())
+      win.webContents.send('window:maximized', false)
   })
 
   // 悬浮球展开态失焦时自动收起（由渲染进程控制是否启用）
@@ -404,7 +387,7 @@ app.whenReady().then(async () => {
       createWindow()
     }
     else {
-      getMainWindow()?.show()
+      showMainWindow()
     }
   })
 

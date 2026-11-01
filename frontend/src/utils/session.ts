@@ -47,6 +47,15 @@ export const tabs = ref<ChatTab[]>([
 /** 当前活跃 tab（持久化到 localStorage） */
 export const activeTabId = useStorage('naga-active-tab', 'naga')
 
+// ── 娜迦 tab 的 MESSAGES 保持兼容 ──
+
+export const CURRENT_SESSION_ID = useStorage<string | null>('naga-session', null)
+export const MESSAGES = ref<Message[]>([])
+export const IS_TEMPORARY_SESSION = ref(false)
+
+// 娜迦 tab 的 messages 与 MESSAGES.value 保持同一引用
+tabs.value[0]!.messages = MESSAGES.value
+
 /** 干员编号计数器（只增不减，不复用编号，避免混淆） */
 let agentCounter = 0
 export function nextAgentNumber(): number {
@@ -235,7 +244,7 @@ function isInternalAgentArtifact(message: Message): boolean {
   const text = `${message.content || ''}\n${message.reasoning || ''}`.trim()
   if (!text)
     return false
-  if (message.role === 'user' && /^\[cron:[^\]]+\s+Hook\]/i.test(text))
+  if (message.role === 'user' && isCronHookMessage(text))
     return true
   if (message.role === 'user' && text.includes('Your previous response was only an acknowledgement'))
     return true
@@ -246,6 +255,28 @@ function isInternalAgentArtifact(message: Message): boolean {
   if (text.includes('<|tool_calls_section_begin|>'))
     return true
   return false
+}
+
+function isCronHookMessage(text: string): boolean {
+  const prefix = '[cron:'
+  if (!text.startsWith(prefix))
+    return false
+
+  const closeIndex = text.indexOf(']', prefix.length)
+  if (closeIndex === -1)
+    return false
+
+  const label = text.slice(prefix.length, closeIndex).trimEnd()
+  const hook = 'hook'
+  if (label.length <= hook.length)
+    return false
+
+  const hookStart = label.length - hook.length
+  return label.slice(hookStart).toLowerCase() === hook && isWhitespace(label[hookStart - 1])
+}
+
+function isWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f'
 }
 
 function filterInternalAgentArtifacts(messages: Message[]): Message[] {
@@ -376,13 +407,6 @@ export function openAgentTab(contact: AgentContact) {
 }
 
 // ── 娜迦 tab 的 MESSAGES 保持兼容 ──
-
-export const CURRENT_SESSION_ID = useStorage<string | null>('naga-session', null)
-export const MESSAGES = ref<Message[]>([])
-export const IS_TEMPORARY_SESSION = ref(false)
-
-// 娜迦 tab 的 messages 与 MESSAGES.value 保持同一引用
-tabs.value[0]!.messages = MESSAGES.value
 
 function syncNagaMessages() {
   tabs.value[0]!.messages = MESSAGES.value

@@ -15,7 +15,7 @@
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.0-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
@@ -40,6 +40,16 @@
 
 | 日期 | 版本 | 内容 |
 |------|------|------|
+| 🪟 2026-07-16 | 5.1.5 | 修复 Windows 透明无边框主窗口在最大化后点击还原会消失的问题：避开 Electron 原生透明窗口最大化状态缺陷，基于当前显示器工作区可靠恢复尺寸；统一托盘、快捷键与单实例唤醒，并自动将屏幕外窗口移回可见区域 |
+| 🔊 2026-07-15 | 5.1.4 | 修复日常对话 TTS：统一设置页与聊天页语音开关，保留 `content_clean` 清理后的正文，覆盖主会话与干员会话，按真实 MP3/WAV 类型串行播放；更新检查改以 GitHub Release 为准，无法确认官方版本时明确显示失败 |
+| 🧭 2026-07-08 | 5.1.3 | 调整运行时配置读取优先级：优先使用项目根目录 `config.json`，不存在时再回退到用户数据目录；同步设置页保存目标与相关文档 |
+| 🔐 2026-07-03 | 5.1.2 | 修复本地模型 API Key 保存链路，避免前端占位密钥覆盖真实密钥；空流式响应改为重试并给出可见错误；DeepSeek Thinking Mode 工具调用按需保留 `reasoning_content` |
+| 🚀 2026-06-20 | 5.1.1 | 自定义 Live2D 模型设置上线：终端设置与角色注册支持上传完整模型目录，模型保存到用户数据目录并按当前 API 端口动态注入 |
+| 🧭 2026-06-20 | — | 网络探索控制中心增强：可按干员创建 OpenClaw 探索任务，设置时间 / 积分上限与初始浏览器策略，运行中切换浏览器可见性并查看原始历史 |
+| 🛡️ 2026-06-20 | — | 全栈运行链路加固：未登录 / 开源模式清空旧 token，本地模型占位 API Key 拒绝代理请求，OpenClaw 自动补齐 gateway / hooks 运行时配置 |
+| 🧰 2026-06-20 | — | MCP 与 GUI 模型配置改进：SSE 增加 `tool_calls` / `tool_results`，前端结构化折叠完整工具结果；新增 `provider` 与 `use_gateway` 模型配置 |
+| 🪟 2026-06-20 | — | Skill 路径安全与悬浮窗拖拽修复：导入 / 克隆 / 读取 / 删除 Skill 时拒绝路径穿越名称；展开态拖拽暂停高度自适应避免窗口抖动 |
+| 🔌 2026-05-10 | — | 未登录或关闭网关时直连用户自配 API，避免误走 NagaBusiness 扣积分；登出后同步 OpenClaw 切回本地模型配置；移除本地异常脚本 |
 | 🔧 2026-04-15 | — | 配置同步重构：source config 与 runtime config 双向合并；ASR 健康检查 URL 改用配置值；服务端口获取与配置路径重构 |
 | 🤖 2026-04-14 | — | 新增 Anthropic API 格式支持（`api_format` 字段）；五元组提取器兼容 Anthropic SDK；Live2D 空文本调用处理 |
 | 🐛 2026-04-12 | — | 修复 py2neo `Graph()` timeout 参数不兼容与 Neo4j 连接状态误报 |
@@ -144,12 +154,18 @@ pip install -r requirements.txt
     "api_key": "your-api-key",
     "base_url": "https://api.deepseek.com",
     "model": "deepseek-v3.2",
+    "provider": "deepseek",
+    "use_gateway": true,
     "api_format": "openai"
   }
 }
 ```
 
-支持所有 OpenAI 兼容 API（DeepSeek、通义千问、OpenAI、Ollama 等），也支持 Anthropic 原生格式（将 `api_format` 设为 `"anthropic"`）。
+支持所有 OpenAI 兼容 API（DeepSeek、通义千问、OpenAI、Ollama 等），也支持 Anthropic 原生格式（将 `api_format` 设为 `"anthropic"`）。登录 Naga 后默认使用 NagaModel 网关；如需使用本地密钥，在设置页关闭“使用 NagaModel 网关”，或将 `use_gateway` 设为 `false`。
+
+配置读取优先使用项目根目录下的 `config.json`；如果该文件不存在，才会回退到用户数据目录（Linux/macOS 为 `~/.naga/config.json`，Windows 为 `%APPDATA%/NagaAgent/config.json`）。设置页保存配置时会写回当前生效的配置文件。
+
+未登录或选择“不登录，使用开源版本”时会进入本地配置模式并清空前端旧 token；此时 `api.api_key` 必须替换为真实密钥，`your-api-key`、`your-api-key-here` 和 `sk-placeholder-key-not-set` 会被视为占位值并拒绝代理请求，避免误以为本地模型已配置。配置保存时，如果前端提交了占位密钥而本地配置文件已有真实密钥，后端会保留已有真实密钥，防止整份配置自动同步把 key 覆盖回占位值。
 
 ### 启动
 
@@ -209,7 +225,8 @@ parse_tool_calls_from_text()
 ```
 
 - 文本解析：`json5` 容错解析，全角字符自动标准化
-- SSE 格式：`data: {"type":"content"|"reasoning","text":"..."}\n\n`（直接 JSON，不含 base64）
+- SSE 格式：`data: {"type":"content"|"reasoning"|"tool_calls"|"tool_results","text":...}\n\n`（直接 JSON，不含 base64）
+- 前端会把 MCP / 工具结果作为结构化 `toolEvents` 折叠显示，长结果保留完整内容，不再只显示截断摘要。
 - 循环上限：`max_loop_stream = 5`（可配置）
 
 源码：[`apiserver/agentic_tool_loop.py`](apiserver/agentic_tool_loop.py)
@@ -229,7 +246,7 @@ parse_tool_calls_from_text()
 
 ### DeepSeek 推理链展示
 
-使用 DeepSeek 时，`reasoning` 字段通过 SSE 实时推送，前端以独立样式展示思考过程。
+使用 DeepSeek 时，`reasoning` 字段通过 SSE 实时推送，前端以独立样式展示思考过程。对于 DeepSeek Thinking Mode 的原生工具调用轮次，后端会在下一轮请求中保留 assistant `reasoning_content`；普通回复和旧 `deepseek-reasoner` 请求不会回传该字段，避免上游拒绝。
 
 ---
 
@@ -324,6 +341,8 @@ Canvas 2D + 手写 3D 投影（非 WebGL），球面坐标相机，透视除法 
 | `ForumMyPostsView` | `/forum/my-posts` | 我的发帖 |
 | `ForumMyRepliesView` | `/forum/my-replies` | 我的回复 |
 | `ForumQuotaView` | `/forum/quota` | 积分配额与探索入口 |
+
+`ForumQuotaView` 也是网络探索控制中心：可以按干员创建 OpenClaw 探索任务，设置时间/积分上限和初始浏览器策略；任务运行中仍可切换“浏览器可见”和“页面保持打开”，并可打开原始历史弹窗查看后端回传的 session 消息。
 
 源码：[`frontend/src/forum/`](frontend/src/forum/)
 
@@ -483,6 +502,7 @@ SSAA 超采样抗锯齿：Canvas 按 `width × ssaa` 渲染，CSS `transform: sc
 
 - **三级回退启动：** 打包内嵌 → 全局 `openclaw` 命令 → 自动 `npm install -g openclaw`
 - 支持 sessionKey hooks（2026.2.17+），可配置自定义 hooks 路径
+- 启动/注入配置时会自动补齐 `gateway.mode=local`、`gateway.port`、`hooks.path=/hooks` 和 `hooks.allowRequestSessionKey=true`
 - `POST /openclaw/send` 发送指令，最长等待 120 秒
 
 **任务调度器（`TaskScheduler`）：**
@@ -562,7 +582,7 @@ NagaAgent/
 ├── main.py                   # 统一入口，编排所有服务
 ├── build.py                  # 跨平台构建脚本
 ├── config.json               # 运行时配置（从 config.json.example 复制）
-├── pyproject.toml            # 版本 5.1.0，项目元数据与依赖
+├── pyproject.toml            # 版本 5.1.5，项目元数据与依赖
 │
 ├── apiserver/                # API Server（:8000）
 │   ├── api_server.py         #   FastAPI 主应用
@@ -671,23 +691,26 @@ NagaAgent/
 <details>
 <summary><b>Live2D 虚拟形象（自定义模型）</b></summary>
 
+在 **终端设置 → 音画配置 → Live2D 模型** 中可以直接上传自定义模型。请选择包含 `.model3.json`、`.moc3`、贴图、动作、物理文件等资源的完整模型目录，上传后会保存到用户数据目录并自动应用；也可以在 **枢机集市 → 角色注册 → 自定义角色** 中录入角色名、提示词并上传同一套 Live2D 模型目录。
+
 ```json
 {
   "web_live2d": {
     "ssaa": 2,
     "model": {
-      "source": "./models/your-model/model.model3.json",
+      "source": "由 GUI 或角色系统自动注入",
       "x": 0.5,
       "y": 1.3,
       "size": 6800
     },
+    "custom_model_id": "上传后自动生成的模型 ID",
     "face_y_ratio": 0.13,
     "tracking_hold_delay_ms": 100
   }
 }
 ```
 
-启用角色卡后，`ai_name` 与 `model.source` 由角色 JSON 自动覆盖，无需手动修改。
+启用角色卡后，`ai_name` 与 `model.source` 由角色 JSON 自动覆盖；使用自定义模型时，持久化的是 `custom_model_id`，`model.source` 会按当前 API 端口动态注入。配置保存会过滤 `localhost`、`127.0.0.1` 和 `naga-char://` 形式的动态模型地址，避免把运行时 URL 写入 `config.json`。
 </details>
 
 <details>
@@ -751,4 +774,4 @@ python main.py --quick-check              # 快速检查
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=RTGS2017/NagaAgent&type=date&legend=top-left)](https://www.star-history.com/#RTGS2017/NagaAgent&type=date&legend=top-left)
+[![Star History Chart](https://star-history.dera.page/svg?repos=RTGS2017/NagaAgent&type=date&legend=top-left)](https://star-history.dera.page/#RTGS2017/NagaAgent&type=date&legend=top-left)

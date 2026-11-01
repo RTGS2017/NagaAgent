@@ -17,6 +17,7 @@ import httpx
 from system.config import get_config, get_server_port
 from apiserver.agent_directory import format_agent_directory_text, resolve_agent_descriptor
 from apiserver import naga_auth
+from apiserver.tool_schemas import resolve_mcp_func_name
 
 logger = logging.getLogger(__name__)
 
@@ -1217,6 +1218,28 @@ def format_tool_results_for_llm(results: List[Dict[str, Any]]) -> str:
     return "\n\n".join(parts)
 
 
+def format_tool_result_for_display(result: Any) -> Any:
+    """保留工具原始结构，并在字符串结果中解开常见 JSON 包装。"""
+    if not isinstance(result, str):
+        return result
+
+    text = result.strip()
+    if not text:
+        return ""
+
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return result
+
+    if isinstance(parsed, dict):
+        if "data" in parsed and parsed.get("status") in {"success", "ok"}:
+            return parsed["data"]
+        if "result" in parsed:
+            return parsed["result"]
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # SSE 辅助
 # ---------------------------------------------------------------------------
@@ -1246,6 +1269,9 @@ def _convert_native_to_dispatch(native_calls: List[Dict[str, Any]]) -> List[Dict
     - openclaw__agent → agentType="openclaw", task_type="message"
     - live2d__action → agentType="live2d"
     - naga_control__command → agentType="naga_control"
+
+    MCP 工具名在生成时可能被 sanitize（service_name/command 含中文等非法字符），
+    故优先用 resolve_mcp_func_name() 反查还原原始名，查不到再 fallback 到 split。
     """
     result = []
     for call in native_calls:
@@ -1270,8 +1296,13 @@ def _convert_native_to_dispatch(native_calls: List[Dict[str, Any]]) -> List[Dict
             dispatch["tool_name"] = parts[1]
             dispatch["args"] = args
         elif agent_type == "mcp" and len(parts) >= 3:
-            dispatch["service_name"] = parts[1]
-            dispatch["tool_name"] = parts[2]
+            # 优先用反查映射还原原始 service_name/command（function name 可能被 sanitize 过）
+            resolved = resolve_mcp_func_name(name)
+            if resolved is not None:
+                dispatch["service_name"], dispatch["tool_name"] = resolved
+            else:
+                dispatch["service_name"] = parts[1]
+                dispatch["tool_name"] = parts[2]
             # MCP 工具参数直接展开到 dispatch 顶层（与现有格式一致）
             dispatch.update(args)
         elif agent_type == "openclaw":
@@ -1291,6 +1322,32 @@ def _convert_native_to_dispatch(native_calls: List[Dict[str, Any]]) -> List[Dict
 
         result.append(dispatch)
     return result
+
+
+def _build_native_assistant_message(
+    clean_text: str,
+    calls: List[Dict[str, Any]],
+    reasoning_content: str = "",
+) -> Dict[str, Any]:
+    """构造 OpenAI 兼容的 assistant tool_calls 历史消息。"""
+    assistant_msg: Dict[str, Any] = {
+        "role": "assistant",
+        "content": clean_text or None,
+        "tool_calls": [
+            {
+                "id": c.get("_tool_call_id", f"call_{i}"),
+                "type": "function",
+                "function": {
+                    "name": c.get("_original_name", ""),
+                    "arguments": c.get("_original_args", "{}"),
+                },
+            }
+            for i, c in enumerate(calls)
+        ],
+    }
+    if reasoning_content.strip():
+        assistant_msg["reasoning_content"] = reasoning_content
+    return assistant_msg
 
 
 # ---------------------------------------------------------------------------
@@ -1446,22 +1503,7 @@ async def run_agentic_loop(
             if live2d_calls and not complete_text.strip() and use_native and round_num < max_rounds:
                 logger.info(f"[AgenticLoop] Round {round_num}: 模型仅返回 live2d 调用无正文，"
                             f"回注 tool result 继续下一轮获取文字回复")
-                # 构造 assistant message + tool results for live2d calls
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": c.get("_tool_call_id", f"call_{i}"),
-                            "type": "function",
-                            "function": {
-                                "name": c.get("_original_name", ""),
-                                "arguments": c.get("_original_args", "{}"),
-                            },
-                        }
-                        for i, c in enumerate(live2d_calls)
-                    ],
-                }
+                assistant_msg = _build_native_assistant_message("", live2d_calls, complete_reasoning)
                 messages.append(assistant_msg)
                 for c in live2d_calls:
                     messages.append({
@@ -1500,15 +1542,12 @@ async def run_agentic_loop(
         # 8. 通知前端工具结果
         result_summaries = []
         for r in results:
-            result_text = r.get("result", "")
-            # 截断过长的结果用于前端显示
-            display_result = result_text[:500] + "..." if len(result_text) > 500 else result_text
             result_summaries.append(
                 {
                     "service_name": r.get("service_name", "unknown"),
                     "tool_name": r.get("tool_name", ""),
                     "status": r.get("status", "unknown"),
-                    "result": display_result,
+                    "result": format_tool_result_for_display(r.get("result", "")),
                 }
             )
         yield _format_sse_event("tool_results", {"results": result_summaries})
@@ -1516,21 +1555,7 @@ async def run_agentic_loop(
         # 9. 将本轮LLM输出 + 工具结果注入消息历史
         if use_native:
             # 标准 function calling 格式：assistant message + tool messages
-            assistant_msg = {
-                "role": "assistant",
-                "content": clean_text or None,
-                "tool_calls": [
-                    {
-                        "id": c.get("_tool_call_id", f"call_{i}"),
-                        "type": "function",
-                        "function": {
-                            "name": c.get("_original_name", ""),
-                            "arguments": c.get("_original_args", "{}"),
-                        },
-                    }
-                    for i, c in enumerate(actionable_calls)
-                ],
-            }
+            assistant_msg = _build_native_assistant_message(clean_text, actionable_calls, complete_reasoning)
             messages.append(assistant_msg)
             for call_item, result_item in zip(actionable_calls, results):
                 messages.append({

@@ -173,8 +173,7 @@ function openAddPrivateSkill() {
 async function handlePrivateSkillConfirm(data:
   | { mode: 'hub', name: string, source: string }
   | { mode: 'cache', name: string, sourceScope: 'cache' | 'public' | 'private', sourceAgentId?: string }
-  | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string },
-) {
+  | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string }) {
   if (!props.agent)
     return
   try {

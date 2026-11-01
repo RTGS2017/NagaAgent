@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ForumComment } from '../types'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { likeComment } from '../api'
 
 const props = defineProps<{
@@ -13,6 +13,16 @@ defineEmits<{
 }>()
 
 const liking = ref(false)
+const likesCount = ref(props.comment.likesCount)
+const liked = ref(props.comment.liked)
+
+watch(
+  () => [props.comment.likesCount, props.comment.liked] as const,
+  ([nextLikesCount, nextLiked]) => {
+    likesCount.value = nextLikesCount
+    liked.value = nextLiked
+  },
+)
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
@@ -30,8 +40,8 @@ async function toggleLike() {
   liking.value = true
   try {
     const res = await likeComment(props.comment.id)
-    props.comment.likesCount = res.likes
-    props.comment.liked = res.liked
+    likesCount.value = res.likes
+    liked.value = res.liked
   }
   finally {
     liking.value = false
@@ -78,12 +88,12 @@ async function toggleLike() {
         <div class="flex items-center gap-3 mt-1.5 text-xs">
           <button
             class="like-btn flex items-center gap-1 border-none bg-transparent cursor-pointer p-0 transition"
-            :class="comment.liked ? 'liked' : ''"
+            :class="liked ? 'liked' : ''"
             :disabled="liking"
             @click="toggleLike"
           >
             <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-            {{ comment.likesCount }}
+            {{ likesCount }}
           </button>
         </div>
       </div>

@@ -3,9 +3,11 @@ import { useToast } from 'primevue/usetoast'
 import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCredits, getPurchaseLink, redeemCode } from '@/api/business'
+import API from '@/api/core'
 import { isNagaLoggedIn, nagaUser, refreshUserStats, sessionRestored } from '@/composables/useAuth'
 import { useBackground } from '@/composables/useBackground'
-import { CONFIG } from '@/utils/config'
+import { CONFIG, SYSTEM_PROMPT } from '@/utils/config'
+import { applyCustomLive2DModel, upsertCustomLive2DModel } from '@/utils/live2dModels'
 
 const router = useRouter()
 const route = useRoute()
@@ -170,9 +172,15 @@ function applyCharacter(name: string) {
 }
 
 // ── 自定义角色 ──
-const customChar = reactive({ name: '', modelFile: null as File | null, prompt: '' })
+const customChar = reactive({
+  name: '',
+  modelFiles: [] as File[],
+  modelPath: '',
+  prompt: '',
+  uploading: false,
+})
 const customReady = computed(() =>
-  customChar.name.trim() !== '' && customChar.modelFile !== null && customChar.prompt.trim() !== '',
+  customChar.name.trim() !== '' && customChar.modelFiles.length > 0 && customChar.prompt.trim() !== '',
 )
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -182,14 +190,38 @@ function triggerFileInput() {
 
 function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files && input.files.length > 0) {
-    customChar.modelFile = input.files[0] ?? null
-  }
+  const files = Array.from(input.files ?? [])
+  customChar.modelFiles = files
+  const modelFiles = files
+    .map(file => file.webkitRelativePath || file.name)
+    .filter(path => path.toLowerCase().endsWith('.model3.json'))
+  customChar.modelPath = modelFiles.length === 1 ? modelFiles[0] ?? '' : ''
 }
 
-function applyCustomCharacter() {
+async function applyCustomCharacter() {
+  if (!customReady.value || customChar.uploading)
+    return
+  customChar.uploading = true
+  try {
+    const res = await API.uploadCustomLive2DModel({
+      name: customChar.name.trim(),
+      files: customChar.modelFiles,
+      modelPath: customChar.modelPath || undefined,
+    })
+    const savedModel = upsertCustomLive2DModel(res.model)
+    applyCustomLive2DModel(savedModel)
+    toast.add({ severity: 'success', summary: '角色已录入', detail: customChar.name.trim(), life: 2500 })
+  }
+  catch (e: any) {
+    toast.add({ severity: 'error', summary: '录入失败', detail: e?.response?.data?.detail || e.message, life: 4000 })
+    return
+  }
+  finally {
+    customChar.uploading = false
+  }
   CONFIG.value.system.ai_name = customChar.name
   CONFIG.value.system.active_character = ''
+  SYSTEM_PROMPT.value = customChar.prompt
 }
 
 // 标签可见时执行初始化
@@ -530,13 +562,18 @@ async function handleRedeem() {
                 <input
                   ref="fileInputRef"
                   type="file"
-                  accept=".model3.json"
+                  webkitdirectory
+                  directory
+                  multiple
                   style="display:none"
                   @change="onFileChange"
                 >
                 <button type="button" class="custom-file-btn" @click="triggerFileInput">
-                  {{ customChar.modelFile ? customChar.modelFile.name : '选择 .model3.json 文件' }}
+                  {{ customChar.modelFiles.length ? `${customChar.modelFiles.length} 个模型资源文件` : '选择 Live2D 模型目录' }}
                 </button>
+                <span v-if="customChar.modelPath" class="custom-file-hint">
+                  {{ customChar.modelPath }}
+                </span>
               </div>
               <label class="custom-field custom-field-grow">
                 <span class="custom-field-label">系统提示词</span>
@@ -550,10 +587,10 @@ async function handleRedeem() {
                 type="button"
                 class="char-apply-btn"
                 :class="{ disabled: !customReady }"
-                :disabled="!customReady"
+                :disabled="!customReady || customChar.uploading"
                 @click.stop="customReady && applyCustomCharacter()"
               >
-                录入角色
+                {{ customChar.uploading ? '录入中...' : '录入角色' }}
               </button>
             </div>
           </div>
@@ -1348,6 +1385,13 @@ async function handleRedeem() {
 .custom-file-btn:hover {
   border-color: rgba(251, 191, 36, 0.45);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.custom-file-hint {
+  color: rgba(248, 250, 252, 0.44);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .custom-textarea {

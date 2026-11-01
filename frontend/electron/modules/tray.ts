@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { app, Menu, nativeImage, Tray } from 'electron'
-import { getMainWindow } from './window'
+import { showMainWindow } from './window'
 
 let tray: Tray | null = null
 
@@ -35,13 +35,7 @@ export function createTray(): Tray {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '显示窗口',
-      click: () => {
-        const win = getMainWindow()
-        if (win) {
-          win.show()
-          win.focus()
-        }
-      },
+      click: () => showMainWindow(),
     },
     { type: 'separator' },
     {
@@ -56,15 +50,7 @@ export function createTray(): Tray {
 
   // Click tray icon to show window
   tray.on('click', () => {
-    const win = getMainWindow()
-    if (win) {
-      if (win.isVisible()) {
-        win.focus()
-      }
-      else {
-        win.show()
-      }
-    }
+    showMainWindow()
   })
 
   return tray

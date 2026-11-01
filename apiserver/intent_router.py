@@ -166,7 +166,7 @@ def _build_router_messages(messages: List[Dict], user_msg: str) -> List[Dict]:
 
 def _get_router_llm_params() -> Dict:
     """获取路由模型的 LLM 调用参数"""
-    if naga_auth.is_authenticated():
+    if naga_auth.should_use_model_gateway():
         token = naga_auth.get_access_token()
         return {
             "api_key": token,
@@ -185,7 +185,7 @@ def _get_router_llm_params() -> Dict:
 
 def _get_router_model_name() -> str:
     """获取路由模型名称（LiteLLM 格式）"""
-    if naga_auth.is_authenticated():
+    if naga_auth.should_use_model_gateway():
         return f"openai/{ROUTER_MODEL}"
     cfg = get_config()
     if cfg.api.api_format == "anthropic":

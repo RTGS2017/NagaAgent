@@ -1,14 +1,24 @@
 """系统信息、健康检查、配置、日志、更新路由"""
 
 import asyncio
+import copy
 import logging
 import traceback
-from typing import Dict, Any
+from typing import Dict, Any, List
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from system.config import get_config, VERSION, build_system_prompt
+from system.config_value_utils import is_placeholder_api_key, preserve_existing_api_key_if_placeholder
 from system.config_manager import get_config_snapshot, update_config
+from system.live2d_assets import (
+    create_custom_live2d_model,
+    delete_custom_live2d_model,
+    get_custom_live2d_model,
+    list_custom_live2d_models,
+)
 from apiserver.message_manager import message_manager
 from apiserver.api_server import SystemInfoResponse
 from apiserver.telemetry import emit_telemetry
@@ -43,6 +53,57 @@ def _notification_telemetry_snapshot(config_data: Dict[str, Any]) -> Dict[str, A
         "feishu_has_app": bool(str(feishu_channel.get("app_id") or "").strip()) and bool(str(feishu_channel.get("app_secret") or "").strip()),
         "feishu_deliver_full_report": bool(feishu_notify.get("deliver_full_report", True)),
     }
+
+
+def _sanitize_system_config_payload(
+    payload: Dict[str, Any],
+    current_config: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """清洗前端配置保存 payload，避免动态资源 URL 被持久化。"""
+    sanitized = _normalize_system_config_aliases(copy.deepcopy(payload))
+    system_config = sanitized.get("system")
+    if isinstance(system_config, dict):
+        system_config["version"] = VERSION
+    if current_config is not None:
+        preserve_existing_api_key_if_placeholder(sanitized, current_config)
+
+    web_live2d = sanitized.get("web_live2d")
+    if not isinstance(web_live2d, dict):
+        return sanitized
+
+    web_live2d.pop("custom_models", None)
+    model_block = web_live2d.get("model")
+    if not isinstance(model_block, dict):
+        return sanitized
+
+    source = str(model_block.get("source") or "").strip()
+    parsed_source = urlparse(source)
+    is_local_dynamic_url = (
+        parsed_source.scheme in {"http", "https"}
+        and parsed_source.hostname in {"localhost", "127.0.0.1"}
+        and (
+            parsed_source.path.startswith("/characters/")
+            or parsed_source.path.startswith("/custom-live2d/")
+        )
+    )
+    if source.startswith("naga-char://") or is_local_dynamic_url:
+        model_block.pop("source", None)
+    return sanitized
+
+
+def _normalize_system_config_aliases(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """将历史前端键名归一为后端配置 schema 键名。"""
+    alias_map = {
+        "agentserver": "agent_server",
+        "mcpserver": "mcp_server",
+    }
+    for legacy_key, canonical_key in alias_map.items():
+        legacy_value = config_data.pop(legacy_key, None)
+        if legacy_value is None:
+            continue
+        if canonical_key not in config_data:
+            config_data[canonical_key] = legacy_value
+    return config_data
 
 
 # ============ 根路径 & 健康检查 ============
@@ -107,7 +168,7 @@ async def get_system_info():
         version=VERSION,
         status="running",
         available_services=[],  # MCP服务现在由mcpserver独立管理
-        api_key_configured=bool(get_config().api.api_key and get_config().api.api_key != "sk-placeholder-key-not-set"),
+        api_key_configured=not is_placeholder_api_key(get_config().api.api_key),
     )
 
 
@@ -115,21 +176,40 @@ async def get_system_info():
 async def get_system_config():
     """获取完整系统配置（web_live2d.model.source 由角色系统动态注入）"""
     try:
-        config_data = get_config_snapshot()
+        config_data = _normalize_system_config_aliases(copy.deepcopy(get_config_snapshot()))
+        system_config = config_data.setdefault("system", {})
+        if not isinstance(system_config, dict):
+            system_config = {}
+            config_data["system"] = system_config
+        system_config["version"] = VERSION
 
-        # 动态注入角色 Live2D 模型路径
+        # 动态注入角色 Live2D 模型路径；未启用角色时按 custom_model_id 注入自定义模型路径。
+        injected_model_source = False
         try:
-            from system.config import load_character, CHARACTERS_DIR
+            from system.config import load_character
             from urllib.parse import quote
             char_name = get_config().system.active_character
-            char_data = load_character(char_name)
-            port = get_config().api_server.port
-            encoded_name = quote(char_name, safe="")
-            encoded_model = quote(char_data["live2d_model"], safe="/")
-            model_url = f"http://localhost:{port}/characters/{encoded_name}/{encoded_model}"
-            config_data.setdefault("web_live2d", {}).setdefault("model", {})["source"] = model_url
+            if char_name:
+                char_data = load_character(char_name)
+                port = get_config().api_server.port
+                encoded_name = quote(char_name, safe="")
+                encoded_model = quote(char_data["live2d_model"], safe="/")
+                model_url = f"http://localhost:{port}/characters/{encoded_name}/{encoded_model}"
+                config_data.setdefault("web_live2d", {}).setdefault("model", {})["source"] = model_url
+                injected_model_source = True
         except Exception as char_err:
             logger.warning(f"角色模型路径注入失败: {char_err}")
+        if not injected_model_source:
+            web_live2d = config_data.setdefault("web_live2d", {})
+            model_block = web_live2d.setdefault("model", {})
+            custom_model_id = str(web_live2d.get("custom_model_id") or "").strip()
+            if custom_model_id:
+                try:
+                    custom_model = get_custom_live2d_model(custom_model_id, get_config().api_server.port)
+                    if custom_model:
+                        model_block["source"] = custom_model["source"]
+                except Exception as custom_err:
+                    logger.warning(f"自定义 Live2D 模型路径注入失败: {custom_err}")
 
         return {"status": "success", "config": config_data}
     except Exception as e:
@@ -144,14 +224,9 @@ async def update_system_config(payload: Dict[str, Any]):
     try:
         before_snapshot = get_config_snapshot()
         before_notification = _notification_telemetry_snapshot(before_snapshot)
-        # 过滤掉由角色系统动态注入的 model.source，避免将 localhost URL 持久化
-        web_live2d = payload.get("web_live2d", {})
-        model_block = web_live2d.get("model", {})
-        source = model_block.get("source", "")
-        if source and "/characters/" in source and source.startswith("http://localhost"):
-            model_block.pop("source", None)
+        sanitized_payload = _sanitize_system_config_payload(payload, before_snapshot)
 
-        success = update_config(payload)
+        success = update_config(sanitized_payload)
         if success:
             after_snapshot = get_config_snapshot()
             after_notification = _notification_telemetry_snapshot(after_snapshot)
@@ -266,7 +341,7 @@ async def update_system_prompt(payload: Dict[str, Any]):
 async def get_active_character():
     """获取当前活跃角色信息及资源路径"""
     try:
-        from system.config import load_character, CHARACTERS_DIR
+        from system.config import load_character
         from urllib.parse import quote
         char_name = get_config().system.active_character
         char_data = load_character(char_name)
@@ -336,32 +411,154 @@ async def list_characters():
         raise HTTPException(status_code=500, detail=f"获取角色模板列表失败: {str(e)}")
 
 
+@router.get("/system/live2d/custom-models")
+async def list_live2d_custom_models() -> Dict[str, Any]:
+    """列出用户上传的自定义 Live2D 模型。"""
+    try:
+        models = list_custom_live2d_models(get_config().api_server.port)
+        return {"status": "success", "models": models}
+    except Exception as e:
+        logger.error(f"获取自定义 Live2D 模型失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取自定义 Live2D 模型失败: {str(e)}")
+
+
+@router.post("/system/live2d/custom-models")
+async def upload_live2d_custom_model(
+    name: str = Form(...),
+    files: List[UploadFile] = File(...),
+    model_path: str = Form(""),
+) -> Dict[str, Any]:
+    """上传一整套 Live2D 模型资源并登记 .model3.json 入口。"""
+    try:
+        model = await create_custom_live2d_model(
+            name=name,
+            files=files,
+            requested_model_path=model_path or None,
+            api_port=get_config().api_server.port,
+        )
+        return {"status": "success", "model": model}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"上传自定义 Live2D 模型失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"上传自定义 Live2D 模型失败: {str(e)}")
+
+
+@router.delete("/system/live2d/custom-models/{model_id}")
+async def remove_live2d_custom_model(model_id: str) -> Dict[str, Any]:
+    """删除用户上传的自定义 Live2D 模型。"""
+    try:
+        deleted = delete_custom_live2d_model(model_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="自定义 Live2D 模型不存在")
+        return {"status": "success", "message": "自定义 Live2D 模型已删除"}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"删除自定义 Live2D 模型失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除自定义 Live2D 模型失败: {str(e)}")
+
+
 # ============ 更新检查 ============
+
+_GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/RTGS2017/NagaAgent/releases/latest"
+_GITHUB_API_HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "NagaAgent-Update-Checker",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
+_UPDATE_ASSET_SUFFIXES: Dict[str, tuple[str, ...]] = {
+    "windows": (".exe",),
+    "macos": (".dmg",),
+    "linux": (".appimage",),
+}
+
+
+def _select_github_release_asset(assets: List[Dict[str, Any]], platform: str) -> Dict[str, Any] | None:
+    suffixes = _UPDATE_ASSET_SUFFIXES.get(platform, _UPDATE_ASSET_SUFFIXES["linux"])
+    for asset in assets:
+        name = str(asset.get("name") or "").lower()
+        if name.endswith((".blockmap", ".yml", ".yaml")):
+            continue
+        if name.endswith(suffixes):
+            return asset
+    return None
+
+
+def _github_release_to_update_payload(release: Dict[str, Any], platform: str) -> Dict[str, Any]:
+    version = str(release.get("tag_name") or release.get("name") or "").strip().removeprefix("v")
+    if not version:
+        raise ValueError("GitHub Release 缺少版本号")
+
+    raw_assets = release.get("assets")
+    assets = raw_assets if isinstance(raw_assets, list) else []
+    asset = _select_github_release_asset(assets, platform)
+    return {
+        "version": version,
+        "description": str(release.get("body") or release.get("name") or "").strip(),
+        "force_update": False,
+        "download_url": asset.get("browser_download_url") if asset else None,
+        "file_size": asset.get("size") if asset else None,
+        "has_update": True,
+        "source": "github",
+        "release_url": release.get("html_url"),
+    }
+
+
+async def _fetch_github_latest_update(client: httpx.AsyncClient, platform: str) -> Dict[str, Any]:
+    response = await client.get(_GITHUB_LATEST_RELEASE_URL, headers=_GITHUB_API_HEADERS)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("GitHub Release 响应格式无效")
+    return _github_release_to_update_payload(payload, platform)
+
+
+async def _fetch_business_latest_update(client: httpx.AsyncClient, platform: str) -> Dict[str, Any]:
+    from apiserver import naga_auth
+
+    response = await client.get(
+        f"{naga_auth.BUSINESS_URL}/api/app/NagaAgent/latest",
+        params={"platform": platform},
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or not payload.get("version"):
+        raise ValueError("业务更新服务未返回有效版本")
+
+    download_url = payload.get("download_url")
+    if download_url and not str(download_url).startswith(("http://", "https://")):
+        payload["download_url"] = f"{naga_auth.BUSINESS_URL}{download_url}"
+    payload["source"] = "business"
+    return payload
 
 
 @router.get("/update/latest")
-async def proxy_update_check(platform: str = "windows"):
-    """代理更新检查请求，避免前端直接暴露服务器地址"""
-    import httpx
-    from apiserver import naga_auth
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{naga_auth.BUSINESS_URL}/api/app/NagaAgent/latest",
-                params={"platform": platform},
-            )
-            if resp.status_code == 404:
-                return {"has_update": False}
-            resp.raise_for_status()
-            data = resp.json()
-            # 将相对下载路径拼成完整URL（已经是绝对URL则跳过）
-            dl = data.get("download_url")
-            if dl and not dl.startswith(("http://", "https://")):
-                data["download_url"] = f"{naga_auth.BUSINESS_URL}{dl}"
-            return data
-    except Exception as e:
-        logger.warning(f"更新检查失败: {e}")
-        return {"has_update": False}
+async def proxy_update_check(platform: str = "windows") -> Dict[str, Any]:
+    """以 GitHub Release 为版本源，无法访问时回退到业务更新服务。"""
+    normalized_platform = platform if platform in _UPDATE_ASSET_SUFFIXES else "linux"
+    errors: List[str] = []
+
+    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        try:
+            return await _fetch_github_latest_update(client, normalized_platform)
+        except Exception as exc:
+            errors.append(f"GitHub: {exc}")
+            logger.warning("GitHub 更新检查失败，准备回退业务服务: %s", exc)
+
+        try:
+            return await _fetch_business_latest_update(client, normalized_platform)
+        except Exception as exc:
+            errors.append(f"Business: {exc}")
+            logger.warning("业务更新检查失败: %s", exc)
+
+    logger.error("全部更新源不可用: %s", "; ".join(errors))
+    raise HTTPException(status_code=502, detail="更新服务暂不可用，请稍后重试")
 
 
 # ============ 日志上下文 ============

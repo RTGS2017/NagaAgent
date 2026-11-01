@@ -26,21 +26,28 @@ def _get_openclaw_paths():
     return config_file.parent, config_file
 
 
-OPENCLAW_CONFIG_DIR, OPENCLAW_CONFIG_FILE = _get_openclaw_paths()
+def _get_openclaw_config_file() -> Path:
+    return get_openclaw_config_path()
+
+
+def _get_openclaw_config_dir() -> Path:
+    return _get_openclaw_config_file().parent
 
 
 def _migrate_legacy_config_if_needed() -> None:
     """兼容历史错误路径：~/.openclaw -> ~/.naga/openclaw"""
-    if OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    config_dir = config_file.parent
+    if config_file.exists():
         return
     try:
         legacy_cfg = Path.home() / ".openclaw" / "openclaw.json"
         if not legacy_cfg.exists():
             return
 
-        OPENCLAW_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(legacy_cfg, OPENCLAW_CONFIG_FILE)
-        logger.info(f"已迁移 OpenClaw 配置: {legacy_cfg} -> {OPENCLAW_CONFIG_FILE}")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy_cfg, config_file)
+        logger.info(f"已迁移 OpenClaw 配置: {legacy_cfg} -> {config_file}")
     except Exception as e:
         logger.warning(f"迁移历史 OpenClaw 配置失败（忽略）: {e}")
 
@@ -99,6 +106,39 @@ def _apply_gateway_port_patch(config_data: Dict[str, Any]) -> bool:
     return True
 
 
+def _apply_runtime_compat_patches(config_data: Dict[str, Any]) -> bool:
+    """应用 Naga 启动 OpenClaw 所需的基础兼容补丁。"""
+    changed = False
+    changed = _apply_hooks_compat_patch(config_data) or changed
+    changed = _apply_hooks_path_patch(config_data) or changed
+    changed = _apply_gateway_mode_compat_patch(config_data) or changed
+    changed = _apply_gateway_port_patch(config_data) or changed
+    return changed
+
+
+def _ensure_runtime_compat_patches(config_file: Path) -> bool:
+    """确保已有 openclaw.json 也满足当前运行时要求。"""
+    try:
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error(f"读取 openclaw.json 失败，无法应用运行时兼容补丁: {e}")
+        return False
+
+    if not _apply_runtime_compat_patches(config_data):
+        return True
+
+    try:
+        config_file.write_text(
+            json.dumps(config_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        logger.info("已补齐 OpenClaw 运行时兼容配置")
+        return True
+    except Exception as e:
+        logger.error(f"写入 openclaw.json 失败，运行时兼容补丁未生效: {e}")
+        return False
+
+
 def ensure_hooks_allow_request_session_key(auto_create: bool = False) -> bool:
     """
     确保 openclaw.json 中启用 hooks.allowRequestSessionKey=true。
@@ -109,15 +149,17 @@ def ensure_hooks_allow_request_session_key(auto_create: bool = False) -> bool:
     Returns:
         True 表示已满足条件（已存在或已修复），False 表示修复失败
     """
-    if not OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    if not config_file.exists():
         if not auto_create:
             logger.debug("openclaw.json 不存在，跳过 hooks.allowRequestSessionKey 兼容补丁")
             return False
         if not ensure_openclaw_config():
             return False
+        config_file = _get_openclaw_config_file()
 
     try:
-        config_data = json.loads(OPENCLAW_CONFIG_FILE.read_text(encoding="utf-8"))
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
     except Exception as e:
         logger.error(f"读取 openclaw.json 失败，无法应用 hooks 兼容补丁: {e}")
         return False
@@ -127,7 +169,7 @@ def ensure_hooks_allow_request_session_key(auto_create: bool = False) -> bool:
         return True
 
     try:
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -148,15 +190,17 @@ def ensure_gateway_local_mode(auto_create: bool = False) -> bool:
     Returns:
         True 表示已满足条件（已存在或已修复），False 表示修复失败
     """
-    if not OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    if not config_file.exists():
         if not auto_create:
             logger.debug("openclaw.json 不存在，跳过 gateway.mode 兼容补丁")
             return False
         if not ensure_openclaw_config():
             return False
+        config_file = _get_openclaw_config_file()
 
     try:
-        config_data = json.loads(OPENCLAW_CONFIG_FILE.read_text(encoding="utf-8"))
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
     except Exception as e:
         logger.error(f"读取 openclaw.json 失败，无法应用 gateway.mode 兼容补丁: {e}")
         return False
@@ -166,7 +210,7 @@ def ensure_gateway_local_mode(auto_create: bool = False) -> bool:
         return True
 
     try:
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -179,14 +223,16 @@ def ensure_gateway_local_mode(auto_create: bool = False) -> bool:
 
 def ensure_hooks_path(auto_create: bool = False) -> bool:
     """确保 openclaw.json 的 hooks.path 已显式设置为 /hooks。"""
-    if not OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    if not config_file.exists():
         if not auto_create:
             return False
         if not ensure_openclaw_config():
             return False
+        config_file = _get_openclaw_config_file()
 
     try:
-        config_data = json.loads(OPENCLAW_CONFIG_FILE.read_text(encoding="utf-8"))
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
     except Exception as e:
         logger.error(f"读取 openclaw.json 失败，无法应用 hooks.path 补丁: {e}")
         return False
@@ -196,7 +242,7 @@ def ensure_hooks_path(auto_create: bool = False) -> bool:
         return True
 
     try:
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -209,14 +255,16 @@ def ensure_hooks_path(auto_create: bool = False) -> bool:
 
 def ensure_gateway_port(auto_create: bool = False) -> bool:
     """确保 openclaw.json 的 gateway.port 与 NagaAgent 配置一致。"""
-    if not OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    if not config_file.exists():
         if not auto_create:
             return False
         if not ensure_openclaw_config():
             return False
+        config_file = _get_openclaw_config_file()
 
     try:
-        config_data = json.loads(OPENCLAW_CONFIG_FILE.read_text(encoding="utf-8"))
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
     except Exception as e:
         logger.error(f"读取 openclaw.json 失败，无法应用 gateway.port 补丁: {e}")
         return False
@@ -227,7 +275,7 @@ def ensure_gateway_port(auto_create: bool = False) -> bool:
 
     port = _get_gateway_port()
     try:
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -246,13 +294,15 @@ def ensure_openclaw_config() -> bool:
         是否成功（已存在或新建成功）
     """
     _migrate_legacy_config_if_needed()
+    config_file = _get_openclaw_config_file()
+    config_dir = config_file.parent
 
-    if OPENCLAW_CONFIG_FILE.exists():
+    if config_file.exists():
         logger.debug("openclaw.json 已存在，跳过生成")
-        return True
+        return _ensure_runtime_compat_patches(config_file)
 
     try:
-        OPENCLAW_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        config_dir.mkdir(parents=True, exist_ok=True)
 
         gateway_token = secrets.token_hex(32)
         hooks_token = secrets.token_hex(32)
@@ -279,11 +329,11 @@ def ensure_openclaw_config() -> bool:
             },
         }
 
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(minimal_config, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
-        logger.info(f"已自动生成 openclaw.json: {OPENCLAW_CONFIG_FILE}")
+        logger.info(f"已自动生成 openclaw.json: {config_file}")
         return True
 
     except Exception as e:
@@ -301,17 +351,17 @@ def inject_naga_llm_config() -> bool:
     Returns:
         是否注入成功
     """
-    if not OPENCLAW_CONFIG_FILE.exists():
+    config_file = _get_openclaw_config_file()
+    config_dir = config_file.parent
+    if not config_file.exists():
         logger.warning("openclaw.json 不存在，无法注入配置")
         return False
 
     try:
         from system.config import config as naga_config, get_data_dir
 
-        config_data = json.loads(OPENCLAW_CONFIG_FILE.read_text(encoding="utf-8"))
-        _apply_hooks_compat_patch(config_data)
-        _apply_gateway_mode_compat_patch(config_data)
-        _apply_gateway_port_patch(config_data)
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
+        _apply_runtime_compat_patches(config_data)
 
         # ── LLM Provider ──
         # 使用本地 API Server 的 OpenAI 兼容代理端点（统一计费）
@@ -426,13 +476,13 @@ def inject_naga_llm_config() -> bool:
             else:
                 logger.warning("OpenClaw 飞书已启用，但缺少 app_id/app_secret，跳过通道注入")
 
-        OPENCLAW_CONFIG_FILE.write_text(
+        config_file.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
         # 创建 auth-profiles.json 让 OpenClaw 能找到 API key
-        auth_profiles_path = OPENCLAW_CONFIG_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+        auth_profiles_path = config_dir / "agents" / "main" / "agent" / "auth-profiles.json"
         auth_profiles_path.parent.mkdir(parents=True, exist_ok=True)
         auth_profiles = {
             f"{provider_name}:default": {

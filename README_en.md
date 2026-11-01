@@ -14,7 +14,7 @@ The future of Naga is yours to explore.
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.0-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
@@ -38,6 +38,16 @@ Commercial inquiries: contact@nagaagent.com / bilibili [柏斯阔落]
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 🪟 2026-07-16 | 5.1.5 | Fixed the Windows transparent frameless main window disappearing after maximize/restore: the app now avoids Electron's unreliable native transparent-window maximize state and restores against the active display work area; tray, hotkey, and single-instance wake-up share one recovery path, and off-screen windows return automatically |
+| 🔊 2026-07-15 | 5.1.4 | Fixed daily-conversation TTS: settings and chat now share one voice toggle, cleaned `content_clean` text is preserved, main and agent chats are covered, and MP3/WAV responses play serially by their real media type; update checks now use GitHub Releases as the source of truth and clearly fail when the official version cannot be confirmed |
+| 🧭 2026-07-08 | 5.1.3 | Adjusted runtime config priority: project-root `config.json` is used first, with user data config as fallback; settings saves and docs now follow the active config file |
+| 🔐 2026-07-03 | 5.1.2 | Fixed local model API key persistence so frontend placeholders cannot overwrite real keys; empty streams now retry and show a visible error; DeepSeek Thinking Mode tool calls replay `reasoning_content` only when required |
+| 🚀 2026-06-20 | 5.1.1 | Custom Live2D model settings: Terminal Settings and Character Registration can upload complete model directories, store them under user data, and inject model URLs with the current API port |
+| 🧭 2026-06-20 | — | Network exploration control center enhanced: create OpenClaw exploration tasks per agent, set time / credit limits and initial browser policy, toggle browser visibility while running, and inspect raw history |
+| 🛡️ 2026-06-20 | — | Full-stack runtime hardening: logged-out / open-source mode clears stale tokens, local-model placeholder API keys are rejected, and OpenClaw gateway / hooks runtime config is auto-patched |
+| 🧰 2026-06-20 | — | MCP and GUI model config improvements: SSE now includes `tool_calls` / `tool_results`, the frontend shows complete structured tool results, and `provider` / `use_gateway` model config was added |
+| 🪟 2026-06-20 | — | Skill path security and floating-window drag fixes: path traversal skill names are rejected on import / clone / read / delete, and expanded-window dragging pauses height fitting to avoid jitter |
+| 🔌 2026-05-10 | — | Logged-out or gateway-disabled mode now calls the user's configured API directly to avoid unintended NagaBusiness credit usage; logout syncs OpenClaw back to local model config; local abnormal scripts removed |
 | 🔧 2026-04-15 | — | Config sync refactor: source config and runtime config bidirectional merging; ASR health check URL now uses config values; server port retrieval and config path refactoring |
 | 🤖 2026-04-14 | — | Added Anthropic API format support (`api_format` field); quintuple extractor now compatible with Anthropic SDK; Live2D empty-text call handling |
 | 🐛 2026-04-12 | — | Fixed py2neo `Graph()` timeout parameter incompatibility and Neo4j connection status false positives |
@@ -140,12 +150,16 @@ Copy `config.json.example` to `config.json` and fill in your LLM API credentials
     "api_key": "your-api-key",
     "base_url": "https://api.deepseek.com",
     "model": "deepseek-v3.2",
+    "provider": "deepseek",
+    "use_gateway": true,
     "api_format": "openai"
   }
 }
 ```
 
-Works with any OpenAI-compatible API (DeepSeek, Qwen, OpenAI, Ollama, etc.), and also supports the native Anthropic format (set `api_format` to `"anthropic"`).
+Works with any OpenAI-compatible API (DeepSeek, Qwen, OpenAI, Ollama, etc.), and also supports the native Anthropic format (set `api_format` to `"anthropic"`). After login, NagaModel Gateway is used by default; disable `use_gateway` in Terminal Settings to use your local provider credentials.
+
+Configuration is loaded from `config.json` in the project root first. If that file does not exist, NagaAgent falls back to the user data config (`~/.naga/config.json` on Linux/macOS, `%APPDATA%/NagaAgent/config.json` on Windows). The settings page writes back to the currently active config file.
 
 ### Launch
 
@@ -559,7 +573,7 @@ NagaAgent/
 ├── main.py                   # Unified entry point, orchestrates all services
 ├── build.py                  # Cross-platform build script
 ├── config.json               # Runtime config (copied from config.json.example)
-├── pyproject.toml            # Version 5.1.0, project metadata & dependencies
+├── pyproject.toml            # Version 5.1.5, project metadata & dependencies
 │
 ├── apiserver/                # API Server (:8000)
 │   ├── api_server.py         #   FastAPI main app
@@ -668,23 +682,26 @@ Full-duplex realtime voice chat (requires Qwen DashScope API Key):
 <details>
 <summary><b>Live2D Avatar (Custom Model)</b></summary>
 
+Use **Terminal Settings → Audio/Visual Config → Live2D Model** to upload a custom model. Select the complete model directory that contains `.model3.json`, `.moc3`, textures, motions, physics files, and related assets. The uploaded model is stored under the user data directory and applied automatically. You can also use **Cardinal Market → Character Registration → Custom Character** to enter the character name, prompt, and the same Live2D model directory.
+
 ```json
 {
   "web_live2d": {
     "ssaa": 2,
     "model": {
-      "source": "./models/your-model/model.model3.json",
+      "source": "injected by the GUI or character system",
       "x": 0.5,
       "y": 1.3,
       "size": 6800
     },
+    "custom_model_id": "generated model ID after upload",
     "face_y_ratio": 0.13,
     "tracking_hold_delay_ms": 100
   }
 }
 ```
 
-When a character card is active, `ai_name` and `model.source` are automatically overridden by the character JSON — no manual edits needed.
+When a character card is active, `ai_name` and `model.source` are overridden by the character JSON. For custom models, `custom_model_id` is persisted and `model.source` is dynamically injected with the current API port.
 </details>
 
 <details>

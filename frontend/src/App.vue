@@ -25,8 +25,8 @@ import { useBackground } from '@/composables/useBackground'
 import { useElectron } from '@/composables/useElectron'
 import { useMusicPlayer } from '@/composables/useMusicPlayer'
 import { useParallax } from '@/composables/useParallax'
-import { useStartupProgress } from '@/composables/useStartupProgress'
 import { connectRealtimeUi, disconnectRealtimeUi } from '@/composables/useRealtimeUi'
+import { useStartupProgress } from '@/composables/useStartupProgress'
 import { startToolPolling, stopToolPolling } from '@/composables/useToolStatus'
 import { checkForUpdate, showUpdateDialog, updateInfo } from '@/composables/useVersionCheck'
 import { backendConnected, CONFIG } from '@/utils/config'
@@ -318,7 +318,7 @@ const live2dPeekShellTransition = computed(() => {
 
 // ─── CAS 会话失效弹窗 ──────────────────────────
 const authExpiredVisible = ref(false)
-const { logout: doLogout } = useAuth()
+const { logout: doLogout, skipLogin } = useAuth()
 
 watch(authExpired, (expired) => {
   if (expired && !authExpiredVisible.value) {
@@ -376,6 +376,7 @@ function onLoginSuccess() {
 }
 
 function onLoginSkip() {
+  skipLogin()
   showLoginDialog.value = false
   setAuthExpiredSuppressed(false)
   enterMainContent()
@@ -421,7 +422,7 @@ watch(effectiveLive2dSource, (source) => {
   activeLive2dSource.value = source || DEFAULT_STARTUP_LIVE2D_SOURCE
 }, { immediate: true })
 
-watch([activeTabId, activeAgentCharacterTemplate, effectiveLive2dSource], () => {
+watch([activeTabId, activeAgentCharacterTemplate, effectiveLive2dSource, backendConnected], () => {
   live2dRenderKey.value += 1
 })
 
@@ -514,7 +515,9 @@ onMounted(() => {
     if (!connected)
       return
     stopVersionWatch()
-    checkForUpdate()
+    void checkForUpdate().catch((error) => {
+      console.warn('[VersionCheck] Startup check failed:', error)
+    })
   })
 
   // 监听后端启动失败

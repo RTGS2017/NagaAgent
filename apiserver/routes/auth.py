@@ -3,11 +3,13 @@
 import logging
 import struct
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 
 from apiserver import naga_auth
 from apiserver.telemetry import emit_telemetry
+from system.config import get_character_voice, get_config
 from system.config_manager import update_config
 
 logger = logging.getLogger(__name__)
@@ -402,14 +404,30 @@ async def auth_refresh(request: Request):
 
 # ============ TTS 代理（解决前端跨域问题） ============
 
-def _ensure_wav_header(audio_data: bytes) -> tuple[bytes, str]:
+_GATEWAY_TTS_MODEL = "default"
+_GATEWAY_TTS_FALLBACK_VOICE = "Cherry"
+_REFRESHED_TOKEN_HEADER = "X-Naga-Access-Token"
+_AUDIO_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/ogg",
+    "audio/flac",
+    "audio/mp4",
+    "audio/aac",
+}
+
+
+def _ensure_wav_header(audio_data: bytes, declared_content_type: str = "") -> tuple[bytes, str]:
     """检查音频数据是否有有效容器头部，若是 raw PCM 则包装为 WAV 格式（浏览器可播放）"""
     if len(audio_data) < 4:
         return audio_data, "audio/mpeg"
 
     header = audio_data[:4]
-    # 只检测有可靠 magic bytes 的容器格式，MP3 sync word (0xFF 0xEx) 容易和 PCM 数据混淆
     if header[:3] == b'ID3':                          # MP3 with ID3 tag
+        return audio_data, "audio/mpeg"
+    if header[0] == 0xFF and header[1] & 0xE0 == 0xE0:  # MP3 frame sync
         return audio_data, "audio/mpeg"
     if header == b'RIFF':                              # WAV
         return audio_data, "audio/wav"
@@ -417,6 +435,12 @@ def _ensure_wav_header(audio_data: bytes) -> tuple[bytes, str]:
         return audio_data, "audio/ogg"
     if header == b'fLaC':                              # FLAC
         return audio_data, "audio/flac"
+    if len(audio_data) >= 8 and audio_data[4:8] == b"ftyp":  # MP4/M4A
+        return audio_data, "audio/mp4"
+
+    media_type = declared_content_type.split(";", 1)[0].strip().lower()
+    if media_type in _AUDIO_CONTENT_TYPES:
+        return audio_data, "audio/mpeg" if media_type == "audio/mp3" else media_type
 
     # 无法识别的格式 → 假定 raw PCM，包装为 WAV (24kHz, 16-bit, mono)
     sample_rate = 24000
@@ -447,46 +471,58 @@ def _ensure_wav_header(audio_data: bytes) -> tuple[bytes, str]:
 
 
 @router.post("/tts/speech")
-async def tts_speech_proxy(request: Request):
+async def tts_speech_proxy(request: Request) -> Response:
     """代理前端 TTS 请求到 NagaBusiness，避免浏览器 CORS 限制"""
-    import httpx
-    from system.config import get_config
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict) or not str(body.get("input") or "").strip():
+        raise HTTPException(status_code=400, detail="TTS input 不能为空")
 
-    # 优先使用后端自身维护的认证状态（token 总是最新的），
-    # 其次使用前端请求头携带的 token（可能过期，导致打包模式下 TTS 失败）
-    auth_header = ""
-    if naga_auth.is_authenticated():
-        auth_header = f"Bearer {naga_auth.get_access_token()}"
-    elif request.headers.get("Authorization", ""):
-        auth_header = request.headers.get("Authorization", "")
-
-    if auth_header:
+    config = get_config()
+    use_gateway = naga_auth.should_use_model_gateway()
+    refreshed_access_token: str | None = None
+    if use_gateway:
         # 已登录 → 代理到 NagaBusiness
         tts_url = naga_auth.NAGA_MODEL_URL + "/audio/speech"
+        body["model"] = _GATEWAY_TTS_MODEL
+        body["voice"] = get_character_voice() or body.get("voice") or _GATEWAY_TTS_FALLBACK_VOICE
         headers = {
             "Content-Type": "application/json",
-            "Authorization": auth_header,
+            "Authorization": f"Bearer {naga_auth.get_access_token()}",
         }
     else:
         # 未登录 → 转发到本地 edge-tts
-        config = get_config()
-        tts_port = config.tts.port if hasattr(config, 'tts') else 5048
-        tts_url = f"http://localhost:{tts_port}/v1/audio/speech"
+        tts_url = f"http://127.0.0.1:{config.tts.port}/v1/audio/speech"
+        body["voice"] = body.get("voice") or config.tts.default_voice
+        body["response_format"] = body.get("response_format") or config.tts.default_format
+        body["speed"] = body.get("speed") or config.tts.default_speed
         headers = {"Content-Type": "application/json"}
+        if config.tts.require_api_key and config.tts.api_key:
+            headers["Authorization"] = f"Bearer {config.tts.api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, trust_env=use_gateway) as client:
             resp = await client.post(tts_url, json=body, headers=headers)
+            if use_gateway and resp.status_code == 401 and naga_auth.has_refresh_token():
+                await naga_auth.refresh()
+                refreshed_access_token = naga_auth.get_access_token()
+                headers["Authorization"] = f"Bearer {refreshed_access_token}"
+                resp = await client.post(tts_url, json=body, headers=headers)
         if resp.status_code != 200:
-            logger.error(f"TTS 代理失败: {resp.status_code} url={tts_url}")
+            logger.error("TTS 代理失败: status=%s url=%s", resp.status_code, tts_url)
             raise HTTPException(status_code=resp.status_code, detail="TTS service error")
         # 检查音频格式，raw PCM 自动包装为 WAV
-        audio_data, content_type = _ensure_wav_header(resp.content)
-        return Response(content=audio_data, media_type=content_type)
+        audio_data, content_type = _ensure_wav_header(
+            resp.content,
+            resp.headers.get("content-type", ""),
+        )
+        response = Response(content=audio_data, media_type=content_type)
+        if refreshed_access_token:
+            response.headers[_REFRESHED_TOKEN_HEADER] = refreshed_access_token
+            response.headers["Access-Control-Expose-Headers"] = _REFRESHED_TOKEN_HEADER
+        return response
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="TTS service timeout")
     except HTTPException:

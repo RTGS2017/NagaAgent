@@ -62,7 +62,7 @@ class TTSWrapper:
         try:
             # NagaModel 网关优先
             from apiserver import naga_auth
-            if naga_auth.is_authenticated():
+            if naga_auth.should_use_model_gateway():
                 import requests as _req
                 # NagaBusiness TTS 使用角色 voice 名称，回退到 config 或 Cherry
                 from system.config import get_character_voice

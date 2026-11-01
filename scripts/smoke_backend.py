@@ -3,8 +3,8 @@
 """
 后端冒烟测试：
 1. 复用已运行后端，若未运行则启动 `main.py --headless`
-2. 等待 8000 / 8001 就绪
-3. 验证登录、鉴权和关键接口
+2. 等待 API / Agent Server 就绪
+3. 验证未登录可用路径；提供账号时额外验证登录、鉴权路径
 """
 
 from __future__ import annotations
@@ -35,8 +35,21 @@ def log(message: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NagaAgent backend smoke test")
-    parser.add_argument("--username", required=True, help="登录用户名")
-    parser.add_argument("--password", required=True, help="登录密码")
+    parser.add_argument(
+        "--username",
+        default=os.environ.get("NAGA_SMOKE_USERNAME", ""),
+        help="登录用户名；也可通过 NAGA_SMOKE_USERNAME 提供",
+    )
+    parser.add_argument(
+        "--password",
+        default=os.environ.get("NAGA_SMOKE_PASSWORD", ""),
+        help="登录密码；也可通过 NAGA_SMOKE_PASSWORD 提供",
+    )
+    parser.add_argument(
+        "--skip-auth",
+        action="store_true",
+        help="跳过验证码、登录和 /auth/me 已登录检查，只验证未登录本地路径",
+    )
     parser.add_argument("--api-base", default=DEFAULT_API_BASE, help="API server base URL")
     parser.add_argument("--agent-base", default=DEFAULT_AGENT_BASE, help="Agent server base URL")
     parser.add_argument("--timeout", type=float, default=120.0, help="启动等待超时（秒）")
@@ -50,7 +63,10 @@ def parse_args() -> argparse.Namespace:
         default=str(PROJECT_ROOT / ".venv" / "bin" / "python"),
         help="启动后端使用的 Python 解释器",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.skip_auth and (not args.username or not args.password):
+        parser.error("未指定 --skip-auth 时必须提供 --username/--password 或 NAGA_SMOKE_USERNAME/NAGA_SMOKE_PASSWORD")
+    return args
 
 
 def request_json(method: str, url: str, *, expected: int = 200, **kwargs) -> Any:
@@ -178,9 +194,99 @@ def run_smoke(args: argparse.Namespace) -> Dict[str, Any]:
     summary["checks"]["agent_health"] = agent_health
 
     summary["checks"]["tool_status"] = request_json("GET", f"{args.api_base}/tool_status")
+    summary["checks"]["auth_me_unauthenticated"] = request_json(
+        "GET",
+        f"{args.api_base}/auth/me",
+        expected=401,
+    )
+    summary["checks"]["system_config"] = request_json("GET", f"{args.api_base}/system/config")
     summary["checks"]["characters"] = request_json("GET", f"{args.api_base}/system/characters")
     summary["checks"]["tasks_proxy"] = request_json("GET", f"{args.api_base}/openclaw/tasks")
     summary["checks"]["tasks_direct"] = request_json("GET", f"{args.agent_base}/openclaw/tasks")
+
+    tool_notification = request_json(
+        "POST",
+        f"{args.api_base}/tool_notification",
+        expected=400,
+        json={"stage": "executing"},
+    )
+    summary["checks"]["tool_notification_missing_session"] = tool_notification
+    request_json(
+        "POST",
+        f"{args.api_base}/tool_notification",
+        json={
+            "session_id": "smoke-session",
+            "stage": "executing",
+            "tool_calls": [{"service_name": "smoke", "tool_name": "ping", "status": "ok"}],
+        },
+    )
+    summary["checks"]["tool_status_visible"] = request_json("GET", f"{args.api_base}/tool_status")
+    request_json(
+        "POST",
+        f"{args.api_base}/tool_notification",
+        json={"session_id": "smoke-session", "stage": "hide"},
+    )
+    summary["checks"]["tool_status_hidden"] = request_json("GET", f"{args.api_base}/tool_status")
+
+    request_json(
+        "POST",
+        f"{args.api_base}/ui_notification",
+        json={
+            "action": "show_mcp_result",
+            "results": [
+                {
+                    "service_name": "smoke",
+                    "tool_name": "ping",
+                    "status": "ok",
+                    "result": {"message": "pong"},
+                }
+            ],
+        },
+    )
+    summary["checks"]["clawdbot_replies"] = request_json("GET", f"{args.api_base}/clawdbot/replies")
+
+    request_json(
+        "POST",
+        f"{args.api_base}/ui_notification",
+        json={"action": "live2d_action", "action_name": "wave"},
+    )
+    summary["checks"]["live2d_actions"] = request_json("GET", f"{args.api_base}/live2d/actions")
+
+    request_json(
+        "POST",
+        f"{args.api_base}/ui_notification",
+        json={"action": "music_control", "music_action": "play", "track": "smoke"},
+    )
+    summary["checks"]["music_commands"] = request_json("GET", f"{args.api_base}/music/commands")
+
+    request_json(
+        "POST",
+        f"{args.api_base}/queue/push",
+        json={"source": "heartbeat", "content": "smoke-heartbeat"},
+    )
+    summary["checks"]["heartbeat_replies"] = request_json("GET", f"{args.api_base}/clawdbot/replies")
+
+    config_body = summary["checks"]["system_config"]
+    config_data = config_body.get("config", {}) if isinstance(config_body, dict) else {}
+    api_config = config_data.get("api", {}) if isinstance(config_data, dict) else {}
+    api_key = str(api_config.get("api_key") or "").strip()
+    base_url = str(api_config.get("base_url") or "").strip().rstrip("/")
+    if base_url == "https://api.deepseek.com/v1" and api_key in {"", "your-api-key-here", "sk-placeholder-key-not-set"}:
+        summary["checks"]["local_placeholder_completion"] = request_json(
+            "POST",
+            f"{args.api_base}/v1/chat/completions",
+            expected=400,
+            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "ping"}]},
+        )
+    else:
+        summary["checks"]["local_placeholder_completion"] = {
+            "skipped": True,
+            "reason": "运行时配置不是默认占位本地模型配置，避免误打真实上游模型",
+        }
+
+    if args.skip_auth:
+        summary["checks"]["login"] = {"skipped": True, "reason": "--skip-auth"}
+        return summary
 
     captcha = request_json("GET", f"{args.api_base}/auth/captcha")
     captcha_id = captcha.get("captchaId") or captcha.get("captcha_id")

@@ -8,24 +8,24 @@ interface AgentOption {
   name: string
 }
 
-type McpDialogConfirmPayload =
-  | { mode: 'hub', name: string, source: string }
-  | {
-    mode: 'cache'
-    name: string
-    displayName: string
-    description: string
-    config: Record<string, any>
-  }
-  | {
-    mode: 'custom'
-    name: string
-    displayName: string
-    description: string
-    config: Record<string, any>
-    scope: 'public' | 'private'
-    agentId?: string
-  }
+type McpDialogConfirmPayload
+  = | { mode: 'hub', name: string, source: string }
+    | {
+      mode: 'cache'
+      name: string
+      displayName: string
+      description: string
+      config: Record<string, any>
+    }
+    | {
+      mode: 'custom'
+      name: string
+      displayName: string
+      description: string
+      config: Record<string, any>
+      scope: 'public' | 'private'
+      agentId?: string
+    }
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -202,21 +202,21 @@ function handleCancel() {
             {{ title || (isEdit ? '编辑 MCP 服务' : '添加 MCP 服务') }}
           </h2>
           <div class="dialog-form">
-          <div v-if="showModeSwitch" class="mode-switch">
-            <button
-              v-if="cacheModeAvailable"
-              type="button"
-              class="mode-switch-btn"
-              :class="{ active: importMode === 'cache' }"
-              @click="importMode = 'cache'"
-            >
-              缓存
-            </button>
-            <button
-              v-if="props.hubEnabled"
-              type="button"
-              class="mode-switch-btn"
-              :class="{ active: importMode === 'hub' }"
+            <div v-if="showModeSwitch" class="mode-switch">
+              <button
+                v-if="cacheModeAvailable"
+                type="button"
+                class="mode-switch-btn"
+                :class="{ active: importMode === 'cache' }"
+                @click="importMode = 'cache'"
+              >
+                缓存
+              </button>
+              <button
+                v-if="props.hubEnabled"
+                type="button"
+                class="mode-switch-btn"
+                :class="{ active: importMode === 'hub' }"
                 @click="importMode = 'hub'"
               >
                 从 Hub 下载

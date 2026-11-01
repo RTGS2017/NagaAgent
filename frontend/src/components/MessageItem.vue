@@ -214,7 +214,7 @@ function toolBody(event: ToolEvent): string {
   white-space: pre-wrap;
   word-break: break-word;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  max-height: 200px;
+  max-height: min(420px, 45vh);
   overflow-y: auto;
 }
 .message-body :deep(.tool-result-line) {

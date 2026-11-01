@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { TravelProgressEvent, TravelSession } from '@/travel/types'
 import { Button, ProgressBar, ToggleSwitch } from 'primevue'
-import { formatMinutes } from '@/travel/composables/useTravel'
 import { computed } from 'vue'
+import { formatMinutes } from '@/travel/composables/useTravel'
 import TravelDiscoveryItem from './TravelDiscoveryItem.vue'
 
 const props = defineProps<{

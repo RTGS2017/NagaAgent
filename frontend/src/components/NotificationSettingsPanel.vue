@@ -2,12 +2,12 @@
 import { Divider, InputText, Select, ToggleSwitch } from 'primevue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import { computed, ref, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import { computed, ref, watch } from 'vue'
 import API from '@/api/core'
 import ConfigItem from '@/components/ConfigItem.vue'
-import { CONFIG } from '@/utils/config'
-import { backendConnected } from '@/utils/config'
+import { backendConnected, CONFIG } from '@/utils/config'
+
 import { parseQqBindingTarget } from '@/utils/qqNotification'
 
 const FEISHU_TARGET_OPTIONS = [

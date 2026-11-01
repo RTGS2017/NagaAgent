@@ -57,8 +57,7 @@ function openEditMcp(service: McpService) {
 async function onMcpConfirm(data:
   | { mode: 'hub', name: string, source: string }
   | { mode: 'cache', name: string, displayName: string, description: string, config: Record<string, any> }
-  | { mode: 'custom', name: string, displayName: string, description: string, config: Record<string, any>, scope: 'public' | 'private' },
-) {
+  | { mode: 'custom', name: string, displayName: string, description: string, config: Record<string, any>, scope: 'public' | 'private' }) {
   try {
     if (data.mode === 'hub') {
       await API.installHubMcp({
@@ -155,8 +154,7 @@ function openSkillDialog() {
 async function onSkillConfirm(data:
   | { mode: 'hub', name: string, source: string }
   | { mode: 'cache', name: string, sourceScope: 'cache' | 'public' | 'private', sourceAgentId?: string }
-  | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string },
-) {
+  | { mode: 'custom', name: string, content: string, scope: 'cache' | 'public' | 'private', agentId?: string }) {
   try {
     if (data.mode === 'hub') {
       await API.installHubSkill({
@@ -272,7 +270,7 @@ void loadSkillCatalog()
           <div>
             <div class="section-title">MCP</div>
             <div class="section-meta">
-              通用 MCP。这里管理全局可用的 MCP 服务。启用后，娜迦和多个干员都可以共用。
+              通用 MCP。这里管理全局可用的 MCP 服务。已启用 {{ mcpEnabledCount }} / {{ mcpTotalCount }}。
             </div>
           </div>
           <button class="add-btn add-btn-compact" @click="openAddMcp">
@@ -366,7 +364,6 @@ void loadSkillCatalog()
           </div>
         </template>
       </section>
-
     </div>
 
     <McpAddDialog

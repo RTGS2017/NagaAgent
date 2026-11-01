@@ -9,11 +9,17 @@
   - openclaw__agent
   - live2d__action
   - naga_control__command
+
+OpenAI 要求 tools[*].function.name 匹配 ^[a-zA-Z0-9_-]+$。MCP 的 service_name/command
+可能含中文、空格等非法字符，故生成时经 _make_mcp_func_name() 做 sanitize（非法字符替换为
+下划线并追加短哈希），并登记到 _mcp_name_map 供解析端无损还原。
 """
 
+import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +29,54 @@ logger = logging.getLogger(__name__)
 
 _schema_cache: Dict[str, List[Dict[str, Any]]] = {}
 
+# function name -> (service_name, command) 反查映射
+# 用于在 sanitize 之后仍能把 OpenAI function name 还原回原始 MCP 服务名/命令。
+# 刻意不随 schema 缓存一起清空：func_name 由原始值确定性派生（同输入恒等同输出），
+# 此表是 _make_mcp_func_name 的纯函数缓存，只增不清。否则 MCP 注册变更若发生在
+# 「LLM 已拿到工具列表」与「解析其 tool_call」之间，映射会被清空导致解析错误回退到 split。
+_mcp_name_map: Dict[str, Tuple[str, str]] = {}
+
 
 def invalidate_schema_cache():
     """MCP 注册变更时调用，清除缓存"""
     _schema_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# function name 规范化
+# OpenAI 要求 tools[*].function.name 匹配 ^[a-zA-Z0-9_-]+$，
+# 而 MCP 的 service_name / command 可能含中文、空格等非法字符。
+# ---------------------------------------------------------------------------
+
+_INVALID_FUNC_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def _sanitize_func_name_part(part: str) -> str:
+    """将名称片段中不符合 ^[a-zA-Z0-9_-]+$ 的字符替换为下划线"""
+    return _INVALID_FUNC_NAME_CHARS.sub("_", part)
+
+
+def _make_mcp_func_name(service_name: str, command: str) -> str:
+    """生成符合 OpenAI 正则的 MCP function name，并登记反查映射。
+
+    - 纯 ASCII 安全名保持原样（向后兼容已有命名约定）；
+    - 含非法字符时，先逐字符替换为下划线，再追加基于原始值的短哈希，
+      以保证唯一、确定且可通过 _mcp_name_map 无损还原。
+    """
+    safe_service = _sanitize_func_name_part(service_name)
+    safe_command = _sanitize_func_name_part(command)
+    func_name = f"mcp__{safe_service}__{safe_command}"
+    if safe_service != service_name or safe_command != command:
+        # 用 NUL 作为分隔符，避免 service/command 边界歧义
+        digest = hashlib.md5(f"{service_name}\x00{command}".encode("utf-8")).hexdigest()[:6]
+        func_name = f"{func_name}_{digest}"
+    _mcp_name_map[func_name] = (service_name, command)
+    return func_name
+
+
+def resolve_mcp_func_name(func_name: str) -> Optional[Tuple[str, str]]:
+    """根据 function name 还原 (service_name, command)，未登记返回 None"""
+    return _mcp_name_map.get(func_name)
 
 
 def get_all_tool_schemas(agent_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -452,7 +502,7 @@ def _build_mcp_schemas(agent_id: Optional[str] = None) -> List[Dict[str, Any]]:
                     schema = {
                         "type": "function",
                         "function": {
-                            "name": f"mcp__{service_name}__{command}",
+                            "name": _make_mcp_func_name(service_name, command),
                             "description": f"[MCP/{service_name}] {description}",
                             "parameters": declared_parameters,
                         },
@@ -483,7 +533,7 @@ def _build_mcp_schemas(agent_id: Optional[str] = None) -> List[Dict[str, Any]]:
                     except (json.JSONDecodeError, TypeError):
                         pass
 
-                func_name = f"mcp__{service_name}__{command}"
+                func_name = _make_mcp_func_name(service_name, command)
                 schema = {
                     "type": "function",
                     "function": {

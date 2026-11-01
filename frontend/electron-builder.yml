@@ -94,6 +94,6 @@ linux:
   category: Utility
 
 publish:
-  provider: generic
-  url: http://62.234.131.204:30031/api/app/releases
-  channel: latest
+  provider: github
+  owner: RTGS2017
+  repo: NagaAgent
