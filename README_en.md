@@ -14,7 +14,7 @@ The future of Naga is yours to explore.
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.6-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
@@ -38,6 +38,7 @@ Commercial inquiries: contact@nagaagent.com / bilibili [柏斯阔落]
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 🧩 2026-11-01 | 5.1.6 | Fixed the model incompatibility issue mentioned in #323, caused by incorrectly passing the temperature parameter. Also merged PR #313 from Lex, which fixes related text-encoding issues on Windows |
 | 🪟 2026-07-16 | 5.1.5 | Fixed the Windows transparent frameless main window disappearing after maximize/restore: the app now avoids Electron's unreliable native transparent-window maximize state and restores against the active display work area; tray, hotkey, and single-instance wake-up share one recovery path, and off-screen windows return automatically |
 | 🔊 2026-07-15 | 5.1.4 | Fixed daily-conversation TTS: settings and chat now share one voice toggle, cleaned `content_clean` text is preserved, main and agent chats are covered, and MP3/WAV responses play serially by their real media type; update checks now use GitHub Releases as the source of truth and clearly fail when the official version cannot be confirmed |
 | 🧭 2026-07-08 | 5.1.3 | Adjusted runtime config priority: project-root `config.json` is used first, with user data config as fallback; settings saves and docs now follow the active config file |

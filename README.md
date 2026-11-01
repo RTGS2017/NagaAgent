@@ -15,7 +15,7 @@
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.6-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)

@@ -42,7 +42,7 @@ export const DEFAULT_MODEL: keyof typeof MODELS = 'NagaTest2'
 
 export const DEFAULT_CONFIG = {
   system: {
-    version: '5.1.5', // 系统版本号
+    version: '5.1.6', // 系统版本号
     ai_name: '娜杰日达', // AI助手名称
     active_character: '娜杰日达', // 当前活跃角色名称
     voice_enabled: true, // 是否启用语音功能

@@ -14,7 +14,7 @@ Nagaの未来は、あなた自身で切り拓いてください。
 
 [简体中文](README.md) | [English](README_en.md) | [日本語](README_ja.md)
 
-![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.5-blue?style=for-the-badge&logo=python&logoColor=white)
+![NagaAgent](https://img.shields.io/badge/NagaAgent-5.1.6-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-AGPL%203.0%20%7C%20Proprietary-yellow?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
@@ -38,6 +38,7 @@ Nagaの未来は、あなた自身で切り拓いてください。
 
 | 日付 | バージョン | 変更内容 |
 |------|---------|---------|
+| 🧩 2026-11-01 | 5.1.6 | #323で指摘された、温度パラメータの誤送信によるモデル非対応の問題を修正しました。また、LexからのPR #313をマージし、Windowsで発生する文字化けを修正しました |
 | 🪟 2026-07-16 | 5.1.5 | Windows の透明フレームレス・メインウィンドウが最大化後の復元時に消える問題を修正：Electron の不安定なネイティブ最大化状態を避け、現在のディスプレイ作業領域を基準に確実に復元；トレイ・ショートカット・単一インスタンス起動の復帰処理を統一し、画面外のウィンドウも自動的に戻すようにしました |
 | 🔊 2026-07-15 | 5.1.4 | 日常会話 TTS を修正：設定画面とチャット画面の音声スイッチを統一し、`content_clean` 後の本文を保持、メインチャットとエージェントチャットの両方に対応、実際の MP3/WAV 形式に従って直列再生；更新確認は GitHub Release を正とし、公式バージョンを確認できない場合は明確に失敗を表示 |
 | 🧭 2026-07-08 | 5.1.3 | ランタイム設定の読み込み優先順位を調整：プロジェクトルートの `config.json` を優先し、存在しない場合のみユーザーデータ設定へフォールバック；設定画面の保存先と関連ドキュメントも有効な設定ファイルに合わせました |
