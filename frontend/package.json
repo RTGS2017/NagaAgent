@@ -8,7 +8,7 @@
     "lint": "node scripts/run-eslint.mjs",
     "lint:fix": "node scripts/run-eslint.mjs --fix",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "dev:web": "npx cross-env WEB_ONLY=1 vite",
     "build": "node scripts/run-build.mjs",
     "preview": "vite preview",
