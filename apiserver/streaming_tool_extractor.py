@@ -244,7 +244,7 @@ class StreamingToolCallExtractor:
         self._pending_display.clear()
     
     async def process_streaming_response(self, llm_service, messages: List[Dict], 
-                                       temperature: float = 0.7, voice_integration=None):
+                                       temperature: Optional[float] = None, voice_integration=None):
         """处理流式响应，整合LLM调用和TTS处理"""
         if voice_integration:
             self.voice_integration = voice_integration

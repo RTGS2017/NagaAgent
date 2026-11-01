@@ -390,7 +390,7 @@ class APIConfig(BaseModel):
     provider: str = Field(default="deepseek", description="模型供应商：auto/openai/deepseek/openrouter/anthropic/gemini/custom")
     use_gateway: bool = Field(default=True, description="登录后是否通过 NagaModel 网关调用模型")
     api_format: str = Field(default="openai", description="API调用格式：openai 或 anthropic")
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0, description="温度参数，留空表示使用模型默认值")
     max_tokens: int = Field(default=10000, ge=1, le=32768, description="最大token数")
     max_history_rounds: int = Field(default=100, ge=1, le=200, description="最大历史轮数")
     persistent_context: bool = Field(default=True, description="是否启用持久化上下文")

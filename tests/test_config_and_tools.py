@@ -1252,6 +1252,31 @@ class McpFuncNameSanitizeTests(unittest.TestCase):
         self.assertNotIn("reasoning_content", deepseek_messages[1])
         self.assertNotIn("reasoning_content", reasoner_messages[0])
 
+    def test_normalize_temperature_omits_param_for_locked_models(self) -> None:
+        from apiserver.llm_service import LLMService
+
+        service = LLMService.__new__(LLMService)
+
+        # 网关/自定义地址会加 provider 前缀，匹配前必须去掉
+        for model in (
+            "openai/gpt-5",
+            "openai/gpt-5-codex",
+            "openai/o3",
+            "openai/o4-mini",
+            "anthropic/claude-opus-4-7",
+            "anthropic/claude-opus-4.8",
+            "anthropic/claude-opus-5",
+            "openai/kimi-k2.6",
+        ):
+            with self.subTest(model=model):
+                self.assertIsNone(service._normalize_temperature(model, 0.7))
+
+        # 其他模型仍按调用方传入的值发送
+        self.assertEqual(service._normalize_temperature("deepseek/deepseek-v3.2", 0.7), 0.7)
+        self.assertEqual(service._normalize_temperature("openai/gpt-4.1-nano", 0), 0)
+        # 未指定 temperature 时不发送
+        self.assertIsNone(service._normalize_temperature("deepseek/deepseek-v3.2", None))
+
     def test_stream_chat_returns_visible_error_after_empty_stream_retries(self) -> None:
         from apiserver.llm_service import LLMService
 

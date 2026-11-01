@@ -6,6 +6,7 @@ LLM服务模块
 """
 
 import logging
+import re
 import sys
 import os
 from typing import Optional, Dict, Any, List
@@ -214,30 +215,41 @@ class LLMService:
             prepared.append(item)
         return prepared
 
-    # 不支持自定义 temperature 的模型约束表: {前缀: 强制值}
-    _TEMPERATURE_CONSTRAINTS: Dict[str, float] = {
-        "gpt-5": 1,
-    }
+    # 不接受自定义 temperature 的模型（匹配前会去掉 provider/ 路由前缀）。
+    # 命中后直接省略该参数，由服务端使用默认值，避免不同模型的约束差异。
+    _TEMPERATURE_LOCKED_PATTERNS: tuple[re.Pattern[str], ...] = (
+        re.compile(r"^gpt-5(?:-|$)"),          # GPT-5 系列仅支持 temperature=1
+        re.compile(r"^o[134](?:-|$)"),          # OpenAI o 系列推理模型
+        re.compile(r"^claude-opus-4-[78](?:-|$)"),  # Claude Opus 4.7 / 4.8
+        re.compile(r"^claude-(?:opus|sonnet|haiku)-5(?:-|$)"),  # Claude 5 系列
+        re.compile(r"^kimi-k2-(?:[6-9]|\d{2,})(?:-|$)"),  # Kimi K2.6 及之后
+    )
 
     def _normalize_temperature(self, model_name: str, temperature: Optional[float]) -> Optional[float]:
-        """兼容不支持自定义 temperature 的模型参数约束。"""
+        """返回应发送的 temperature；None 表示省略该参数，使用模型默认值。"""
         if temperature is None:
             return None
 
-        normalized_model = (model_name or "").lower()
-        for prefix, forced_value in self._TEMPERATURE_CONSTRAINTS.items():
-            if normalized_model.startswith(prefix) and temperature != forced_value:
-                logger.info(f"[LLM] 模型 {model_name} 仅支持 temperature={forced_value}，自动调整当前值 {temperature}")
-                return forced_value
+        # 网关/自定义地址会给模型名加 provider 前缀，匹配前先去掉
+        base_model = (
+            (model_name or "")
+            .lower()
+            .rsplit("/", 1)[-1]
+            .replace(".", "-")
+            .replace("_", "-")
+        )
+        if any(pattern.match(base_model) for pattern in self._TEMPERATURE_LOCKED_PATTERNS):
+            logger.info(f"[LLM] 模型 {model_name} 不支持自定义 temperature，已省略当前值 {temperature}")
+            return None
 
         return temperature
 
-    async def get_response(self, prompt: str, temperature: float = 0.7) -> str:
+    async def get_response(self, prompt: str, temperature: Optional[float] = None) -> str:
         """为其他模块提供API调用接口（保持向后兼容，只返回 content）"""
         response = await self.get_response_with_reasoning(prompt, temperature)
         return response.content
 
-    async def get_response_with_reasoning(self, prompt: str, temperature: float = 0.7) -> LLMResponse:
+    async def get_response_with_reasoning(self, prompt: str, temperature: Optional[float] = None) -> LLMResponse:
         """为其他模块提供API调用接口，返回包含 reasoning_content 的完整响应"""
         if not self._initialized:
             self._initialize_client()
@@ -250,13 +262,16 @@ class LLMService:
             config_error = self._local_api_config_error(llm_params)
             if config_error:
                 return LLMResponse(content=config_error)
-            response = await acompletion(
-                model=model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self._normalize_temperature(model_name, temperature),
-                max_tokens=get_config().api.max_tokens,
-                **llm_params
-            )
+            call_params: Dict[str, Any] = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": get_config().api.max_tokens,
+                **llm_params,
+            }
+            normalized_temperature = self._normalize_temperature(model_name, temperature)
+            if normalized_temperature is not None:
+                call_params["temperature"] = normalized_temperature
+            response = await acompletion(**call_params)
             message = response.choices[0].message
             return LLMResponse(
                 content=message.content or "", reasoning_content=getattr(message, "reasoning_content", None)
@@ -269,7 +284,7 @@ class LLMService:
         """检查LLM服务是否可用"""
         return self._initialized
 
-    async def chat_with_context(self, messages: List[Dict], temperature: float = 0.7) -> str:
+    async def chat_with_context(self, messages: List[Dict], temperature: Optional[float] = None) -> str:
         """带上下文的聊天调用（保持向后兼容，只返回 content）"""
         response = await self.chat_with_context_and_reasoning(messages, temperature)
         return response.content
@@ -277,7 +292,7 @@ class LLMService:
     async def chat_with_context_and_reasoning_with_overrides(
         self,
         messages: List[Dict[str, Any]],
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         model_override: Optional[str] = None,
         api_key_override: Optional[str] = None,
         api_base_override: Optional[str] = None,
@@ -313,13 +328,16 @@ class LLMService:
                 final_base,
                 provider_hint,
             )
-            response = await acompletion(
-                model=model_name,
-                messages=prepared_messages,
-                temperature=self._normalize_temperature(model_name, temperature),
-                max_tokens=get_config().api.max_tokens if hasattr(get_config().api, 'max_tokens') else None,
-                **llm_params
-            )
+            call_params: Dict[str, Any] = {
+                "model": model_name,
+                "messages": prepared_messages,
+                "max_tokens": get_config().api.max_tokens if hasattr(get_config().api, 'max_tokens') else None,
+                **llm_params,
+            }
+            normalized_temperature = self._normalize_temperature(model_name, temperature)
+            if normalized_temperature is not None:
+                call_params["temperature"] = normalized_temperature
+            response = await acompletion(**call_params)
             message = response.choices[0].message
             return LLMResponse(
                 content=message.content or "", reasoning_content=getattr(message, "reasoning_content", None)
@@ -328,7 +346,7 @@ class LLMService:
             logger.error(f"上下文聊天调用失败: {e}")
             return LLMResponse(content=f"聊天调用出错: {str(e)}")
 
-    async def chat_with_context_and_reasoning(self, messages: List[Dict], temperature: float = 0.7) -> LLMResponse:
+    async def chat_with_context_and_reasoning(self, messages: List[Dict], temperature: Optional[float] = None) -> LLMResponse:
         """带上下文的聊天调用，返回包含 reasoning_content 的完整响应"""
         return await self.chat_with_context_and_reasoning_with_overrides(
             messages=messages,
@@ -338,14 +356,14 @@ class LLMService:
             api_base_override=None,
         )
 
-    async def stream_chat_with_context(self, messages: List[Dict], temperature: float = 0.7,
+    async def stream_chat_with_context(self, messages: List[Dict], temperature: Optional[float] = None,
                                        model_override: Optional[Dict[str, str]] = None,
                                        tools: Optional[List[Dict]] = None):
         """带上下文的流式聊天调用，支持 reasoning_content 交织输出 + 原生 function calling
 
         Args:
             messages: 对话消息列表
-            temperature: 生成温度
+            temperature: 生成温度，None 表示不传该参数（使用模型默认值）
             model_override: 临时模型覆盖参数，用于切换到视觉模型等场景
                 格式: {"model": "glm-4.5v", "api_base": "https://...", "api_key": "..."}
             tools: OpenAI function calling schemas（可选）
@@ -420,7 +438,6 @@ class LLMService:
                 call_params = {
                     "model": model_name,
                     "messages": prepared_messages,
-                    "temperature": self._normalize_temperature(model_name, temperature),
                     "max_tokens": get_config().api.max_tokens if hasattr(get_config().api, "max_tokens") else None,
                     "stream": True,
                     "timeout": 120,
@@ -428,6 +445,9 @@ class LLMService:
                     "num_retries": 0,
                     **llm_params
                 }
+                normalized_temperature = self._normalize_temperature(model_name, temperature)
+                if normalized_temperature is not None:
+                    call_params["temperature"] = normalized_temperature
                 if tools:
                     call_params["tools"] = tools
                     if get_config().api.api_format != "anthropic":
@@ -576,7 +596,7 @@ async def llm_chat(request: Dict[str, Any]):
     """LLM聊天接口 - 为其他模块提供LLM调用服务"""
     try:
         prompt = request.get("prompt", "")
-        temperature = request.get("temperature", 0.7)
+        temperature = request.get("temperature")
 
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt参数不能为空")

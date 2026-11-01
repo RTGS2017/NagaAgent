@@ -58,7 +58,7 @@ export const DEFAULT_CONFIG = {
     provider: 'deepseek', // 模型供应商
     use_gateway: true, // 登录后是否使用 NagaModel 网关
     api_format: 'openai', // API调用格式
-    temperature: 0.7, // 生成温度 (0.0-2.0)
+    temperature: null as number | null, // 生成温度 (0.0-2.0)，null 表示使用模型默认值
     max_tokens: 8192, // 最大token数
     max_history_rounds: 10, // 最大历史对话轮数
     persistent_context: true, // 是否持久化上下文

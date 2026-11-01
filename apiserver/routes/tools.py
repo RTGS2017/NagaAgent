@@ -285,7 +285,7 @@ async def tool_result_callback(payload: Dict[str, Any]):
         # 使用LLM服务基于原始对话和工具结果重新生成回复
         try:
             llm_service = get_llm_service()
-            response_text = await llm_service.chat_with_context(messages, temperature=0.7)
+            response_text = await llm_service.chat_with_context(messages)
             logger.info(f"[工具回调] 工具后回复生成成功，内容: {response_text[:200]}...")
         except Exception as e:
             logger.error(f"[工具回调] 调用LLM服务失败: {e}")
